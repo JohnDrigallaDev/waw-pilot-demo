@@ -35,7 +35,6 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         priority
                     />
                 </div>
-
                 <div className="min-w-0">
                     <p className="truncate text-sm font-extrabold uppercase tracking-[0.28em] text-cyan-700">
                         WAW Pilot
@@ -113,15 +112,14 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         Rechnungen, Dokumente und Bestandsprozesse zentral steuern.
                     </p>
                 </div>
-
-                <Link
+                <a
                     href="/logout"
                     onClick={onNavigate}
                     className="group flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-600 transition-all duration-200 hover:border-red-100 hover:bg-red-50 hover:text-red-700"
                 >
                     <LogOut className="size-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
                     Abmelden
-                </Link>
+                </a>
             </div>
         </>
     );
