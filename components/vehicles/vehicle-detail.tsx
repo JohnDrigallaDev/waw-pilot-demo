@@ -1,0 +1,504 @@
+import Link from "next/link";
+import {
+    ArrowLeft,
+    ArrowUpRight,
+    CalendarDays,
+    Download,
+    ExternalLink,
+    FileText,
+    Receipt,
+    Truck,
+    UserRound,
+    Wallet,
+} from "lucide-react";
+
+import type { VehicleDetail as VehicleDetailType } from "@/lib/vehicles/vehicle-detail-queries";
+import { formatCurrency } from "@/lib/format/currency";
+import { formatDate } from "@/lib/format/date";
+import {
+    getPaymentStatusLabel,
+    getPaymentStatusTone,
+    getSaleStatusLabel,
+    getSaleStatusTone,
+} from "@/lib/sales/sale-helpers";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+
+type VehicleDetailProps = {
+    vehicle: VehicleDetailType;
+};
+
+export function VehicleDetail({ vehicle }: VehicleDetailProps) {
+    const estimatedProfit =
+        vehicle.sale_price_net === null
+            ? null
+            : vehicle.sale_price_net -
+            vehicle.purchase_price_net -
+            vehicle.additional_costs_net;
+
+    return (
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="Fahrzeugakte"
+                title={`${vehicle.internal_number} · ${vehicle.name}`}
+                description="Detailansicht mit Fahrzeugdaten, Kundenbezug, Verkäufen und Dokumenten."
+                action={
+                    <Button
+                        asChild
+                        variant="outline"
+                        className="rounded-2xl border-slate-200 bg-white font-bold"
+                    >
+                        <Link href="/dashboard/vehicles">
+                            <ArrowLeft className="mr-2 size-4" />
+                            Zurück
+                        </Link>
+                    </Button>
+                }
+            />
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <VehicleStatCard
+                    label="Status"
+                    value={getVehicleStatusLabel(vehicle.status)}
+                    description={vehicle.vehicle_type}
+                    icon={Truck}
+                    tone={vehicle.status === "sold" ? "success" : "info"}
+                />
+                <VehicleStatCard
+                    label="Einkauf netto"
+                    value={formatCurrency(vehicle.purchase_price_net)}
+                    description="Anschaffung"
+                    icon={Wallet}
+                    tone="neutral"
+                />
+                <VehicleStatCard
+                    label="Verkauf netto"
+                    value={
+                        vehicle.sale_price_net === null
+                            ? "—"
+                            : formatCurrency(vehicle.sale_price_net)
+                    }
+                    description="geplant oder verkauft"
+                    icon={Receipt}
+                    tone={vehicle.sale_price_net ? "success" : "warning"}
+                />
+                <VehicleStatCard
+                    label="Rohgewinn"
+                    value={estimatedProfit === null ? "—" : formatCurrency(estimatedProfit)}
+                    description="Verkauf - Einkauf - Kosten"
+                    icon={ArrowUpRight}
+                    tone={
+                        estimatedProfit === null
+                            ? "neutral"
+                            : estimatedProfit >= 0
+                                ? "success"
+                                : "danger"
+                    }
+                />
+            </section>
+
+            <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+                <div className="space-y-6">
+                    <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="p-5">
+                            <SectionTitle
+                                icon={Truck}
+                                title="Fahrzeugdaten"
+                                description="Technische Stammdaten und interne Zuordnung."
+                            />
+
+                            <div className="mt-5 space-y-3">
+                                <InfoRow label="Interne Nummer" value={vehicle.internal_number} />
+                                <InfoRow label="Hersteller" value={vehicle.manufacturer} />
+                                <InfoRow label="Modell" value={vehicle.model} />
+                                <InfoRow label="Fahrzeugtyp" value={vehicle.vehicle_type} />
+                                <InfoRow label="VIN" value={vehicle.vin} />
+                                <InfoRow label="Kennzeichen" value={vehicle.license_plate ?? "—"} />
+                                <InfoRow
+                                    label="Baujahr"
+                                    value={vehicle.construction_year?.toString() ?? "—"}
+                                />
+                                <InfoRow
+                                    label="Erstzulassung"
+                                    value={formatDate(vehicle.first_registration)}
+                                />
+                                <InfoRow
+                                    label="Angelegt am"
+                                    value={formatDate(vehicle.created_at)}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="p-5">
+                            <SectionTitle
+                                icon={Wallet}
+                                title="Preise & Kalkulation"
+                                description="Einkauf, Nebenkosten, Verkauf und Rohgewinn."
+                            />
+
+                            <div className="mt-5 space-y-3">
+                                <InfoRow
+                                    label="Einkauf netto"
+                                    value={formatCurrency(vehicle.purchase_price_net)}
+                                />
+                                <InfoRow
+                                    label="Nebenkosten netto"
+                                    value={formatCurrency(vehicle.additional_costs_net)}
+                                />
+                                <InfoRow
+                                    label="Verkauf netto"
+                                    value={
+                                        vehicle.sale_price_net === null
+                                            ? "—"
+                                            : formatCurrency(vehicle.sale_price_net)
+                                    }
+                                />
+                                <InfoRow
+                                    label="Rohgewinn netto"
+                                    value={
+                                        estimatedProfit === null ? "—" : formatCurrency(estimatedProfit)
+                                    }
+                                    strong
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="p-5">
+                            <SectionTitle
+                                icon={UserRound}
+                                title="Kundenbezug"
+                                description="Verkäufer und Käufer, falls zugeordnet."
+                            />
+
+                            <div className="mt-5 grid gap-4">
+                                <CustomerBox title="Verkäufer" customer={vehicle.seller} />
+                                <CustomerBox title="Käufer" customer={vehicle.buyer} />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <div className="space-y-6">
+                    <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="p-0">
+                            <div className="border-b border-slate-200 p-5">
+                                <SectionTitle
+                                    icon={Receipt}
+                                    title="Verkäufe"
+                                    description="Alle Verkaufsakten zu diesem Fahrzeug."
+                                />
+                            </div>
+
+                            {vehicle.sales.length > 0 ? (
+                                <div className="divide-y divide-slate-100">
+                                    {vehicle.sales.map((sale) => (
+                                        <div
+                                            key={sale.id}
+                                            className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between"
+                                        >
+                                            <div>
+                                                <p className="font-extrabold text-slate-950">
+                                                    {sale.customer_name}
+                                                </p>
+                                                <p className="mt-1 text-sm font-semibold text-slate-500">
+                                                    {formatDate(sale.sale_date)}
+                                                </p>
+
+                                                {sale.invoice_number ? (
+                                                    <p className="mt-1 text-sm font-extrabold text-cyan-700">
+                                                        Rechnung {sale.invoice_number}
+                                                    </p>
+                                                ) : null}
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <StatusBadge tone={getSaleStatusTone(sale.status)}>
+                                                    {getSaleStatusLabel(sale.status)}
+                                                </StatusBadge>
+
+                                                <StatusBadge tone={getPaymentStatusTone(sale.payment_status)}>
+                                                    {getPaymentStatusLabel(sale.payment_status)}
+                                                </StatusBadge>
+
+                                                <Button
+                                                    asChild
+                                                    size="sm"
+                                                    className="rounded-xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
+                                                >
+                                                    <Link href={`/dashboard/sales/${sale.id}`}>
+                                                        Verkaufsakte
+                                                        <ArrowUpRight className="ml-1 size-3.5" />
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-5">
+                                    <EmptyBox text="Für dieses Fahrzeug gibt es noch keinen Verkauf." />
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="p-0">
+                            <div className="border-b border-slate-200 p-5">
+                                <SectionTitle
+                                    icon={FileText}
+                                    title="Dokumente"
+                                    description="Alle Dokumente, die mit diesem Fahrzeug verknüpft sind."
+                                />
+                            </div>
+
+                            {vehicle.documents.length > 0 ? (
+                                <div className="divide-y divide-slate-100">
+                                    {vehicle.documents.map((document) => (
+                                        <div
+                                            key={document.id}
+                                            className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"
+                                        >
+                                            <div>
+                                                <p className="font-extrabold text-slate-950">
+                                                    {document.file_name}
+                                                </p>
+                                                <p className="mt-1 text-sm font-medium text-slate-500">
+                                                    {document.document_type} · {document.status}
+                                                </p>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <StatusBadge
+                                                    tone={
+                                                        document.status === "available" ? "success" : "warning"
+                                                    }
+                                                >
+                                                    {document.status === "available"
+                                                        ? "Verfügbar"
+                                                        : "Prüfen"}
+                                                </StatusBadge>
+
+                                                {document.file_path ? (
+                                                    <>
+                                                        <Button
+                                                            asChild
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="rounded-xl font-bold"
+                                                        >
+                                                            <Link
+                                                                href={`/api/documents/${document.id}/file`}
+                                                                target="_blank"
+                                                            >
+                                                                <ExternalLink className="mr-1 size-3.5" />
+                                                                Öffnen
+                                                            </Link>
+                                                        </Button>
+
+                                                        <Button
+                                                            asChild
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="rounded-xl font-bold"
+                                                        >
+                                                            <Link
+                                                                href={`/api/documents/${document.id}/file?download=1`}
+                                                            >
+                                                                <Download className="mr-1 size-3.5" />
+                                                                Download
+                                                            </Link>
+                                                        </Button>
+                                                    </>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-5">
+                                    <EmptyBox text="Für dieses Fahrzeug sind noch keine Dokumente vorhanden." />
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {vehicle.notes ? (
+                        <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                            <CardContent className="p-5">
+                                <SectionTitle
+                                    icon={CalendarDays}
+                                    title="Notizen"
+                                    description="Interne Hinweise zum Fahrzeug."
+                                />
+
+                                <p className="mt-5 rounded-3xl bg-slate-50 p-4 text-sm font-semibold leading-7 text-slate-700">
+                                    {vehicle.notes}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    ) : null}
+                </div>
+            </section>
+        </div>
+    );
+}
+
+function CustomerBox({
+                         title,
+                         customer,
+                     }: {
+    title: string;
+    customer: VehicleDetailType["seller"];
+}) {
+    if (!customer) {
+        return (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-bold text-slate-500">
+                    Kein {title.toLowerCase()} zugeordnet.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
+                {title}
+            </p>
+            <p className="mt-2 font-extrabold text-slate-950">{customer.name}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+                {customer.address}
+            </p>
+            {customer.email ? (
+                <p className="mt-1 text-sm font-semibold text-cyan-700">
+                    {customer.email}
+                </p>
+            ) : null}
+            {customer.phone ? (
+                <p className="mt-1 text-sm font-semibold text-slate-600">
+                    {customer.phone}
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
+function SectionTitle({
+                          icon: Icon,
+                          title,
+                          description,
+                      }: {
+    icon: typeof Truck;
+    title: string;
+    description: string;
+}) {
+    return (
+        <div className="flex items-start gap-3">
+            <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan-100 bg-cyan-50 text-cyan-700">
+                <Icon className="size-5" />
+            </div>
+            <div>
+                <h2 className="text-xl font-extrabold text-slate-950">{title}</h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                    {description}
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function InfoRow({
+                     label,
+                     value,
+                     strong = false,
+                 }: {
+    label: string;
+    value: string;
+    strong?: boolean;
+}) {
+    return (
+        <div className="flex items-start justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-sm font-bold text-slate-500">{label}</p>
+            <p
+                className={
+                    strong
+                        ? "text-right text-sm font-extrabold text-emerald-700"
+                        : "text-right text-sm font-extrabold text-slate-950"
+                }
+            >
+                {value || "—"}
+            </p>
+        </div>
+    );
+}
+
+function VehicleStatCard({
+                             label,
+                             value,
+                             description,
+                             icon: Icon,
+                             tone,
+                         }: {
+    label: string;
+    value: string;
+    description: string;
+    icon: typeof Truck;
+    tone: "success" | "warning" | "danger" | "info" | "neutral";
+}) {
+    const toneClasses = {
+        success: "border-emerald-100 bg-emerald-50 text-emerald-700",
+        warning: "border-amber-100 bg-amber-50 text-amber-700",
+        danger: "border-red-100 bg-red-50 text-red-700",
+        info: "border-cyan-100 bg-cyan-50 text-cyan-700",
+        neutral: "border-slate-200 bg-slate-50 text-slate-700",
+    };
+
+    return (
+        <Card className="rounded-[1.5rem] border-slate-200 bg-white/90 shadow-sm">
+            <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <p className="text-sm font-bold text-slate-500">{label}</p>
+                        <p className="mt-3 text-xl font-extrabold tracking-tight text-slate-950">
+                            {value}
+                        </p>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">
+                            {description}
+                        </p>
+                    </div>
+
+                    <div
+                        className={`flex size-11 items-center justify-center rounded-2xl border ${toneClasses[tone]}`}
+                    >
+                        <Icon className="size-5" />
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function EmptyBox({ text }: { text: string }) {
+    return (
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+            <p className="text-sm font-bold text-slate-500">{text}</p>
+        </div>
+    );
+}
+
+function getVehicleStatusLabel(status: string): string {
+    const labels: Record<string, string> = {
+        in_stock: "Im Bestand",
+        reserved: "Reserviert",
+        sold: "Verkauft",
+    };
+
+    return labels[status] ?? status;
+}

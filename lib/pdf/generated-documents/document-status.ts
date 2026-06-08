@@ -1,0 +1,68 @@
+import type {
+    GeneratedDocumentDefinition,
+    GeneratedDocumentStatus,
+} from "@/lib/pdf/generated-documents/document-types";
+import type { GeneratedDocumentValidationResult } from "@/lib/pdf/generated-documents/document-validation";
+
+export function getGeneratedDocumentStatus(params: {
+    definition: GeneratedDocumentDefinition;
+    validation: GeneratedDocumentValidationResult;
+    documentExists: boolean;
+    signedDocumentExists?: boolean;
+    sentToCustomer?: boolean;
+}): GeneratedDocumentStatus {
+    if (!params.validation.canGenerate) {
+        return "missing_data";
+    }
+
+    if (!params.documentExists) {
+        return "can_generate";
+    }
+
+    if (!params.definition.requiresSignature) {
+        return "generated_available";
+    }
+
+    if (params.signedDocumentExists) {
+        return "signed_received";
+    }
+
+    if (params.sentToCustomer) {
+        return "sent_to_customer";
+    }
+
+    return "generated_needs_signature";
+}
+
+export function getGeneratedDocumentStatusLabel(
+    status: GeneratedDocumentStatus,
+): string {
+    const labels: Record<GeneratedDocumentStatus, string> = {
+        missing_data: "Daten fehlen",
+        can_generate: "Kann erzeugt werden",
+        generated_needs_signature: "Unterschrift fehlt",
+        generated_available: "Erzeugt",
+        sent_to_customer: "An Kunden gesendet",
+        signed_received: "Unterschrieben vorhanden",
+    };
+
+    return labels[status];
+}
+
+export function getGeneratedDocumentStatusTone(
+    status: GeneratedDocumentStatus,
+): "success" | "warning" | "danger" | "info" {
+    if (status === "signed_received" || status === "generated_available") {
+        return "success";
+    }
+
+    if (status === "missing_data") {
+        return "danger";
+    }
+
+    if (status === "sent_to_customer") {
+        return "info";
+    }
+
+    return "warning";
+}

@@ -1,0 +1,380 @@
+"use server";
+
+import { redirect } from "next/navigation";
+
+import { getCurrentCompanyId } from "@/lib/company";
+import {
+    getInvoiceTypeDocumentType,
+    getNextInvoiceNumber,
+} from "@/lib/invoices/invoice-numbering";
+import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { SaleType } from "@/lib/sales/sale-queries";
+
+type CreateSaleState = {
+    success: boolean;
+    message: string;
+};
+
+function getStringValue(formData: FormData, key: string): string | null {
+    const value = formData.get(key);
+
+    if (typeof value !== "string") return null;
+
+    const trimmedValue = value.trim();
+
+    return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function getNumberValue(formData: FormData, key: string): number | null {
+    const value = getStringValue(formData, key);
+
+    if (!value) return null;
+
+    const normalizedValue = value.replace(",", ".");
+    const numberValue = Number(normalizedValue);
+
+    return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function getSaleTypeValue(formData: FormData): SaleType {
+    const value = getStringValue(formData, "sale_type");
+
+    if (
+        value === "inland" ||
+        value === "eu" ||
+        value === "export_third_country"
+    ) {
+        return value;
+    }
+
+    return "inland";
+}
+
+function roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
+}
+
+function addDays(dateString: string, days: number): string {
+    const date = new Date(dateString);
+    date.setDate(date.getDate() + days);
+
+    return date.toISOString().slice(0, 10);
+}
+
+export async function createSaleAction(
+    _previousState: CreateSaleState,
+    formData: FormData,
+): Promise<CreateSaleState> {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const vehicleId = getStringValue(formData, "vehicle_id");
+    const buyerCustomerId = getStringValue(formData, "buyer_customer_id");
+    const saleDate = getStringValue(formData, "sale_date");
+    const saleType = getSaleTypeValue(formData);
+    const netAmount = getNumberValue(formData, "net_amount");
+    const vatRate = getNumberValue(formData, "vat_rate") ?? 19;
+    const notes = getStringValue(formData, "notes");
+
+    const exportDestinationCity = getStringValue(
+        formData,
+        "export_destination_city",
+    );
+    const exportDestinationCountry = getStringValue(
+        formData,
+        "export_destination_country",
+    );
+    const exportArrivalMonth = getStringValue(formData, "export_arrival_month");
+    const exportArrivalYear = getStringValue(formData, "export_arrival_year");
+    const exportTransportDate = getStringValue(formData, "export_transport_date");
+    const exportTransportType = getStringValue(formData, "export_transport_type");
+    const exportReceiverName = getStringValue(formData, "export_receiver_name");
+
+    const shouldCreateInvoice =
+        getStringValue(formData, "create_invoice") === "yes";
+
+    const shouldCreateCashbookEntry =
+        getStringValue(formData, "create_cashbook_entry") === "yes";
+
+    const paymentMethod = getStringValue(formData, "payment_method") ?? "bank";
+
+    if (paymentMethod !== "bank" && paymentMethod !== "cash") {
+        return {
+            success: false,
+            message: "Bitte wähle eine gültige Zahlungsart aus.",
+        };
+    }
+
+    if (!vehicleId) {
+        return {
+            success: false,
+            message: "Bitte wähle ein Fahrzeug aus.",
+        };
+    }
+
+    if (!buyerCustomerId) {
+        return {
+            success: false,
+            message: "Bitte wähle einen Käufer aus.",
+        };
+    }
+
+    if (!saleDate) {
+        return {
+            success: false,
+            message: "Bitte wähle ein Verkaufsdatum aus.",
+        };
+    }
+
+    if (netAmount === null || netAmount <= 0) {
+        return {
+            success: false,
+            message: "Bitte gib einen gültigen Verkaufspreis netto ein.",
+        };
+    }
+
+    const vatAmount = roundMoney(netAmount * (vatRate / 100));
+    const grossAmount = roundMoney(netAmount + vatAmount);
+
+    const { data: vehicleData, error: vehicleLoadError } = await supabase
+        .from("vehicles")
+        .select("internal_number, manufacturer, model")
+        .eq("id", vehicleId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (vehicleLoadError || !vehicleData) {
+        return {
+            success: false,
+            message: `Fahrzeug konnte nicht geladen werden: ${
+                vehicleLoadError?.message ?? "Nicht gefunden"
+            }`,
+        };
+    }
+
+    const { data: sale, error: saleError } = await supabase
+        .from("sales")
+        .insert({
+            company_id: companyId,
+            vehicle_id: vehicleId,
+            buyer_customer_id: buyerCustomerId,
+            sale_date: saleDate,
+            sale_type: saleType,
+            net_amount: netAmount,
+            vat_rate: vatRate,
+            vat_amount: vatAmount,
+            gross_amount: grossAmount,
+            status: "active",
+            payment_status: shouldCreateCashbookEntry ? "paid" : "open",
+            document_check_status: "missing",
+            datev_status: "not_sent",
+            notes,
+
+            export_destination_city: exportDestinationCity,
+            export_destination_country: exportDestinationCountry,
+            export_arrival_month: exportArrivalMonth,
+            export_arrival_year: exportArrivalYear,
+            export_transport_date: exportTransportDate,
+            export_transport_type: exportTransportType,
+            export_receiver_name: exportReceiverName,
+        })
+        .select("id")
+        .single();
+
+    if (saleError || !sale) {
+        return {
+            success: false,
+            message: `Verkauf konnte nicht gespeichert werden: ${
+                saleError?.message ?? "Keine Verkaufs-ID erhalten"
+            }`,
+        };
+    }
+
+    const saleId = sale.id as string;
+
+    const { error: vehicleUpdateError } = await supabase
+        .from("vehicles")
+        .update({
+            status: "sold",
+            buyer_customer_id: buyerCustomerId,
+            sale_price_net: netAmount,
+        })
+        .eq("id", vehicleId)
+        .eq("company_id", companyId);
+
+    if (vehicleUpdateError) {
+        return {
+            success: false,
+            message: `Verkauf wurde gespeichert, aber Fahrzeugstatus konnte nicht aktualisiert werden: ${vehicleUpdateError.message}`,
+        };
+    }
+
+    let invoiceId: string | null = null;
+    let invoiceNumber: string | null = null;
+    let invoiceDocumentId: string | null = null;
+
+    if (shouldCreateInvoice) {
+        try {
+            invoiceNumber = await getNextInvoiceNumber({
+                invoiceType: "standard",
+                invoiceDate: saleDate,
+            });
+        } catch (error) {
+            return {
+                success: false,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Rechnungsnummer konnte nicht erzeugt werden.",
+            };
+        }
+
+        const { data: invoice, error: invoiceError } = await supabase
+            .from("invoices")
+            .insert({
+                company_id: companyId,
+                sale_id: saleId,
+                customer_id: buyerCustomerId,
+                vehicle_id: vehicleId,
+                invoice_type: "standard",
+                invoice_number: invoiceNumber,
+                invoice_date: saleDate,
+                due_date: addDays(saleDate, 7),
+                net_amount: netAmount,
+                vat_rate: vatRate,
+                vat_amount: vatAmount,
+                gross_amount: grossAmount,
+                status: shouldCreateCashbookEntry ? "paid" : "created",
+                payment_status: shouldCreateCashbookEntry ? "paid" : "open",
+                datev_status: "not_sent",
+                paid_at: shouldCreateCashbookEntry ? new Date().toISOString() : null,
+            })
+            .select("id")
+            .single();
+
+        if (invoiceError || !invoice) {
+            return {
+                success: false,
+                message: `Verkauf wurde gespeichert, aber Rechnung konnte nicht erzeugt werden: ${
+                    invoiceError?.message ?? "Keine Rechnungs-ID erhalten"
+                }`,
+            };
+        }
+
+        const createdInvoiceId = invoice.id as string;
+        invoiceId = createdInvoiceId;
+
+        const invoiceFileName = `rechnung-${invoiceNumber}.pdf`;
+        const invoiceFilePath = `invoices/${invoiceFileName}`;
+
+        const { data: invoiceDocument, error: documentError } = await supabase
+            .from("documents")
+            .insert({
+                company_id: companyId,
+                document_type: getInvoiceTypeDocumentType("standard"),
+                source: "generated",
+                status: "needs_review",
+                file_name: invoiceFileName,
+                file_path: invoiceFilePath,
+                mime_type: "application/pdf",
+                file_size: null,
+                customer_id: buyerCustomerId,
+                vehicle_id: vehicleId,
+                sale_id: saleId,
+                invoice_id: createdInvoiceId,
+                generated_by_system: true,
+            })
+            .select("id")
+            .single();
+
+        if (documentError || !invoiceDocument) {
+            return {
+                success: false,
+                message: `Rechnung wurde erzeugt, aber Dokument konnte nicht angelegt werden: ${
+                    documentError?.message ?? "Keine Dokument-ID erhalten"
+                }`,
+            };
+        }
+
+        const createdInvoiceDocumentId = invoiceDocument.id as string;
+        invoiceDocumentId = createdInvoiceDocumentId;
+
+        const { error: invoiceDocumentLinkError } = await supabase
+            .from("invoices")
+            .update({
+                pdf_document_id: createdInvoiceDocumentId,
+            })
+            .eq("id", createdInvoiceId)
+            .eq("company_id", companyId);
+
+        if (invoiceDocumentLinkError) {
+            return {
+                success: false,
+                message: `Dokument wurde angelegt, aber nicht mit der Rechnung verknüpft: ${invoiceDocumentLinkError.message}`,
+            };
+        }
+
+        try {
+            const storedPdf = await generateAndStoreInvoicePdf(createdInvoiceId);
+
+            const { error: documentUpdateError } = await supabase
+                .from("documents")
+                .update({
+                    status: "available",
+                    file_name: storedPdf.fileName,
+                    file_path: storedPdf.filePath,
+                    file_size: storedPdf.fileSize,
+                })
+                .eq("id", createdInvoiceDocumentId)
+                .eq("company_id", companyId);
+
+            if (documentUpdateError) {
+                return {
+                    success: false,
+                    message: `PDF wurde gespeichert, aber Dokumentdaten konnten nicht aktualisiert werden: ${documentUpdateError.message}`,
+                };
+            }
+        } catch (error) {
+            return {
+                success: false,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "PDF konnte nicht im Storage gespeichert werden.",
+            };
+        }
+    }
+
+    if (shouldCreateCashbookEntry) {
+        const description = invoiceNumber
+            ? `Zahlung Rechnung ${invoiceNumber}`
+            : `Zahlung Verkauf ${vehicleData.internal_number}`;
+
+        const { error: cashbookError } = await supabase
+            .from("cashbook_entries")
+            .insert({
+                company_id: companyId,
+                entry_type: "income",
+                category: "vehicle_sale",
+                payment_method: paymentMethod,
+                amount: grossAmount,
+                booking_date: saleDate,
+                description,
+                customer_id: buyerCustomerId,
+                vehicle_id: vehicleId,
+                sale_id: saleId,
+                invoice_id: invoiceId,
+                document_id: invoiceDocumentId,
+            });
+
+        if (cashbookError) {
+            return {
+                success: false,
+                message: `Verkauf wurde gespeichert, aber Kassenbuch konnte nicht erzeugt werden: ${cashbookError.message}`,
+            };
+        }
+    }
+
+    redirect(`/dashboard/sales/${saleId}`);
+}
