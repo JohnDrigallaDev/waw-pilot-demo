@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { CashbookOverview } from "@/components/cashbook/cashbook-overview";
 import { getCashbookEntries } from "@/lib/cashbook/cashbook-queries";
 

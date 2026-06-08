@@ -192,23 +192,28 @@ export function DotGrid({
     useEffect(() => {
         buildGrid();
 
+        const wrapper = wrapperRef.current;
         let resizeObserver: ResizeObserver | null = null;
+        let usesWindowResize = false;
 
-        if ("ResizeObserver" in window) {
-            resizeObserver = new ResizeObserver(buildGrid);
+        if (typeof ResizeObserver !== "undefined" && wrapper) {
+            resizeObserver = new ResizeObserver(() => {
+                buildGrid();
+            });
 
-            if (wrapperRef.current) {
-                resizeObserver.observe(wrapperRef.current);
-            }
+            resizeObserver.observe(wrapper);
         } else {
-            window.addEventListener("resize", buildGrid);
+            usesWindowResize = true;
+            globalThis.addEventListener("resize", buildGrid);
         }
 
         return () => {
             if (resizeObserver) {
                 resizeObserver.disconnect();
-            } else {
-                window.removeEventListener("resize", buildGrid);
+            }
+
+            if (usesWindowResize) {
+                globalThis.removeEventListener("resize", buildGrid);
             }
         };
     }, [buildGrid]);

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { CustomersOverview } from "@/components/customers/customers-overview";
 import { getCustomers } from "@/lib/customers/customer-queries";
 

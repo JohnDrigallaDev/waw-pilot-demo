@@ -162,9 +162,30 @@ export async function generateTransportProofPdf(
         .filter(Boolean)
         .join(" ");
 
-    y = drawFieldRow(ctx, "Fahrzeugtyp", vehicleDescription, ctx.margin, y);
-    y = drawFieldRow(ctx, "Fahrgestellnummer / VIN", data.vehicle.vin, ctx.margin, y);
-    y = drawFieldRow(ctx, "Interne Fahrzeugnummer", data.vehicle.internalNumber, ctx.margin, y);
+    y = drawFieldRow(
+        ctx,
+        "Fahrzeugtyp",
+        requireValue(vehicleDescription),
+        ctx.margin,
+        y,
+    );
+
+    y = drawFieldRow(
+        ctx,
+        "Fahrgestellnummer / VIN",
+        requireValue(data.vehicle.vin),
+        ctx.margin,
+        y,
+    );
+
+    y = drawFieldRow(
+        ctx,
+        "Interne Fahrzeugnummer",
+        requireValue(data.vehicle.internalNumber),
+        ctx.margin,
+        y,
+    );
+
     y = drawFieldRow(
         ctx,
         "Rechnung",
@@ -237,21 +258,39 @@ export async function generateTransportProofPdf(
 
     y -= 24;
 
-    y = drawFieldRow(ctx, "Name", data.customer.name, ctx.margin, y);
     y = drawFieldRow(
         ctx,
-        "Adresse",
-        [
-            data.customer.street,
-            [data.customer.postalCode, data.customer.city].filter(Boolean).join(" "),
-            data.customer.country,
-        ]
-            .filter(Boolean)
-            .join(", "),
+        "Name",
+        requireValue(data.customer.name),
         ctx.margin,
         y,
     );
-    y = drawFieldRow(ctx, "USt-ID", requireValue(data.customer.vatId), ctx.margin, y);
+
+    y = drawFieldRow(
+        ctx,
+        "Adresse",
+        requireValue(
+            [
+                data.customer.street,
+                [data.customer.postalCode, data.customer.city]
+                    .filter(Boolean)
+                    .join(" "),
+                data.customer.country,
+            ]
+                .filter(Boolean)
+                .join(", "),
+        ),
+        ctx.margin,
+        y,
+    );
+
+    y = drawFieldRow(
+        ctx,
+        "USt-ID",
+        requireValue(data.customer.vatId),
+        ctx.margin,
+        y,
+    );
 
     y -= 8;
     drawHorizontalLine(ctx, y + 10);
@@ -335,10 +374,16 @@ export async function generateTransportProofPdf(
 
     y -= 58;
 
-    drawText(ctx, `Ausstellungsdatum: ${formatPdfDate(new Date().toISOString())}`, ctx.margin, y, {
-        size: pdfTheme.fontSize.normal,
-        bold: true,
-    });
+    drawText(
+        ctx,
+        `Ausstellungsdatum: ${formatPdfDate(new Date().toISOString())}`,
+        ctx.margin,
+        y,
+        {
+            size: pdfTheme.fontSize.normal,
+            bold: true,
+        },
+    );
 
     y -= 62;
 

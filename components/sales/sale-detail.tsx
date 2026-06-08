@@ -428,7 +428,7 @@ function InvoiceCard({
                     </StatusBadge>
 
                     <StatusBadge tone={getDatevStatusTone(datevStatus)}>
-                        DATEV: {getDatevStatusLabel(datevStatus)}
+                        {`DATEV: ${getDatevStatusLabel(datevStatus)}`}
                     </StatusBadge>
                 </div>
             </div>

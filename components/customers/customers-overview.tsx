@@ -386,7 +386,7 @@ export function CustomersOverview({ customers }: CustomersOverviewProps) {
 
                                         <td className="px-5 py-5">
                                             <p className="text-sm font-semibold text-slate-700">
-                                                {formatDate(customer.createdAt)}
+                                                {formatDate(customer.created_at)}
                                             </p>
                                         </td>
 

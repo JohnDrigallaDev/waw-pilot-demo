@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { PurchasesOverview } from "@/components/purchases/purchases-overview";
 import { getPurchaseCases } from "@/lib/purchases/purchase-queries";
 

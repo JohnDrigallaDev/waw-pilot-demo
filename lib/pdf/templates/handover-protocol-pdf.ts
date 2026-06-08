@@ -66,6 +66,39 @@ export async function generateHandoverProtocolPdf(
         );
     }
 
+    const customerForPdf = {
+        name: requireValue(data.customer.name),
+        street: data.customer.street ?? null,
+        postalCode: data.customer.postalCode ?? null,
+        city: data.customer.city ?? null,
+        country: data.customer.country ?? null,
+        email: data.customer.email ?? null,
+        phone: data.customer.phone ?? null,
+        vatId: data.customer.vatId ?? null,
+    };
+
+    const companyForPdf = {
+        legalName: requireValue(data.company.legalName),
+        street: requireValue(data.company.street),
+        postalCode: requireValue(data.company.postalCode),
+        city: requireValue(data.company.city),
+        country: requireValue(data.company.country),
+        email: data.company.email ?? null,
+        phone: data.company.phone ?? null,
+        vatId: data.company.vatId ?? null,
+        taxNumber: data.company.taxNumber ?? null,
+    };
+
+    const vehicleForPdf = {
+        internalNumber: requireValue(data.vehicle.internalNumber),
+        manufacturer: requireValue(data.vehicle.manufacturer),
+        model: requireValue(data.vehicle.model),
+        vehicleType: requireValue(data.vehicle.vehicleType),
+        vin: requireValue(data.vehicle.vin),
+        firstRegistration: data.vehicle.firstRegistration ?? null,
+        constructionYear: data.vehicle.constructionYear ?? null,
+    };
+
     const ctx = await createPdfLayout();
 
     await drawLogo(ctx);
@@ -122,8 +155,8 @@ export async function generateHandoverProtocolPdf(
 
     y -= 20;
 
-    const customerEndY = drawCustomerBlock(ctx, data.customer, leftX, y);
-    const companyEndY = drawCompanyBlock(ctx, data.company, rightX, y);
+    const customerEndY = drawCustomerBlock(ctx, customerForPdf, leftX, y);
+    const companyEndY = drawCompanyBlock(ctx, companyForPdf, rightX, y);
 
     y = Math.min(customerEndY, companyEndY) - 24;
 
@@ -137,7 +170,7 @@ export async function generateHandoverProtocolPdf(
 
     y -= 22;
 
-    y = drawVehicleSummary(ctx, data.vehicle, ctx.margin, y);
+    y = drawVehicleSummary(ctx, vehicleForPdf, ctx.margin, y);
 
     y -= 10;
 
@@ -150,11 +183,11 @@ export async function generateHandoverProtocolPdf(
     drawText(
         ctx,
         [
-            data.vehicle.constructionYear
-                ? `Baujahr ${data.vehicle.constructionYear}`
+            vehicleForPdf.constructionYear
+                ? `Baujahr ${vehicleForPdf.constructionYear}`
                 : null,
-            data.vehicle.firstRegistration
-                ? `Erstzulassung ${formatPdfDate(data.vehicle.firstRegistration)}`
+            vehicleForPdf.firstRegistration
+                ? `Erstzulassung ${formatPdfDate(vehicleForPdf.firstRegistration)}`
                 : null,
         ]
             .filter(Boolean)
@@ -220,6 +253,7 @@ export async function generateHandoverProtocolPdf(
     y -= 56;
 
     const dateText = `Datum: ${formatPdfDate(data.sale.saleDate)}`;
+
     drawText(ctx, dateText, ctx.margin, y, {
         size: pdfTheme.fontSize.normal,
         bold: true,
@@ -228,6 +262,7 @@ export async function generateHandoverProtocolPdf(
     y -= 62;
 
     drawSignatureLine(ctx, ctx.margin, y, "Unterschrift / Stempel Käufer", 210);
+
     drawSignatureLine(
         ctx,
         ctx.width - ctx.margin - 210,

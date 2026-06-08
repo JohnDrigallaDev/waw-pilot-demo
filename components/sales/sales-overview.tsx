@@ -473,8 +473,7 @@ function RequiredDocumentsCell({ sale }: { sale: SaleRow }) {
     return (
         <div className="min-w-[145px]">
             <StatusBadge tone={isComplete ? "success" : "danger"}>
-                {sale.available_required_documents_count} von{" "}
-                {sale.required_documents_count} vorhanden
+                {`${sale.available_required_documents_count} von ${sale.required_documents_count} vorhanden`}
             </StatusBadge>
         </div>
     );

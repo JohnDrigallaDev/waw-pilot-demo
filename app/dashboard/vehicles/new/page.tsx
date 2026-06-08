@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { VehicleForm } from "@/components/vehicles/vehicle-form";
 import { getCustomers } from "@/lib/customers/customer-queries";
 

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { ReportsOverview } from "@/components/reports/reports-overview";
 import {
     getReportsData,

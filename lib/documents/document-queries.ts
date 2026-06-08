@@ -1,5 +1,5 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentCompanyId } from "@/lib/company";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type DocumentSource = "generated" | "uploaded";
 export type DocumentStatus = "available" | "missing" | "needs_review";
@@ -29,36 +29,73 @@ export type DocumentRow = {
     invoice_number: string | null;
 };
 
+type SupabaseRelation<T> = T | T[] | null;
+
+type CustomerRelation = {
+    type: "company" | "private";
+    company_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+};
+
+type VehicleRelation = {
+    internal_number: string;
+    manufacturer: string;
+    model: string;
+};
+
+type InvoiceRelation = {
+    invoice_number: string;
+};
+
 type DocumentQueryRow = {
     id: string;
     document_type: string;
     source: DocumentSource;
     status: DocumentStatus;
+
     file_name: string;
     file_path: string | null;
     mime_type: string | null;
     file_size: number | null;
+
     customer_id: string | null;
     vehicle_id: string | null;
     sale_id: string | null;
     invoice_id: string | null;
+
     generated_by_system: boolean;
     created_at: string;
-    customers: {
-        type: "company" | "private";
-        company_name: string | null;
-        first_name: string | null;
-        last_name: string | null;
-    } | null;
-    vehicles: {
-        internal_number: string;
-        manufacturer: string;
-        model: string;
-    } | null;
-    invoices: {
-        invoice_number: string;
-    } | null;
+
+    customers: SupabaseRelation<CustomerRelation>;
+    vehicles: SupabaseRelation<VehicleRelation>;
+    invoices: SupabaseRelation<InvoiceRelation>;
 };
+
+function getSingleRelation<T>(relation: SupabaseRelation<T>): T | null {
+    if (!relation) return null;
+
+    if (Array.isArray(relation)) {
+        return relation[0] ?? null;
+    }
+
+    return relation;
+}
+
+function getCustomerName(customer: CustomerRelation | null): string | null {
+    if (!customer) return null;
+
+    if (customer.type === "company") {
+        return customer.company_name ?? "Unbekannte Firma";
+    }
+
+    const privateName = [customer.first_name, customer.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+    return privateName.length > 0 ? privateName : "Unbekannte Privatperson";
+}
 
 export async function getDocuments(): Promise<DocumentRow[]> {
     const supabase = createServerSupabaseClient();
@@ -105,15 +142,10 @@ export async function getDocuments(): Promise<DocumentRow[]> {
         throw new Error(`Dokumente konnten nicht geladen werden: ${error.message}`);
     }
 
-    return ((data ?? []) as DocumentQueryRow[]).map((document) => {
-        const customer = document.customers;
-        const vehicle = document.vehicles;
-        const invoice = document.invoices;
-
-        const customerName =
-            customer?.type === "company"
-                ? customer.company_name ?? "Unbekannte Firma"
-                : [customer?.first_name, customer?.last_name].filter(Boolean).join(" ");
+    return ((data ?? []) as unknown as DocumentQueryRow[]).map((document) => {
+        const customer = getSingleRelation(document.customers);
+        const vehicle = getSingleRelation(document.vehicles);
+        const invoice = getSingleRelation(document.invoices);
 
         return {
             id: document.id,
@@ -134,9 +166,11 @@ export async function getDocuments(): Promise<DocumentRow[]> {
             generated_by_system: document.generated_by_system,
             created_at: document.created_at,
 
-            customer_name: customerName || null,
+            customer_name: getCustomerName(customer),
             vehicle_internal_number: vehicle?.internal_number ?? null,
-            vehicle_name: vehicle ? `${vehicle.manufacturer} ${vehicle.model}` : null,
+            vehicle_name: vehicle
+                ? `${vehicle.manufacturer} ${vehicle.model}`
+                : null,
             invoice_number: invoice?.invoice_number ?? null,
         };
     });

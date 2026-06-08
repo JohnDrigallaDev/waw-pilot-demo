@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { SalesOverview } from "@/components/sales/sales-overview";
 import { getSales } from "@/lib/sales/sale-queries";
 

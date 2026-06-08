@@ -132,7 +132,18 @@ export async function generateEntryCertificatePdf(
 
     y -= 20;
 
-    y = drawCustomerBlock(ctx, data.customer, ctx.margin, y);
+    const customerForPdf = {
+        name: requireValue(data.customer.name),
+        street: data.customer.street ?? null,
+        postalCode: data.customer.postalCode ?? null,
+        city: data.customer.city ?? null,
+        country: data.customer.country ?? null,
+        email: data.customer.email ?? null,
+        phone: data.customer.phone ?? null,
+        vatId: data.customer.vatId ?? null,
+    };
+
+    y = drawCustomerBlock(ctx, customerForPdf, ctx.margin, y);
 
     if (data.customer.vatId) {
         drawText(ctx, `USt-ID: ${data.customer.vatId}`, ctx.margin, y - 2, {
@@ -218,7 +229,7 @@ export async function generateEntryCertificatePdf(
             maxWidth: 145,
         });
 
-        drawText(ctx, row.value, ctx.margin + 165, y, {
+        drawText(ctx, requireValue(row.value), ctx.margin + 165, y, {
             size: pdfTheme.fontSize.small,
             color: pdfTheme.colors.text,
             maxWidth: ctx.width - ctx.margin * 2 - 165,
