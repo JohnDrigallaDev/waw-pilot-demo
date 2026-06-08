@@ -17,6 +17,14 @@ function getStringValue(formData: FormData, key: string): string {
     return value.trim();
 }
 
+function getSafeRedirectPath(path: string) {
+    if (!path.startsWith("/") || path.startsWith("//")) {
+        return "/dashboard";
+    }
+
+    return path;
+}
+
 export async function loginAction(
     _previousState: LoginState,
     formData: FormData,
@@ -53,5 +61,5 @@ export async function loginAction(
         };
     }
 
-    redirect(redirectedFrom || "/dashboard");
+    redirect(getSafeRedirectPath(redirectedFrom || "/dashboard"));
 }
