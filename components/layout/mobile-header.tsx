@@ -16,10 +16,10 @@ export function MobileHeader() {
     const [open, setOpen] = useState(false);
 
     return (
-        <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/85 px-4 py-3 backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm shadow-slate-200/60 backdrop-blur-xl lg:hidden">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-200 bg-cyan-50 text-cyan-700">
+                    <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-blue-50 text-cyan-700 shadow-sm">
                         <Truck className="size-5" />
                     </div>
 
@@ -36,7 +36,7 @@ export function MobileHeader() {
                         <Button
                             variant="outline"
                             size="icon"
-                            className="size-11 rounded-2xl border-slate-200 bg-white"
+                            className="size-11 rounded-2xl border-slate-200 bg-white shadow-sm"
                             aria-label="Menü öffnen"
                         >
                             <Menu className="size-5" />
@@ -45,7 +45,7 @@ export function MobileHeader() {
 
                     <SheetContent
                         side="left"
-                        className="w-[86vw] max-w-sm border-r border-slate-200 bg-white p-0"
+                        className="w-[86vw] max-w-sm border-r border-slate-900 bg-slate-950 p-0 text-white"
                     >
                         <SheetTitle className="sr-only">Navigation</SheetTitle>
                         <div className="flex h-full flex-col">

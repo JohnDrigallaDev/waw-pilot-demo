@@ -379,7 +379,13 @@ function DashboardStatCard({
                            }: DashboardStatCardProps) {
     return (
         <Link href={href}>
-            <Card className="group h-full rounded-[1.5rem] border-slate-200 bg-white/90 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/80">
+            <Card
+                className={
+                    danger
+                        ? "group h-full rounded-[1.5rem] border-red-100 bg-gradient-to-br from-red-50/80 via-white to-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-red-100/70"
+                        : "group h-full rounded-[1.5rem] border-cyan-100 bg-gradient-to-br from-cyan-50/70 via-white to-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-100/70"
+                }
+            >
                 <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-4">
                         <div>
@@ -395,8 +401,8 @@ function DashboardStatCard({
                         <div
                             className={
                                 danger
-                                    ? "flex size-11 items-center justify-center rounded-2xl border border-red-100 bg-red-50 text-red-700"
-                                    : "flex size-11 items-center justify-center rounded-2xl border border-cyan-100 bg-cyan-50 text-cyan-700"
+                                    ? "flex size-11 items-center justify-center rounded-2xl border border-red-200 bg-red-50 text-red-800 shadow-sm shadow-red-900/10"
+                                    : "flex size-11 items-center justify-center rounded-2xl border border-cyan-200 bg-cyan-50 text-cyan-800 shadow-sm shadow-cyan-900/10"
                             }
                         >
                             <Icon className="size-5" />

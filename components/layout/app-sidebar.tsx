@@ -3,14 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 
 import { mainNavigation, secondaryNavigation } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 export function AppSidebar() {
     return (
-        <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-slate-200 bg-white/95 backdrop-blur-xl lg:flex lg:flex-col">
+        <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/15 lg:flex lg:flex-col">
             <SidebarContent />
         </aside>
     );
@@ -24,9 +24,10 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <Link
                 href="/dashboard"
                 onClick={onNavigate}
-                className="flex h-20 items-center gap-3 border-b border-slate-100 px-5 transition hover:bg-slate-50/70"
+                className="relative flex min-h-24 items-center gap-3 overflow-hidden border-b border-white/10 px-5 transition hover:bg-white/[0.04]"
             >
-                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-100 bg-white shadow-sm">
+                <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,145,178,0.28),rgba(15,23,42,0)_55%,rgba(16,185,129,0.12))]" />
+                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-white shadow-lg shadow-cyan-950/40">
                     <Image
                         src="/software-logo.png"
                         alt="WAW Pilot Logo"
@@ -35,17 +36,17 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         priority
                     />
                 </div>
-                <div className="min-w-0">
-                    <p className="truncate text-sm font-extrabold uppercase tracking-[0.28em] text-cyan-700">
+                <div className="relative min-w-0">
+                    <p className="truncate text-sm font-black uppercase tracking-[0.28em] text-cyan-100">
                         WAW Pilot
                     </p>
-                    <p className="truncate text-xs font-semibold text-slate-500">
+                    <p className="truncate text-xs font-semibold text-slate-300">
                         Nutzfahrzeughandel
                     </p>
                 </div>
             </Link>
 
-            <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
+            <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
                 {mainNavigation.map((item) => {
                     const isActive =
                         pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -56,16 +57,19 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                             href={item.href}
                             onClick={onNavigate}
                             className={cn(
-                                "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all duration-200",
+                                "group relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all duration-200",
                                 isActive
-                                    ? "bg-cyan-50 text-cyan-800 ring-1 ring-cyan-100"
-                                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
+                                    ? "bg-white text-slate-950 shadow-lg shadow-cyan-950/25"
+                                    : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
                             )}
                         >
+                            {isActive ? (
+                                <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-cyan-500" />
+                            ) : null}
                             <item.icon
                                 className={cn(
                                     "size-4 transition-transform duration-200 group-hover:scale-110",
-                                    isActive ? "text-cyan-700" : "text-slate-500",
+                                    isActive ? "text-cyan-700" : "text-slate-400",
                                 )}
                             />
                             {item.title}
@@ -74,7 +78,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 })}
             </nav>
 
-            <div className="space-y-1 border-t border-slate-100 px-4 py-5">
+            <div className="space-y-1.5 border-t border-white/10 px-3 py-5">
                 {secondaryNavigation.map((item) => {
                     const isActive =
                         pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -85,16 +89,19 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                             href={item.href}
                             onClick={onNavigate}
                             className={cn(
-                                "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all duration-200",
+                                "group relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all duration-200",
                                 isActive
-                                    ? "bg-cyan-50 text-cyan-800 ring-1 ring-cyan-100"
-                                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
+                                    ? "bg-white text-slate-950 shadow-lg shadow-cyan-950/25"
+                                    : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
                             )}
                         >
+                            {isActive ? (
+                                <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-cyan-500" />
+                            ) : null}
                             <item.icon
                                 className={cn(
                                     "size-4 transition-transform duration-200 group-hover:scale-110",
-                                    isActive ? "text-cyan-700" : "text-slate-500",
+                                    isActive ? "text-cyan-700" : "text-slate-400",
                                 )}
                             />
                             {item.title}
@@ -103,19 +110,22 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 })}
             </div>
 
-            <div className="space-y-3 border-t border-slate-100 p-4">
-                <div className="rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
-                    <p className="text-sm font-extrabold text-cyan-950">
+            <div className="space-y-3 border-t border-white/10 p-4">
+                <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/10 p-4 shadow-inner shadow-white/5">
+                    <div className="mb-3 flex size-9 items-center justify-center rounded-xl bg-cyan-300/15 text-cyan-100">
+                        <ShieldCheck className="size-4" />
+                    </div>
+                    <p className="text-sm font-extrabold text-white">
                         WAW Automatisierung
                     </p>
-                    <p className="mt-1 text-xs font-semibold leading-5 text-cyan-800">
+                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-300">
                         Rechnungen, Dokumente und Bestandsprozesse zentral steuern.
                     </p>
                 </div>
                 <a
                     href="/logout"
                     onClick={onNavigate}
-                    className="group flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-600 transition-all duration-200 hover:border-red-100 hover:bg-red-50 hover:text-red-700"
+                    className="group flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-extrabold text-slate-300 transition-all duration-200 hover:border-red-300/25 hover:bg-red-500/10 hover:text-red-100"
                 >
                     <LogOut className="size-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
                     Abmelden
