@@ -16,6 +16,8 @@ type CreateSaleState = {
     message: string;
 };
 
+type CustomerType = "company" | "private";
+
 function getStringValue(formData: FormData, key: string): string | null {
     const value = formData.get(key);
 
@@ -51,6 +53,16 @@ function getSaleTypeValue(formData: FormData): SaleType {
     return "inland";
 }
 
+function getNewCustomerType(formData: FormData): CustomerType {
+    const value = getStringValue(formData, "new_customer_type");
+
+    if (value === "company" || value === "private") {
+        return value;
+    }
+
+    return "company";
+}
+
 function roundMoney(value: number): number {
     return Math.round(value * 100) / 100;
 }
@@ -62,6 +74,96 @@ function addDays(dateString: string, days: number): string {
     return date.toISOString().slice(0, 10);
 }
 
+async function createBuyerCustomerFromSaleForm(
+    supabase: ReturnType<typeof createServerSupabaseClient>,
+    companyId: string,
+    formData: FormData,
+): Promise<
+    | {
+    success: true;
+    customerId: string;
+}
+    | {
+    success: false;
+    message: string;
+}
+> {
+    const type = getNewCustomerType(formData);
+
+    const companyName = getStringValue(formData, "new_customer_company_name");
+    const ownerName = getStringValue(formData, "new_customer_owner_name");
+    const firstName = getStringValue(formData, "new_customer_first_name");
+    const lastName = getStringValue(formData, "new_customer_last_name");
+
+    const street = getStringValue(formData, "new_customer_street");
+    const postalCode = getStringValue(formData, "new_customer_postal_code");
+    const city = getStringValue(formData, "new_customer_city");
+    const country = getStringValue(formData, "new_customer_country") ?? "Deutschland";
+
+    const email = getStringValue(formData, "new_customer_email");
+    const phone = getStringValue(formData, "new_customer_phone");
+    const vatId = getStringValue(formData, "new_customer_vat_id");
+    const taxNumber = getStringValue(formData, "new_customer_tax_number");
+
+    if (!street || !postalCode || !city) {
+        return {
+            success: false,
+            message: "Bitte gib Straße, PLZ und Ort für den neuen Käufer ein.",
+        };
+    }
+
+    if (type === "company" && !companyName) {
+        return {
+            success: false,
+            message: "Bitte gib einen Firmennamen für den neuen Käufer ein.",
+        };
+    }
+
+    if (type === "private" && (!firstName || !lastName)) {
+        return {
+            success: false,
+            message: "Bitte gib Vorname und Nachname für den neuen Käufer ein.",
+        };
+    }
+
+    const { data: customer, error } = await supabase
+        .from("customers")
+        .insert({
+            company_id: companyId,
+            type,
+            company_name: type === "company" ? companyName : null,
+            owner_name: ownerName,
+            first_name: type === "private" ? firstName : null,
+            last_name: type === "private" ? lastName : null,
+            street,
+            postal_code: postalCode,
+            city,
+            country,
+            email,
+            phone,
+            tax_number: taxNumber,
+            vat_id: vatId,
+            commercial_register_number: null,
+            notes: "Direkt beim Verkauf angelegt.",
+        })
+        .select("id")
+        .single();
+
+    if (error || !customer) {
+        return {
+            success: false,
+            message: `Neuer Käufer konnte nicht gespeichert werden: ${
+                error?.message ?? "Keine Kunden-ID erhalten"
+            }`,
+        };
+    }
+
+    return {
+        success: true,
+        customerId: customer.id as string,
+    };
+}
+
 export async function createSaleAction(
     _previousState: CreateSaleState,
     formData: FormData,
@@ -70,7 +172,9 @@ export async function createSaleAction(
     const companyId = getCurrentCompanyId();
 
     const vehicleId = getStringValue(formData, "vehicle_id");
-    const buyerCustomerId = getStringValue(formData, "buyer_customer_id");
+    let buyerCustomerId = getStringValue(formData, "buyer_customer_id");
+
+    const buyerMode = getStringValue(formData, "buyer_mode") ?? "existing";
     const saleDate = getStringValue(formData, "sale_date");
     const saleType = getSaleTypeValue(formData);
     const netAmount = getNumberValue(formData, "net_amount");
@@ -113,10 +217,27 @@ export async function createSaleAction(
         };
     }
 
+    if (buyerMode === "new") {
+        const createdCustomer = await createBuyerCustomerFromSaleForm(
+            supabase,
+            companyId,
+            formData,
+        );
+
+        if (!createdCustomer.success) {
+            return {
+                success: false,
+                message: createdCustomer.message,
+            };
+        }
+
+        buyerCustomerId = createdCustomer.customerId;
+    }
+
     if (!buyerCustomerId) {
         return {
             success: false,
-            message: "Bitte wähle einen Käufer aus.",
+            message: "Bitte wähle einen Käufer aus oder lege einen neuen Käufer an.",
         };
     }
 
