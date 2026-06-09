@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 import { mainNavigation, secondaryNavigation } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 className="relative flex min-h-24 items-center gap-3 overflow-hidden border-b border-white/10 px-5 transition hover:bg-white/[0.04]"
             >
                 <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(8,145,178,0.28),rgba(15,23,42,0)_55%,rgba(16,185,129,0.12))]" />
+
                 <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-white shadow-lg shadow-cyan-950/40">
                     <Image
                         src="/software-logo.png"
@@ -36,6 +37,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         priority
                     />
                 </div>
+
                 <div className="relative min-w-0">
                     <p className="truncate text-sm font-black uppercase tracking-[0.28em] text-cyan-100">
                         WAW Pilot
@@ -46,82 +48,81 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 </div>
             </Link>
 
-            <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
-                {mainNavigation.map((item) => {
-                    const isActive =
-                        pathname === item.href || pathname.startsWith(`${item.href}/`);
+            <div className="flex-1 overflow-y-auto px-3 py-5">
+                <nav className="space-y-1.5">
+                    {mainNavigation.map((item) => {
+                        const isActive =
+                            pathname === item.href ||
+                            pathname.startsWith(`${item.href}/`);
 
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={onNavigate}
-                            className={cn(
-                                "group relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all duration-200",
-                                isActive
-                                    ? "bg-white text-slate-950 shadow-lg shadow-cyan-950/25"
-                                    : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
-                            )}
-                        >
-                            {isActive ? (
-                                <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-cyan-500" />
-                            ) : null}
-                            <item.icon
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                onClick={onNavigate}
                                 className={cn(
-                                    "size-4 transition-transform duration-200 group-hover:scale-110",
-                                    isActive ? "text-cyan-700" : "text-slate-400",
+                                    "group relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all duration-200",
+                                    isActive
+                                        ? "bg-white text-slate-950 shadow-lg shadow-cyan-950/25"
+                                        : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
                                 )}
-                            />
-                            {item.title}
-                        </Link>
-                    );
-                })}
-            </nav>
+                            >
+                                {isActive ? (
+                                    <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-cyan-500" />
+                                ) : null}
 
-            <div className="space-y-1.5 border-t border-white/10 px-3 py-5">
-                {secondaryNavigation.map((item) => {
-                    const isActive =
-                        pathname === item.href || pathname.startsWith(`${item.href}/`);
+                                <item.icon
+                                    className={cn(
+                                        "size-4 transition-transform duration-200 group-hover:scale-110",
+                                        isActive ? "text-cyan-700" : "text-slate-400",
+                                    )}
+                                />
 
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={onNavigate}
-                            className={cn(
-                                "group relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all duration-200",
-                                isActive
-                                    ? "bg-white text-slate-950 shadow-lg shadow-cyan-950/25"
-                                    : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
-                            )}
-                        >
-                            {isActive ? (
-                                <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-cyan-500" />
-                            ) : null}
-                            <item.icon
-                                className={cn(
-                                    "size-4 transition-transform duration-200 group-hover:scale-110",
-                                    isActive ? "text-cyan-700" : "text-slate-400",
-                                )}
-                            />
-                            {item.title}
-                        </Link>
-                    );
-                })}
+                                {item.title}
+                            </Link>
+                        );
+                    })}
+                </nav>
+
+                <div className="mt-7 border-t border-white/10 pt-6">
+                    <nav className="space-y-1.5">
+                        {secondaryNavigation.map((item) => {
+                            const isActive =
+                                pathname === item.href ||
+                                pathname.startsWith(`${item.href}/`);
+
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    onClick={onNavigate}
+                                    className={cn(
+                                        "group relative flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all duration-200",
+                                        isActive
+                                            ? "bg-white text-slate-950 shadow-lg shadow-cyan-950/25"
+                                            : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
+                                    )}
+                                >
+                                    {isActive ? (
+                                        <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-cyan-500" />
+                                    ) : null}
+
+                                    <item.icon
+                                        className={cn(
+                                            "size-4 transition-transform duration-200 group-hover:scale-110",
+                                            isActive ? "text-cyan-700" : "text-slate-400",
+                                        )}
+                                    />
+
+                                    {item.title}
+                                </Link>
+                            );
+                        })}
+                    </nav>
+                </div>
             </div>
 
-            <div className="space-y-3 border-t border-white/10 p-4">
-                <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/10 p-4 shadow-inner shadow-white/5">
-                    <div className="mb-3 flex size-9 items-center justify-center rounded-xl bg-cyan-300/15 text-cyan-100">
-                        <ShieldCheck className="size-4" />
-                    </div>
-                    <p className="text-sm font-extrabold text-white">
-                        WAW Automatisierung
-                    </p>
-                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-300">
-                        Rechnungen, Dokumente und Bestandsprozesse zentral steuern.
-                    </p>
-                </div>
+            <div className="border-t border-white/10 p-4">
                 <a
                     href="/logout"
                     onClick={onNavigate}
