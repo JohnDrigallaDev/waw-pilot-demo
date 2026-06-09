@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CreateCustomerState = {
@@ -18,6 +19,24 @@ function getStringValue(formData: FormData, key: string): string | null {
     const trimmedValue = value.trim();
 
     return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function getCustomerName({
+                             type,
+                             companyName,
+                             firstName,
+                             lastName,
+                         }: {
+    type: "company" | "private";
+    companyName: string | null;
+    firstName: string | null;
+    lastName: string | null;
+}): string {
+    if (type === "company") {
+        return companyName ?? "Unbekannte Firma";
+    }
+
+    return [firstName, lastName].filter(Boolean).join(" ") || "Unbekannte Privatperson";
 }
 
 export async function createCustomerAction(
@@ -77,31 +96,50 @@ export async function createCustomerAction(
         };
     }
 
-    const { error } = await supabase.from("customers").insert({
-        company_id: companyId,
-        type,
-        company_name: companyName,
-        owner_name: ownerName,
-        first_name: firstName,
-        last_name: lastName,
-        street,
-        postal_code: postalCode,
-        city,
-        country,
-        email,
-        phone,
-        tax_number: taxNumber,
-        vat_id: vatId,
-        commercial_register_number: commercialRegisterNumber,
-        notes,
-    });
+    const { data: customer, error } = await supabase
+        .from("customers")
+        .insert({
+            company_id: companyId,
+            type,
+            company_name: companyName,
+            owner_name: ownerName,
+            first_name: firstName,
+            last_name: lastName,
+            street,
+            postal_code: postalCode,
+            city,
+            country,
+            email,
+            phone,
+            tax_number: taxNumber,
+            vat_id: vatId,
+            commercial_register_number: commercialRegisterNumber,
+            notes,
+        })
+        .select("id")
+        .single();
 
-    if (error) {
+    if (error || !customer) {
         return {
             success: false,
-            message: `Kunde konnte nicht gespeichert werden: ${error.message}`,
+            message: `Kunde konnte nicht gespeichert werden: ${
+                error?.message ?? "Keine Kunden-ID erhalten"
+            }`,
         };
     }
+
+    const customerName = getCustomerName({
+        type,
+        companyName,
+        firstName,
+        lastName,
+    });
+
+    await logActivity({
+        action: `Kunde ${customerName} angelegt`,
+        entityType: "customer",
+        entityId: customer.id as string,
+    });
 
     redirect("/dashboard/customers");
 }

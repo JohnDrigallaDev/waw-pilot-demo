@@ -24,59 +24,49 @@ export function RegisterForm() {
                 </div>
             ) : null}
 
-            <div className="space-y-2">
-                <label
-                    htmlFor="email"
-                    className="text-sm font-bold text-slate-200"
-                >
-                    E-Mail
-                </label>
-                <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
+            <div className="grid gap-4 md:grid-cols-2">
+                <AuthField
+                    label="Vorname"
+                    name="first_name"
+                    autoComplete="given-name"
+                    placeholder="Max"
                     required
-                    className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60 focus:bg-white/10 focus:ring-4 focus:ring-cyan-300/10"
-                    placeholder="name@firma.de"
+                />
+                <AuthField
+                    label="Nachname"
+                    name="last_name"
+                    autoComplete="family-name"
+                    placeholder="Mustermann"
+                    required
                 />
             </div>
 
-            <div className="space-y-2">
-                <label
-                    htmlFor="password"
-                    className="text-sm font-bold text-slate-200"
-                >
-                    Passwort
-                </label>
-                <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60 focus:bg-white/10 focus:ring-4 focus:ring-cyan-300/10"
-                    placeholder="Mindestens 6 Zeichen"
-                />
-            </div>
+            <AuthField
+                label="E-Mail"
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="name@firma.de"
+                required
+            />
 
-            <div className="space-y-2">
-                <label
-                    htmlFor="password_confirm"
-                    className="text-sm font-bold text-slate-200"
-                >
-                    Passwort bestätigen
-                </label>
-                <input
-                    id="password_confirm"
-                    name="password_confirm"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60 focus:bg-white/10 focus:ring-4 focus:ring-cyan-300/10"
-                    placeholder="Passwort wiederholen"
-                />
-            </div>
+            <AuthField
+                label="Passwort"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Mindestens 6 Zeichen"
+                required
+            />
+
+            <AuthField
+                label="Passwort bestätigen"
+                name="password_confirm"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Passwort wiederholen"
+                required
+            />
 
             <button
                 type="submit"
@@ -89,5 +79,38 @@ export function RegisterForm() {
                 </span>
             </button>
         </form>
+    );
+}
+
+function AuthField({
+                       label,
+                       name,
+                       type = "text",
+                       autoComplete,
+                       placeholder,
+                       required = false,
+                   }: {
+    label: string;
+    name: string;
+    type?: string;
+    autoComplete?: string;
+    placeholder?: string;
+    required?: boolean;
+}) {
+    return (
+        <div className="space-y-2">
+            <label htmlFor={name} className="text-sm font-bold text-slate-200">
+                {label}
+            </label>
+            <input
+                id={name}
+                name={name}
+                type={type}
+                autoComplete={autoComplete}
+                required={required}
+                className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60 focus:bg-white/10 focus:ring-4 focus:ring-cyan-300/10"
+                placeholder={placeholder}
+            />
+        </div>
     );
 }

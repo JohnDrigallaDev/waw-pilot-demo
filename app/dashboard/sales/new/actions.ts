@@ -10,6 +10,7 @@ import {
 import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { SaleType } from "@/lib/sales/sale-queries";
+import { logActivity } from "@/lib/activity/activity-log";
 
 type CreateSaleState = {
     success: boolean;
@@ -74,6 +75,24 @@ function addDays(dateString: string, days: number): string {
     return date.toISOString().slice(0, 10);
 }
 
+function getCreatedCustomerName({
+                                    type,
+                                    companyName,
+                                    firstName,
+                                    lastName,
+                                }: {
+    type: CustomerType;
+    companyName: string | null;
+    firstName: string | null;
+    lastName: string | null;
+}): string {
+    if (type === "company") {
+        return companyName ?? "Unbekannte Firma";
+    }
+
+    return [firstName, lastName].filter(Boolean).join(" ") || "Unbekannte Privatperson";
+}
+
 async function createBuyerCustomerFromSaleForm(
     supabase: ReturnType<typeof createServerSupabaseClient>,
     companyId: string,
@@ -82,6 +101,7 @@ async function createBuyerCustomerFromSaleForm(
     | {
     success: true;
     customerId: string;
+    customerName: string;
 }
     | {
     success: false;
@@ -161,6 +181,12 @@ async function createBuyerCustomerFromSaleForm(
     return {
         success: true,
         customerId: customer.id as string,
+        customerName: getCreatedCustomerName({
+            type,
+            companyName,
+            firstName,
+            lastName,
+        }),
     };
 }
 
@@ -232,6 +258,12 @@ export async function createSaleAction(
         }
 
         buyerCustomerId = createdCustomer.customerId;
+
+        await logActivity({
+            action: `Kunde ${createdCustomer.customerName} direkt beim Verkauf angelegt`,
+            entityType: "customer",
+            entityId: createdCustomer.customerId,
+        });
     }
 
     if (!buyerCustomerId) {
@@ -314,6 +346,12 @@ export async function createSaleAction(
 
     const saleId = sale.id as string;
 
+    await logActivity({
+        action: `Verkauf für ${vehicleData.internal_number} angelegt`,
+        entityType: "sale",
+        entityId: saleId,
+    });
+
     const { error: vehicleUpdateError } = await supabase
         .from("vehicles")
         .update({
@@ -385,6 +423,12 @@ export async function createSaleAction(
 
         const createdInvoiceId = invoice.id as string;
         invoiceId = createdInvoiceId;
+
+        await logActivity({
+            action: `Rechnung ${invoiceNumber} erzeugt`,
+            entityType: "invoice",
+            entityId: createdInvoiceId,
+        });
 
         const invoiceFileName = `rechnung-${invoiceNumber}.pdf`;
         const invoiceFilePath = `invoices/${invoiceFileName}`;

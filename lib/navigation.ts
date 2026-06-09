@@ -1,4 +1,5 @@
 import {
+    Activity,
     BadgeCheck,
     BarChart3,
     BookOpen,
@@ -70,6 +71,11 @@ export const mainNavigation = [
         title: "Berichte",
         href: "/dashboard/reports",
         icon: BarChart3,
+    },
+    {
+        title: "Aktivitäten",
+        href: "/dashboard/activities",
+        icon: Activity,
     },
 ];
 

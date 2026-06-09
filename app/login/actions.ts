@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { getCurrentCompanyId } from "@/lib/company";
 import { createAuthServerSupabaseClient } from "@/lib/supabase/auth-server";
 
 type LoginState = {
@@ -25,11 +26,18 @@ function getSafeRedirectPath(path: string) {
     return path;
 }
 
+function getFallbackFirstName(email: string): string {
+    const localPart = email.split("@")[0] ?? "Benutzer";
+
+    return localPart || "Benutzer";
+}
+
 export async function loginAction(
     _previousState: LoginState,
     formData: FormData,
 ): Promise<LoginState> {
     const supabase = await createAuthServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
 
     const email = getStringValue(formData, "email");
     const password = getStringValue(formData, "password");
@@ -49,7 +57,7 @@ export async function loginAction(
         };
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
     });
@@ -59,6 +67,42 @@ export async function loginAction(
             success: false,
             message: `Login fehlgeschlagen: ${error.message}`,
         };
+    }
+
+    if (data.user) {
+        const { data: existingProfile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("auth_user_id", data.user.id)
+            .eq("company_id", companyId)
+            .maybeSingle();
+
+        if (existingProfile) {
+            await supabase
+                .from("profiles")
+                .update({
+                    last_seen_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", existingProfile.id);
+        } else {
+            await supabase.from("profiles").insert({
+                id: data.user.id,
+                company_id: companyId,
+                auth_user_id: data.user.id,
+                first_name:
+                    typeof data.user.user_metadata?.first_name === "string"
+                        ? data.user.user_metadata.first_name
+                        : getFallbackFirstName(email),
+                last_name:
+                    typeof data.user.user_metadata?.last_name === "string"
+                        ? data.user.user_metadata.last_name
+                        : "Unbekannt",
+                email,
+                role: "user",
+                last_seen_at: new Date().toISOString(),
+            });
+        }
     }
 
     redirect(getSafeRedirectPath(redirectedFrom || "/dashboard"));

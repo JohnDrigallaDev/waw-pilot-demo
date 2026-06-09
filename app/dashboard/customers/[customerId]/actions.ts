@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function getStringValue(formData: FormData, key: string): string | null {
@@ -16,6 +17,22 @@ function getStringValue(formData: FormData, key: string): string | null {
     return trimmedValue.length > 0 ? trimmedValue : null;
 }
 
+function getCustomerDisplayName(customer: {
+    type: "company" | "private";
+    company_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+}) {
+    if (customer.type === "company") {
+        return customer.company_name ?? "Unbekannte Firma";
+    }
+
+    return [customer.first_name, customer.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || "Unbekannte Privatperson";
+}
+
 export async function updateCustomerMasterDataAction(formData: FormData) {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -25,6 +42,13 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
     if (!customerId) {
         throw new Error("Kunde fehlt.");
     }
+
+    const { data: existingCustomer } = await supabase
+        .from("customers")
+        .select("type, company_name, first_name, last_name")
+        .eq("id", customerId)
+        .eq("company_id", companyId)
+        .maybeSingle();
 
     const street = getStringValue(formData, "street");
     const postalCode = getStringValue(formData, "postal_code");
@@ -59,11 +83,22 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
         );
     }
 
+    const customerName = existingCustomer
+        ? getCustomerDisplayName(existingCustomer)
+        : "Unbekannter Kunde";
+
+    await logActivity({
+        action: `Kundendaten von ${customerName} aktualisiert`,
+        entityType: "customer",
+        entityId: customerId,
+    });
+
     revalidatePath(`/dashboard/customers/${customerId}`);
     revalidatePath("/dashboard/customers");
     revalidatePath("/dashboard/sales");
     revalidatePath("/dashboard/documents");
     revalidatePath("/dashboard/checks");
+    revalidatePath("/dashboard/activities");
 
     redirect(`/dashboard/customers/${customerId}`);
 }
