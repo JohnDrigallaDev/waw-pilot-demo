@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function getStringValue(formData: FormData, key: string): string | null {
@@ -14,6 +15,13 @@ function getStringValue(formData: FormData, key: string): string | null {
     const trimmedValue = value.trim();
 
     return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function getPaymentMethodLabel(paymentMethod: string): string {
+    if (paymentMethod === "cash") return "Bar";
+    if (paymentMethod === "bank") return "Bank";
+
+    return paymentMethod;
 }
 
 export async function markPurchasePaidAction(formData: FormData) {
@@ -59,6 +67,9 @@ export async function markPurchasePaidAction(formData: FormData) {
         redirect(`/dashboard/ankauf/${purchaseId}`);
     }
 
+    const purchaseNumber = purchaseData.purchase_number ?? purchaseId;
+    const paymentMethodLabel = getPaymentMethodLabel(paymentMethod);
+
     const { error: purchaseUpdateError } = await supabase
         .from("purchase_cases")
         .update({
@@ -75,6 +86,12 @@ export async function markPurchasePaidAction(formData: FormData) {
         );
     }
 
+    await logActivity({
+        action: `Ankauf ${purchaseNumber} als bezahlt markiert`,
+        entityType: "purchase",
+        entityId: purchaseId,
+    });
+
     const { data: existingCashbookEntry, error: cashbookCheckError } =
         await supabase
             .from("cashbook_entries")
@@ -90,7 +107,7 @@ export async function markPurchasePaidAction(formData: FormData) {
     }
 
     if (!existingCashbookEntry) {
-        const { error: cashbookInsertError } = await supabase
+        const { data: cashbookEntry, error: cashbookInsertError } = await supabase
             .from("cashbook_entries")
             .insert({
                 company_id: companyId,
@@ -99,20 +116,30 @@ export async function markPurchasePaidAction(formData: FormData) {
                 payment_method: paymentMethod,
                 amount: Number(purchaseData.gross_amount),
                 booking_date: new Date().toISOString().slice(0, 10),
-                description: `Zahlung Ankauf ${purchaseData.purchase_number ?? purchaseId}`,
+                description: `Zahlung Ankauf ${purchaseNumber}`,
                 customer_id: purchaseData.seller_customer_id,
                 vehicle_id: purchaseData.vehicle_id,
                 sale_id: null,
                 invoice_id: null,
                 purchase_case_id: purchaseId,
                 document_id: null,
-            });
+            })
+            .select("id")
+            .single();
 
-        if (cashbookInsertError) {
+        if (cashbookInsertError || !cashbookEntry) {
             throw new Error(
-                `Kassenbuch-Eintrag konnte nicht erstellt werden: ${cashbookInsertError.message}`,
+                `Kassenbuch-Eintrag konnte nicht erstellt werden: ${
+                    cashbookInsertError?.message ?? "Keine Kassenbuch-ID erhalten"
+                }`,
             );
         }
+
+        await logActivity({
+            action: `Kassenbuch-Eintrag für Ankauf ${purchaseNumber} erstellt (${paymentMethodLabel})`,
+            entityType: "cashbook",
+            entityId: cashbookEntry.id as string,
+        });
     }
 
     revalidatePath(`/dashboard/ankauf/${purchaseId}`);
@@ -120,6 +147,7 @@ export async function markPurchasePaidAction(formData: FormData) {
     revalidatePath("/dashboard/cashbook");
     revalidatePath("/dashboard/checks");
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/activities");
 
     redirect(`/dashboard/ankauf/${purchaseId}`);
 }

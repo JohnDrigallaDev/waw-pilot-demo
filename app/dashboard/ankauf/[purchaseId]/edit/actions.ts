@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type UpdatePurchaseCaseState = {
@@ -34,6 +35,21 @@ function getNumberValue(formData: FormData, key: string): number | null {
 
 function roundMoney(value: number): number {
     return Math.round(value * 100) / 100;
+}
+
+function getVehicleActivityName(vehicle: {
+    internal_number: string | null;
+    manufacturer: string | null;
+    model: string | null;
+} | null): string {
+    if (!vehicle) return "unbekanntes Fahrzeug";
+
+    const name = [vehicle.internal_number, vehicle.manufacturer, vehicle.model]
+        .filter(Boolean)
+        .join(" · ")
+        .trim();
+
+    return name || "unbekanntes Fahrzeug";
 }
 
 export async function updatePurchaseCaseAction(
@@ -98,6 +114,23 @@ export async function updatePurchaseCaseAction(
         };
     }
 
+    const { data: existingPurchase } = await supabase
+        .from("purchase_cases")
+        .select("purchase_number, payment_status")
+        .eq("id", purchaseId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+    const { data: vehicleData } = await supabase
+        .from("vehicles")
+        .select("internal_number, manufacturer, model")
+        .eq("id", vehicleId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+    const purchaseNumber = existingPurchase?.purchase_number ?? purchaseId;
+    const vehicleActivityName = getVehicleActivityName(vehicleData);
+
     const vatAmount = roundMoney(netAmount * (vatRate / 100));
     const grossAmount = roundMoney(netAmount + vatAmount);
 
@@ -143,10 +176,28 @@ export async function updatePurchaseCaseAction(
         };
     }
 
+    await logActivity({
+        action: `Ankaufsakte ${purchaseNumber} für ${vehicleActivityName} aktualisiert`,
+        entityType: "purchase",
+        entityId: purchaseId,
+    });
+
+    if (
+        existingPurchase?.payment_status !== "paid" &&
+        paymentStatus === "paid"
+    ) {
+        await logActivity({
+            action: `Ankauf ${purchaseNumber} als bezahlt markiert`,
+            entityType: "purchase",
+            entityId: purchaseId,
+        });
+    }
+
     revalidatePath(`/dashboard/ankauf/${purchaseId}`);
     revalidatePath("/dashboard/ankauf");
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/checks");
+    revalidatePath("/dashboard/activities");
 
     redirect(`/dashboard/ankauf/${purchaseId}`);
 }

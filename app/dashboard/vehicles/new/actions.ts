@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CreateVehicleState = {
@@ -33,6 +34,18 @@ function getNumberValue(formData: FormData, key: string): number | null {
 
 function getDateValue(formData: FormData, key: string): string | null {
     return getStringValue(formData, key);
+}
+
+function getVehicleActivityName({
+                                    internalNumber,
+                                    manufacturer,
+                                    model,
+                                }: {
+    internalNumber: string;
+    manufacturer: string;
+    model: string;
+}): string {
+    return [internalNumber, manufacturer, model].filter(Boolean).join(" · ");
 }
 
 export async function createVehicleAction(
@@ -75,6 +88,12 @@ export async function createVehicleAction(
         };
     }
 
+    const vehicleActivityName = getVehicleActivityName({
+        internalNumber,
+        manufacturer,
+        model,
+    });
+
     const { data: vehicle, error: vehicleError } = await supabase
         .from("vehicles")
         .insert({
@@ -97,30 +116,52 @@ export async function createVehicleAction(
         .select("id")
         .single();
 
-    if (vehicleError) {
+    if (vehicleError || !vehicle) {
         return {
             success: false,
-            message: `Fahrzeug konnte nicht gespeichert werden: ${vehicleError.message}`,
+            message: `Fahrzeug konnte nicht gespeichert werden: ${
+                vehicleError?.message ?? "Keine Fahrzeug-ID erhalten"
+            }`,
         };
     }
 
-    if (sellerCustomerId) {
-        const { error: purchaseError } = await supabase.from("purchases").insert({
-            company_id: companyId,
-            vehicle_id: vehicle.id,
-            seller_customer_id: sellerCustomerId,
-            purchase_date: purchaseDate ?? new Date().toISOString().slice(0, 10),
-            purchase_price_net: purchasePriceNet,
-            additional_costs_net: additionalCostsNet,
-            notes,
-        });
+    const vehicleId = vehicle.id as string;
 
-        if (purchaseError) {
+    await logActivity({
+        action: `Fahrzeug ${vehicleActivityName} angelegt`,
+        entityType: "vehicle",
+        entityId: vehicleId,
+    });
+
+    if (sellerCustomerId) {
+        const { data: purchase, error: purchaseError } = await supabase
+            .from("purchases")
+            .insert({
+                company_id: companyId,
+                vehicle_id: vehicleId,
+                seller_customer_id: sellerCustomerId,
+                purchase_date: purchaseDate ?? new Date().toISOString().slice(0, 10),
+                purchase_price_net: purchasePriceNet,
+                additional_costs_net: additionalCostsNet,
+                notes,
+            })
+            .select("id")
+            .single();
+
+        if (purchaseError || !purchase) {
             return {
                 success: false,
-                message: `Fahrzeug wurde gespeichert, aber der Ankauf konnte nicht gespeichert werden: ${purchaseError.message}`,
+                message: `Fahrzeug wurde gespeichert, aber der Ankauf konnte nicht gespeichert werden: ${
+                    purchaseError?.message ?? "Keine Ankauf-ID erhalten"
+                }`,
             };
         }
+
+        await logActivity({
+            action: `Ankauf für Fahrzeug ${vehicleActivityName} automatisch angelegt`,
+            entityType: "purchase",
+            entityId: purchase.id as string,
+        });
     }
 
     redirect("/dashboard/vehicles");

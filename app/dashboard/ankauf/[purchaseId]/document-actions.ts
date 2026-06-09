@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type UploadPurchaseDocumentState = {
@@ -51,6 +52,19 @@ function isAllowedDocumentType(documentType: string): boolean {
     ].includes(documentType);
 }
 
+function getPurchaseDocumentLabel(documentType: string): string {
+    const labels: Record<string, string> = {
+        purchase_invoice: "Einkaufsrechnung",
+        purchase_contract: "Ankaufsvertrag",
+        purchase_receipt: "Ankaufsbeleg",
+        purchase_payment_proof: "Zahlungsnachweis Ankauf",
+        seller_id: "Ausweis Verkäufer",
+        seller_commercial_register: "Handelsregister Verkäufer",
+    };
+
+    return labels[documentType] ?? documentType;
+}
+
 export async function uploadPurchaseDocumentAction(
     _previousState: UploadPurchaseDocumentState,
     formData: FormData,
@@ -86,7 +100,7 @@ export async function uploadPurchaseDocumentAction(
 
     const { data: purchaseCase, error: purchaseCaseError } = await supabase
         .from("purchase_cases")
-        .select("id, vehicle_id, seller_customer_id")
+        .select("id, vehicle_id, seller_customer_id, purchase_number")
         .eq("id", purchaseId)
         .eq("company_id", companyId)
         .single();
@@ -100,6 +114,9 @@ export async function uploadPurchaseDocumentAction(
         };
     }
 
+    const purchaseNumber = purchaseCase.purchase_number ?? purchaseId;
+    const documentLabel = getPurchaseDocumentLabel(documentType);
+
     const originalFileName = sanitizeFileName(fileValue.name);
     const fileExtension = getFileExtension(originalFileName);
     const timestamp = Date.now();
@@ -109,6 +126,7 @@ export async function uploadPurchaseDocumentAction(
     const fileBuffer = Buffer.from(await fileValue.arrayBuffer());
 
     let oldFilePath: string | null = null;
+    let savedDocumentId: string | null = existingDocumentId ?? null;
 
     if (existingDocumentId) {
         const { data: existingDocument } = await supabase
@@ -168,32 +186,52 @@ export async function uploadPurchaseDocumentAction(
         if (oldFilePath && oldFilePath !== filePath) {
             await supabase.storage.from("documents").remove([oldFilePath]);
         }
-    } else {
-        const { error: insertError } = await supabase.from("documents").insert({
-            company_id: companyId,
-            document_type: documentType,
-            source: "uploaded",
-            status: "available",
-            file_name: originalFileName,
-            file_path: filePath,
-            mime_type: fileValue.type || null,
-            file_size: fileValue.size,
-            customer_id: purchaseCase.seller_customer_id,
-            vehicle_id: purchaseCase.vehicle_id,
-            sale_id: null,
-            invoice_id: null,
-            purchase_case_id: purchaseId,
-            generated_by_system: false,
-        });
 
-        if (insertError) {
+        await logActivity({
+            action: `Ankaufsdokument ${documentLabel} für ${purchaseNumber} ersetzt`,
+            entityType: "document",
+            entityId: existingDocumentId,
+        });
+    } else {
+        const { data: insertedDocument, error: insertError } = await supabase
+            .from("documents")
+            .insert({
+                company_id: companyId,
+                document_type: documentType,
+                source: "uploaded",
+                status: "available",
+                file_name: originalFileName,
+                file_path: filePath,
+                mime_type: fileValue.type || null,
+                file_size: fileValue.size,
+                customer_id: purchaseCase.seller_customer_id,
+                vehicle_id: purchaseCase.vehicle_id,
+                sale_id: null,
+                invoice_id: null,
+                purchase_case_id: purchaseId,
+                generated_by_system: false,
+            })
+            .select("id")
+            .single();
+
+        if (insertError || !insertedDocument) {
             await supabase.storage.from("documents").remove([filePath]);
 
             return {
                 success: false,
-                message: `Dokument konnte nicht gespeichert werden: ${insertError.message}`,
+                message: `Dokument konnte nicht gespeichert werden: ${
+                    insertError?.message ?? "Keine Dokument-ID erhalten"
+                }`,
             };
         }
+
+        savedDocumentId = insertedDocument.id as string;
+
+        await logActivity({
+            action: `Ankaufsdokument ${documentLabel} für ${purchaseNumber} hochgeladen`,
+            entityType: "document",
+            entityId: savedDocumentId,
+        });
     }
 
     const { data: purchaseDocuments } = await supabase
@@ -227,11 +265,20 @@ export async function uploadPurchaseDocumentAction(
         .eq("id", purchaseId)
         .eq("company_id", companyId);
 
+    if (hasAllRequiredDocuments) {
+        await logActivity({
+            action: `Pflichtdokumente für Ankauf ${purchaseNumber} vollständig`,
+            entityType: "purchase",
+            entityId: purchaseId,
+        });
+    }
+
     revalidatePath(`/dashboard/ankauf/${purchaseId}`);
     revalidatePath("/dashboard/ankauf");
     revalidatePath("/dashboard/documents");
     revalidatePath("/dashboard/checks");
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/activities");
 
     redirect(`/dashboard/ankauf/${purchaseId}`);
 }

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CreatePurchaseCaseState = {
@@ -41,6 +42,21 @@ function generatePurchaseNumber(): string {
     const timestamp = now.getTime().toString().slice(-6);
 
     return `AK-${year}-${timestamp}`;
+}
+
+function getVehicleActivityName(vehicle: {
+    internal_number: string | null;
+    manufacturer: string | null;
+    model: string | null;
+} | null): string {
+    if (!vehicle) return "unbekanntes Fahrzeug";
+
+    const name = [vehicle.internal_number, vehicle.manufacturer, vehicle.model]
+        .filter(Boolean)
+        .join(" · ")
+        .trim();
+
+    return name || "unbekanntes Fahrzeug";
 }
 
 export async function createPurchaseCaseAction(
@@ -97,6 +113,15 @@ export async function createPurchaseCaseAction(
         };
     }
 
+    const { data: vehicleData } = await supabase
+        .from("vehicles")
+        .select("internal_number, manufacturer, model")
+        .eq("id", vehicleId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+    const vehicleActivityName = getVehicleActivityName(vehicleData);
+
     const vatAmount = roundMoney(netAmount * (vatRate / 100));
     const grossAmount = roundMoney(netAmount + vatAmount);
     const purchaseNumber = generatePurchaseNumber();
@@ -130,6 +155,8 @@ export async function createPurchaseCaseAction(
         };
     }
 
+    const purchaseCaseId = purchaseCase.id as string;
+
     const { error: vehicleUpdateError } = await supabase
         .from("vehicles")
         .update({
@@ -147,5 +174,25 @@ export async function createPurchaseCaseAction(
         };
     }
 
-    redirect(`/dashboard/ankauf/${purchaseCase.id}`);
+    await logActivity({
+        action: `Ankauf ${purchaseNumber} für ${vehicleActivityName} angelegt`,
+        entityType: "purchase",
+        entityId: purchaseCaseId,
+    });
+
+    await logActivity({
+        action: `Fahrzeug ${vehicleActivityName} durch Ankauf in Bestand aufgenommen`,
+        entityType: "vehicle",
+        entityId: vehicleId,
+    });
+
+    if (paymentStatus === "paid") {
+        await logActivity({
+            action: `Ankauf ${purchaseNumber} als bezahlt markiert`,
+            entityType: "purchase",
+            entityId: purchaseCaseId,
+        });
+    }
+
+    redirect(`/dashboard/ankauf/${purchaseCaseId}`);
 }
