@@ -1,3 +1,4 @@
+import { logActivity } from "@/lib/activity/activity-log";
 import { generateInvoicePdf } from "@/lib/pdf/invoice-pdf";
 import { getInvoicePdfData } from "@/lib/pdf/invoice-pdf-data";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -17,6 +18,14 @@ function getInvoiceFileBaseName(invoiceType: InvoiceType): string {
     };
 
     return fileBaseNames[invoiceType];
+}
+
+function getInvoiceActivityLabel(invoiceType: InvoiceType): string {
+    if (invoiceType === "standard") return "Rechnung";
+    if (invoiceType === "proforma") return "Proforma-Rechnung";
+    if (invoiceType === "down_payment") return "Anzahlungsrechnung";
+
+    return invoiceType;
 }
 
 export async function generateAndStoreInvoicePdf(
@@ -41,6 +50,12 @@ export async function generateAndStoreInvoicePdf(
     if (uploadError) {
         throw new Error(`PDF konnte nicht gespeichert werden: ${uploadError.message}`);
     }
+
+    await logActivity({
+        action: `${getInvoiceActivityLabel(pdfData.invoiceType)} ${pdfData.invoiceNumber} als PDF erzeugt`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
 
     return {
         fileName,
