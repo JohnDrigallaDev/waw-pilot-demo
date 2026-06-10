@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import {
     getInvoiceTypeDocumentType,
     getInvoiceTypeLabel,
@@ -64,6 +65,21 @@ function getInvoiceFileBaseName(invoiceType: InvoiceType): string {
     };
 
     return fileBaseNames[invoiceType];
+}
+
+function getPaymentMethodLabel(paymentMethod: string): string {
+    if (paymentMethod === "cash") return "Bar";
+    if (paymentMethod === "bank") return "Bank";
+
+    return paymentMethod;
+}
+
+function getInvoiceActivityLabel(invoiceType: InvoiceType): string {
+    if (invoiceType === "standard") return "Rechnung";
+    if (invoiceType === "proforma") return "Proforma-Rechnung";
+    if (invoiceType === "down_payment") return "Anzahlungsrechnung";
+
+    return getInvoiceTypeLabel(invoiceType);
 }
 
 export async function createSaleInvoiceAction(formData: FormData) {
@@ -168,6 +184,13 @@ export async function createSaleInvoiceAction(formData: FormData) {
     }
 
     const invoiceId = invoiceData.id as string;
+    const invoiceLabel = getInvoiceActivityLabel(invoiceType);
+
+    await logActivity({
+        action: `${invoiceLabel} ${invoiceNumber} erzeugt`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
 
     const fileBaseName = getInvoiceFileBaseName(invoiceType);
     const invoiceFileName = `${fileBaseName}-${invoiceNumber}.pdf`;
@@ -248,6 +271,7 @@ export async function createSaleInvoiceAction(formData: FormData) {
     revalidatePath("/dashboard/sales");
     revalidatePath("/dashboard/invoices");
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/activities");
 
     redirect(`/dashboard/sales/${saleId}`);
 }
@@ -273,6 +297,8 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
             `
       id,
       sale_id,
+      invoice_type,
+      invoice_number,
       pdf_document_id
     `,
         )
@@ -310,9 +336,18 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
         }
     }
 
+    await logActivity({
+        action: `${getInvoiceActivityLabel(
+            invoiceData.invoice_type as InvoiceType,
+        )} ${invoiceData.invoice_number} PDF neu erzeugt`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
+
     revalidatePath(`/dashboard/sales/${saleId}`);
     revalidatePath("/dashboard/invoices");
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/activities");
 
     redirect(`/dashboard/sales/${saleId}`);
 }
@@ -365,6 +400,8 @@ export async function markInvoicePaidAction(formData: FormData) {
     }
 
     const invoiceType = invoiceData.invoice_type as InvoiceType;
+    const invoiceLabel = getInvoiceActivityLabel(invoiceType);
+    const paymentMethodLabel = getPaymentMethodLabel(paymentMethod);
 
     if (invoiceType === "proforma") {
         throw new Error("Proforma-Rechnungen werden nicht als bezahlt markiert.");
@@ -395,6 +432,12 @@ export async function markInvoicePaidAction(formData: FormData) {
             `Rechnung konnte nicht als bezahlt markiert werden: ${invoiceUpdateError.message}`,
         );
     }
+
+    await logActivity({
+        action: `${invoiceLabel} ${invoiceData.invoice_number} als bezahlt markiert (${paymentMethodLabel})`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
 
     const salePaymentStatus = invoiceType === "down_payment" ? "partial" : "paid";
 
@@ -432,7 +475,7 @@ export async function markInvoicePaidAction(formData: FormData) {
                 ? `Zahlung Anzahlungsrechnung ${invoiceData.invoice_number}`
                 : `Zahlung Rechnung ${invoiceData.invoice_number}`;
 
-        const { error: cashbookInsertError } = await supabase
+        const { data: cashbookEntry, error: cashbookInsertError } = await supabase
             .from("cashbook_entries")
             .insert({
                 company_id: companyId,
@@ -447,13 +490,23 @@ export async function markInvoicePaidAction(formData: FormData) {
                 sale_id: saleId,
                 invoice_id: invoiceId,
                 document_id: invoiceData.pdf_document_id,
-            });
+            })
+            .select("id")
+            .single();
 
-        if (cashbookInsertError) {
+        if (cashbookInsertError || !cashbookEntry) {
             throw new Error(
-                `Kassenbuch-Eintrag konnte nicht erstellt werden: ${cashbookInsertError.message}`,
+                `Kassenbuch-Eintrag konnte nicht erstellt werden: ${
+                    cashbookInsertError?.message ?? "Keine Kassenbuch-ID erhalten"
+                }`,
             );
         }
+
+        await logActivity({
+            action: `Kassenbuch-Eintrag für ${invoiceLabel} ${invoiceData.invoice_number} erstellt (${paymentMethodLabel})`,
+            entityType: "cashbook",
+            entityId: cashbookEntry.id as string,
+        });
     }
 
     revalidatePath(`/dashboard/sales/${saleId}`);
@@ -461,6 +514,7 @@ export async function markInvoicePaidAction(formData: FormData) {
     revalidatePath("/dashboard/invoices");
     revalidatePath("/dashboard/cashbook");
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/activities");
 
     redirect(`/dashboard/sales/${saleId}`);
 }
