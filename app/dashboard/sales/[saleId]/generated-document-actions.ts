@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import {
     type GeneratedDocumentType,
 } from "@/lib/pdf/generated-documents/document-types";
 import { generateAndStoreSaleGeneratedDocument } from "@/lib/pdf/generated-documents/sale-generated-document-storage";
-import { getCurrentCompanyId } from "@/lib/company";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
     getInvoiceTypeDocumentType,
@@ -44,6 +45,26 @@ function getGeneratedDocumentType(
     return null;
 }
 
+function getGeneratedDocumentActivityLabel(
+    documentType: GeneratedDocumentType,
+): string {
+    const labels: Record<GeneratedDocumentType, string> = {
+        invoice_pdf: "Rechnung",
+        proforma_invoice: "Proforma-Rechnung",
+        handover_protocol: "Übergabeprotokoll",
+        entry_certificate: "Gelangensbestätigung",
+        transport_proof: "Verbringungsnachweis",
+        license_plate_consent: "Einverständniserklärung Kennzeichen",
+        travel_expense_form: "Reisekostenformular",
+        purchase_contract: "Ankaufsvertrag",
+        sales_contract: "Kaufvertrag",
+        abd_checklist: "ABD-Checkliste",
+        exit_note_checklist: "Ausgangsvermerk-Checkliste",
+    };
+
+    return labels[documentType] ?? documentType;
+}
+
 function addDays(dateString: string, days: number): string {
     const date = new Date(dateString);
     date.setDate(date.getDate() + days);
@@ -57,7 +78,7 @@ async function createProformaInvoiceForSale(saleId: string) {
 
     const { data: existingInvoice, error: existingInvoiceError } = await supabase
         .from("invoices")
-        .select("id")
+        .select("id, invoice_number")
         .eq("company_id", companyId)
         .eq("sale_id", saleId)
         .eq("invoice_type", "proforma")
@@ -71,6 +92,14 @@ async function createProformaInvoiceForSale(saleId: string) {
 
     if (existingInvoice?.id) {
         const storedPdf = await generateAndStoreInvoicePdf(existingInvoice.id as string);
+
+        await logActivity({
+            action: `Proforma-Rechnung ${
+                existingInvoice.invoice_number ?? existingInvoice.id
+            } für Verkauf neu erzeugt`,
+            entityType: "invoice",
+            entityId: existingInvoice.id as string,
+        });
 
         return {
             invoiceId: existingInvoice.id as string,
@@ -209,6 +238,18 @@ async function createProformaInvoiceForSale(saleId: string) {
         );
     }
 
+    await logActivity({
+        action: `Proforma-Rechnung ${invoiceNumber} für Verkauf erzeugt`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
+
+    await logActivity({
+        action: `Proforma-Dokument ${invoiceNumber} erzeugt`,
+        entityType: "document",
+        entityId: documentId,
+    });
+
     return {
         invoiceId,
         fileName: storedPdf.fileName,
@@ -233,9 +274,17 @@ export async function generateSaleDocumentAction(formData: FormData) {
     if (documentType === "proforma_invoice") {
         await createProformaInvoiceForSale(saleId);
     } else {
-        await generateAndStoreSaleGeneratedDocument({
+        const generatedDocument = await generateAndStoreSaleGeneratedDocument({
             saleId,
             documentType,
+        });
+
+        await logActivity({
+            action: `${getGeneratedDocumentActivityLabel(
+                documentType,
+            )} für Verkauf erzeugt`,
+            entityType: "document",
+            entityId: generatedDocument.documentId,
         });
     }
 
@@ -243,6 +292,7 @@ export async function generateSaleDocumentAction(formData: FormData) {
     revalidatePath("/dashboard/sales");
     revalidatePath("/dashboard/documents");
     revalidatePath("/dashboard/checks");
+    revalidatePath("/dashboard/activities");
 
     redirect(
         `/dashboard/sales/${saleId}?generatedDocument=${encodeURIComponent(
