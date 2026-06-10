@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CreateCashbookEntryState = {
@@ -48,6 +49,36 @@ function getFileExtension(fileName: string): string {
     const extension = parts.length > 1 ? parts.pop() : null;
 
     return extension ? `.${extension}` : "";
+}
+
+function getEntryTypeLabel(entryType: string): string {
+    if (entryType === "income") return "Einnahme";
+    if (entryType === "expense") return "Ausgabe";
+
+    return entryType;
+}
+
+function getPaymentMethodLabel(paymentMethod: string): string {
+    if (paymentMethod === "cash") return "Bar";
+    if (paymentMethod === "bank") return "Bank";
+
+    return paymentMethod;
+}
+
+function getCategoryLabel(category: string): string {
+    const labels: Record<string, string> = {
+        vehicle_sale: "Fahrzeugverkauf",
+        vehicle_purchase: "Fahrzeugankauf",
+        repair: "Reparatur / Werkstatt",
+        fuel: "Kraftstoff",
+        registration: "Zulassung / Kennzeichen",
+        insurance: "Versicherung",
+        tax: "Steuern / Gebühren",
+        office: "Büro / Verwaltung",
+        other: "Sonstiges",
+    };
+
+    return labels[category] ?? category;
 }
 
 async function createCashbookReceiptDocument({
@@ -179,30 +210,52 @@ export async function createCashbookEntryAction(
                 file: fileValue,
                 description,
             });
+
+            await logActivity({
+                action: `Kassenbuch-Beleg zu "${description}" hochgeladen`,
+                entityType: "document",
+                entityId: documentId,
+            });
         }
 
-        const { error } = await supabase.from("cashbook_entries").insert({
-            company_id: companyId,
-            entry_type: entryType,
-            category,
-            payment_method: paymentMethod,
-            amount,
-            booking_date: bookingDate,
-            description,
+        const { data: cashbookEntry, error } = await supabase
+            .from("cashbook_entries")
+            .insert({
+                company_id: companyId,
+                entry_type: entryType,
+                category,
+                payment_method: paymentMethod,
+                amount,
+                booking_date: bookingDate,
+                description,
 
-            customer_id: null,
-            vehicle_id: null,
-            sale_id: null,
-            invoice_id: null,
-            document_id: documentId,
-        });
+                customer_id: null,
+                vehicle_id: null,
+                sale_id: null,
+                invoice_id: null,
+                document_id: documentId,
+            })
+            .select("id")
+            .single();
 
-        if (error) {
+        if (error || !cashbookEntry) {
             return {
                 success: false,
-                message: `Buchung konnte nicht gespeichert werden: ${error.message}`,
+                message: `Buchung konnte nicht gespeichert werden: ${
+                    error?.message ?? "Keine Kassenbuch-ID erhalten"
+                }`,
             };
         }
+
+        const entryTypeLabel = getEntryTypeLabel(entryType);
+        const paymentMethodLabel = getPaymentMethodLabel(paymentMethod);
+        const categoryLabel = getCategoryLabel(category);
+
+        await logActivity({
+            action: `${entryTypeLabel} im Kassenbuch erfasst: ${description} (${paymentMethodLabel}, ${categoryLabel})`,
+            entityType: "cashbook",
+            entityId: cashbookEntry.id as string,
+        });
     } catch (error) {
         return {
             success: false,
