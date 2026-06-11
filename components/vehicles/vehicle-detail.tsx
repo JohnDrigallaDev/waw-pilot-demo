@@ -4,6 +4,7 @@ import {
     ArrowUpRight,
     CalendarDays,
     Download,
+    Edit3,
     ExternalLink,
     FileText,
     Receipt,
@@ -45,16 +46,28 @@ export function VehicleDetail({ vehicle }: VehicleDetailProps) {
                 title={`${vehicle.internal_number} · ${vehicle.name}`}
                 description="Detailansicht mit Fahrzeugdaten, Kundenbezug, Verkäufen und Dokumenten."
                 action={
-                    <Button
-                        asChild
-                        variant="outline"
-                        className="rounded-2xl border-slate-200 bg-white font-bold"
-                    >
-                        <Link href="/dashboard/vehicles">
-                            <ArrowLeft className="mr-2 size-4" />
-                            Zurück
-                        </Link>
-                    </Button>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-2xl border-slate-200 bg-white font-bold"
+                        >
+                            <Link href="/dashboard/vehicles">
+                                <ArrowLeft className="mr-2 size-4" />
+                                Zurück
+                            </Link>
+                        </Button>
+
+                        <Button
+                            asChild
+                            className="rounded-2xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
+                        >
+                            <Link href={`/dashboard/vehicles/${vehicle.id}/edit`}>
+                                <Edit3 className="mr-2 size-4" />
+                                Bearbeiten
+                            </Link>
+                        </Button>
+                    </div>
                 }
             />
 
