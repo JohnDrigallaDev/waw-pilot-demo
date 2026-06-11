@@ -86,15 +86,27 @@ export function VehicleInventory({ vehicles }: VehicleInventoryProps) {
                 title="Fahrzeugbestand"
                 description="Alle angekauften Fahrzeuge, Verkaufsstatus, Dokumentenprüfung und Rohgewinn in einer sauberen Übersicht."
                 action={
-                    <Button
-                        asChild
-                        className="rounded-2xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
-                    >
-                        <Link href="/dashboard/vehicles/new">
-                            <Plus className="mr-2 size-4" />
-                            Ankauf erfassen
-                        </Link>
-                    </Button>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-2xl border-slate-200 bg-white font-bold"
+                        >
+                            <Link href="/dashboard/vehicles/bestandsliste">
+                                Bestandsliste
+                            </Link>
+                        </Button>
+
+                        <Button
+                            asChild
+                            className="rounded-2xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
+                        >
+                            <Link href="/dashboard/vehicles/new">
+                                <Plus className="mr-2 size-4" />
+                                Ankauf erfassen
+                            </Link>
+                        </Button>
+                    </div>
                 }
             />
 

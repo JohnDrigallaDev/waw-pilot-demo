@@ -93,6 +93,50 @@ function getCreatedCustomerName({
     return [firstName, lastName].filter(Boolean).join(" ") || "Unbekannte Privatperson";
 }
 
+function getVehicleActivityName(vehicle: {
+    internal_number: string | null;
+    manufacturer: string | null;
+    model: string | null;
+}): string {
+    const name = [vehicle.internal_number, vehicle.manufacturer, vehicle.model]
+        .filter(Boolean)
+        .join(" · ")
+        .trim();
+
+    return name || "unbekanntes Fahrzeug";
+}
+
+async function getNextSaleNumber(
+    supabase: ReturnType<typeof createServerSupabaseClient>,
+    companyId: string,
+): Promise<string> {
+    const { data, error } = await supabase
+        .from("sales")
+        .select("sale_number")
+        .eq("company_id", companyId)
+        .not("sale_number", "is", null);
+
+    if (error) {
+        throw new Error(`Verkaufsnummer konnte nicht geprüft werden: ${error.message}`);
+    }
+
+    const highestNumber = (data ?? []).reduce((highest, sale) => {
+        if (typeof sale.sale_number !== "string") return highest;
+
+        const match = sale.sale_number.match(/^VK-?(\d+)$/i);
+
+        if (!match) return highest;
+
+        const numberValue = Number(match[1]);
+
+        if (!Number.isFinite(numberValue)) return highest;
+
+        return Math.max(highest, numberValue);
+    }, 0);
+
+    return `VK-${highestNumber + 1}`;
+}
+
 async function createBuyerCustomerFromSaleForm(
     supabase: ReturnType<typeof createServerSupabaseClient>,
     companyId: string,
@@ -306,10 +350,25 @@ export async function createSaleAction(
         };
     }
 
+    let saleNumber: string;
+
+    try {
+        saleNumber = await getNextSaleNumber(supabase, companyId);
+    } catch (error) {
+        return {
+            success: false,
+            message:
+                error instanceof Error
+                    ? error.message
+                    : "Verkaufsnummer konnte nicht erzeugt werden.",
+        };
+    }
+
     const { data: sale, error: saleError } = await supabase
         .from("sales")
         .insert({
             company_id: companyId,
+            sale_number: saleNumber,
             vehicle_id: vehicleId,
             buyer_customer_id: buyerCustomerId,
             sale_date: saleDate,
@@ -345,9 +404,10 @@ export async function createSaleAction(
     }
 
     const saleId = sale.id as string;
+    const vehicleActivityName = getVehicleActivityName(vehicleData);
 
     await logActivity({
-        action: `Verkauf für ${vehicleData.internal_number} angelegt`,
+        action: `Verkauf ${saleNumber} für ${vehicleActivityName} angelegt`,
         entityType: "sale",
         entityId: saleId,
     });
@@ -425,7 +485,7 @@ export async function createSaleAction(
         invoiceId = createdInvoiceId;
 
         await logActivity({
-            action: `Rechnung ${invoiceNumber} erzeugt`,
+            action: `Rechnung ${invoiceNumber} für Verkauf ${saleNumber} erzeugt`,
             entityType: "invoice",
             entityId: createdInvoiceId,
         });
@@ -514,9 +574,9 @@ export async function createSaleAction(
     if (shouldCreateCashbookEntry) {
         const description = invoiceNumber
             ? `Zahlung Rechnung ${invoiceNumber}`
-            : `Zahlung Verkauf ${vehicleData.internal_number}`;
+            : `Zahlung Verkauf ${saleNumber}`;
 
-        const { error: cashbookError } = await supabase
+        const { data: cashbookEntry, error: cashbookError } = await supabase
             .from("cashbook_entries")
             .insert({
                 company_id: companyId,
@@ -531,14 +591,24 @@ export async function createSaleAction(
                 sale_id: saleId,
                 invoice_id: invoiceId,
                 document_id: invoiceDocumentId,
-            });
+            })
+            .select("id")
+            .single();
 
-        if (cashbookError) {
+        if (cashbookError || !cashbookEntry) {
             return {
                 success: false,
-                message: `Verkauf wurde gespeichert, aber Kassenbuch konnte nicht erzeugt werden: ${cashbookError.message}`,
+                message: `Verkauf wurde gespeichert, aber Kassenbuch konnte nicht erzeugt werden: ${
+                    cashbookError?.message ?? "Keine Kassenbuch-ID erhalten"
+                }`,
             };
         }
+
+        await logActivity({
+            action: `Kassenbuch-Eintrag für Verkauf ${saleNumber} erstellt`,
+            entityType: "cashbook",
+            entityId: cashbookEntry.id as string,
+        });
     }
 
     redirect(`/dashboard/sales/${saleId}`);
