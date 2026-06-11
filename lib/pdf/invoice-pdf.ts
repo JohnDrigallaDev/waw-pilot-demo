@@ -79,6 +79,14 @@ function formatCurrency(value: number): string {
     }).format(value);
 }
 
+function safeText(value: string | number | null | undefined): string {
+    if (value === null || value === undefined) return "-";
+
+    const text = String(value).trim();
+
+    return text.length > 0 ? text : "-";
+}
+
 function drawText(
     page: PDFPage,
     text: string,
@@ -124,6 +132,23 @@ function drawBox(
     });
 }
 
+function drawLine(
+    page: PDFPage,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    thickness = 1,
+    color = black,
+) {
+    page.drawLine({
+        start: { x: startX, y: startY },
+        end: { x: endX, y: endY },
+        thickness,
+        color,
+    });
+}
+
 function drawCenteredText(
     page: PDFPage,
     text: string,
@@ -144,35 +169,6 @@ function drawCenteredText(
     });
 }
 
-function safeText(value: string | number | null | undefined): string {
-    if (value === null || value === undefined) return "-";
-
-    const text = String(value).trim();
-
-    return text.length > 0 ? text : "-";
-}
-
-function drawWrappedLines(
-    page: PDFPage,
-    lines: string[],
-    x: number,
-    startY: number,
-    options: {
-        font: PDFFont;
-        size: number;
-        lineHeight: number;
-        color?: ReturnType<typeof rgb>;
-    },
-) {
-    lines.forEach((line, index) => {
-        drawText(page, line, x, startY - index * options.lineHeight, {
-            font: options.font,
-            size: options.size,
-            color: options.color,
-        });
-    });
-}
-
 function drawRightAlignedText(
     page: PDFPage,
     text: string,
@@ -189,6 +185,197 @@ function drawRightAlignedText(
         size,
         font,
         color: black,
+    });
+}
+
+function splitLongWord(word: string, font: PDFFont, size: number, maxWidth: number): string[] {
+    const parts: string[] = [];
+    let current = "";
+
+    for (const character of word) {
+        const next = `${current}${character}`;
+
+        if (font.widthOfTextAtSize(next, size) <= maxWidth || current.length === 0) {
+            current = next;
+            continue;
+        }
+
+        parts.push(current);
+        current = character;
+    }
+
+    if (current.length > 0) {
+        parts.push(current);
+    }
+
+    return parts;
+}
+
+function wrapText(
+    text: string,
+    font: PDFFont,
+    size: number,
+    maxWidth: number,
+): string[] {
+    const normalizedText = safeText(text).replace(/\s+/g, " ").trim();
+
+    if (normalizedText === "-") return ["-"];
+
+    const words = normalizedText.split(" ");
+    const lines: string[] = [];
+    let currentLine = "";
+
+    for (const word of words) {
+        const testLine = currentLine.length > 0 ? `${currentLine} ${word}` : word;
+
+        if (font.widthOfTextAtSize(testLine, size) <= maxWidth) {
+            currentLine = testLine;
+            continue;
+        }
+
+        if (currentLine.length > 0) {
+            lines.push(currentLine);
+            currentLine = "";
+        }
+
+        if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+            currentLine = word;
+            continue;
+        }
+
+        const splitParts = splitLongWord(word, font, size, maxWidth);
+
+        for (const part of splitParts) {
+            if (font.widthOfTextAtSize(part, size) <= maxWidth) {
+                if (currentLine.length > 0) {
+                    lines.push(currentLine);
+                }
+
+                currentLine = part;
+            }
+        }
+    }
+
+    if (currentLine.length > 0) {
+        lines.push(currentLine);
+    }
+
+    return lines;
+}
+
+function drawWrappedText(
+    page: PDFPage,
+    text: string,
+    x: number,
+    startY: number,
+    options: {
+        font: PDFFont;
+        size: number;
+        lineHeight: number;
+        maxWidth: number;
+        maxLines?: number;
+        color?: ReturnType<typeof rgb>;
+    },
+): number {
+    const lines = wrapText(text, options.font, options.size, options.maxWidth);
+    const visibleLines = options.maxLines ? lines.slice(0, options.maxLines) : lines;
+
+    visibleLines.forEach((line, index) => {
+        drawText(page, line, x, startY - index * options.lineHeight, {
+            font: options.font,
+            size: options.size,
+            color: options.color,
+            maxWidth: options.maxWidth,
+        });
+    });
+
+    return startY - visibleLines.length * options.lineHeight;
+}
+
+function drawWrappedLines(
+    page: PDFPage,
+    lines: string[],
+    x: number,
+    startY: number,
+    options: {
+        font: PDFFont;
+        size: number;
+        lineHeight: number;
+        maxWidth?: number;
+        color?: ReturnType<typeof rgb>;
+    },
+) {
+    let y = startY;
+
+    for (const line of lines) {
+        if (line.trim().length === 0) {
+            y -= options.lineHeight;
+            continue;
+        }
+
+        if (options.maxWidth) {
+            y = drawWrappedText(page, line, x, y, {
+                font: options.font,
+                size: options.size,
+                lineHeight: options.lineHeight,
+                maxWidth: options.maxWidth,
+                color: options.color,
+            });
+        } else {
+            drawText(page, line, x, y, {
+                font: options.font,
+                size: options.size,
+                color: options.color,
+            });
+
+            y -= options.lineHeight;
+        }
+    }
+}
+
+function drawCellText(
+    page: PDFPage,
+    text: string,
+    x: number,
+    topY: number,
+    width: number,
+    options: {
+        font: PDFFont;
+        size: number;
+        lineHeight: number;
+        paddingX?: number;
+        paddingTop?: number;
+        maxLines?: number;
+        align?: "left" | "center" | "right";
+        color?: ReturnType<typeof rgb>;
+    },
+) {
+    const paddingX = options.paddingX ?? 6;
+    const paddingTop = options.paddingTop ?? 8;
+    const maxWidth = width - paddingX * 2;
+    const lines = wrapText(text, options.font, options.size, maxWidth);
+    const visibleLines = options.maxLines ? lines.slice(0, options.maxLines) : lines;
+
+    visibleLines.forEach((line, index) => {
+        const textWidth = options.font.widthOfTextAtSize(line, options.size);
+
+        let textX = x + paddingX;
+
+        if (options.align === "center") {
+            textX = x + (width - textWidth) / 2;
+        }
+
+        if (options.align === "right") {
+            textX = x + width - paddingX - textWidth;
+        }
+
+        page.drawText(line, {
+            x: textX,
+            y: topY - paddingTop - index * options.lineHeight,
+            size: options.size,
+            font: options.font,
+            color: options.color ?? black,
+        });
     });
 }
 
@@ -237,7 +424,25 @@ function getPrimaryFileLabel(invoiceType: InvoiceType): string {
         return "Anzahlung";
     }
 
-    return "Rechnung";
+    return "";
+}
+
+function getThirdVehicleLineLabel(invoiceType: InvoiceType): string {
+    if (invoiceType === "proforma") {
+        return "Betriebsstunden:";
+    }
+
+    return "Erstzulassung/Baujahr:";
+}
+
+function getThirdVehicleLineValue(data: InvoicePdfData): string {
+    if (data.invoiceType === "proforma") {
+        return "";
+    }
+
+    return `${formatDate(data.vehicle.firstRegistration)} / ${safeText(
+        data.vehicle.constructionYear,
+    )}`;
 }
 
 export async function generateInvoicePdf(
@@ -248,39 +453,40 @@ export async function generateInvoicePdf(
 
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
     const logoPath = path.join(process.cwd(), "public", "brand", "waw-logo.png");
     const logoBytes = await readFile(logoPath);
     const logoImage = await pdfDoc.embedPng(logoBytes);
 
     page.drawImage(logoImage, {
-        x: 38,
-        y: 686,
-        width: 150,
-        height: 118,
+        x: 40,
+        y: 708,
+        width: 120,
+        height: 95,
     });
 
-    drawText(page, getInvoiceTitle(data.invoiceType, data.invoiceNumber), 226, 795, {
+    drawText(page, getInvoiceTitle(data.invoiceType, data.invoiceNumber), 210, 805, {
         font: helveticaBold,
-        size: data.invoiceType === "standard" ? 24 : 22,
+        size: data.invoiceType === "standard" ? 22 : 21,
         color: data.invoiceType === "standard" ? gray : black,
+        maxWidth: 340,
     });
 
     /**
      * Rechte Firmen- und Bankdatenbox
      */
-    const infoBoxX = 362;
-    const infoBoxY = 506;
+    const infoBoxX = 378;
+    const infoBoxY = 468;
     const infoBoxWidth = 178;
-    const infoBoxHeight = 240;
+    const infoBoxHeight = 250;
+    const infoHeaderHeight = 18;
 
     drawBox(page, infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, {
         borderColor: black,
         borderWidth: 1,
     });
 
-    drawBox(page, infoBoxX, 728, infoBoxWidth, 18, {
+    drawBox(page, infoBoxX, infoBoxY + infoBoxHeight - infoHeaderHeight, infoBoxWidth, infoHeaderHeight, {
         borderColor: black,
         borderWidth: 1,
         fillColor: tableGray,
@@ -301,15 +507,16 @@ export async function generateInvoicePdf(
             safeText(data.company.vatId),
         ],
         infoBoxX + 6,
-        712,
+        infoBoxY + infoBoxHeight - 35,
         {
             font: helveticaBold,
-            size: 6.4,
-            lineHeight: 13,
+            size: 5.7,
+            lineHeight: 11,
+            maxWidth: infoBoxWidth - 12,
         },
     );
 
-    const bankBoxY = 488;
+    const bankBoxY = infoBoxY;
     const bankBoxHeight = 112;
 
     drawBox(page, infoBoxX, bankBoxY, infoBoxWidth, bankBoxHeight, {
@@ -328,49 +535,60 @@ export async function generateInvoicePdf(
             "",
             "Verwendungszweck | reason for payment:",
             getPaymentReasonLabel(data.invoiceType),
-            "Fahrgestell-Nr. | Vehicle Identification Number (VIN)",
+            data.invoiceType === "proforma"
+                ? "Fahrgestellnummer / vehicle identification number"
+                : "Fahrgestell-Nr. | Vehicle Identification Number (VIN)",
         ],
         infoBoxX + 6,
-        588,
+        bankBoxY + bankBoxHeight - 13,
         {
             font: helveticaBold,
-            size: 5.8,
-            lineHeight: 11,
+            size: 5.3,
+            lineHeight: 10,
+            maxWidth: infoBoxWidth - 12,
         },
     );
 
     /**
      * Linke Rechnungsbox
      */
-    drawBox(page, 42, 494, 230, 44, {
+    drawBox(page, 42, 500, 230, 44, {
         borderColor: black,
         borderWidth: 1,
     });
 
-    drawText(page, getInvoiceBoxTitle(data.invoiceType, data.invoiceNumber), 48, 518, {
+    drawWrappedText(page, getInvoiceBoxTitle(data.invoiceType, data.invoiceNumber), 48, 525, {
         font: helveticaBold,
-        size: 10,
+        size: 9,
+        lineHeight: 10,
+        maxWidth: 215,
+        maxLines: 1,
     });
 
-    drawText(page, `Rechnungs-Datum: ${formatDate(data.invoiceDate)}`, 48, 502, {
+    drawText(page, `Rechnungs-Datum: ${formatDate(data.invoiceDate)}`, 48, 507, {
         font: helveticaBold,
         size: 8,
     });
 
-    drawBox(page, 42, 440, 230, 44, {
+    /**
+     * Gebrauchte Box - bewusst mit Abstand zur Fahrzeugtabelle
+     */
+    drawBox(page, 42, 444, 230, 44, {
         borderColor: black,
         borderWidth: 1,
     });
 
-    drawText(page, "Gebrauchte | Pre-owned:", 48, 460, {
+    drawText(page, "Gebrauchte | Pre-owned:", 48, 463, {
         font: helveticaBold,
-        size: 9,
+        size: 8,
     });
 
-    if (data.invoiceType !== "standard") {
-        drawText(page, getPrimaryFileLabel(data.invoiceType), 150, 460, {
+    const primaryFileLabel = getPrimaryFileLabel(data.invoiceType);
+
+    if (primaryFileLabel) {
+        drawText(page, primaryFileLabel, 150, 463, {
             font: helveticaBold,
-            size: 9,
+            size: 8,
         });
     }
 
@@ -378,180 +596,171 @@ export async function generateInvoicePdf(
      * Fahrzeugtabelle
      */
     const tableX = 42;
-    const tableY = 318;
-    const tableWidth = 500;
-    const tableHeight = 160;
+    const tableY = 205;
+    const tableWidth = 515;
+    const tableHeight = 190;
 
+    const headerHeight = 23;
     const col1 = 175;
-    const col2 = 250;
-    const col3 = tableWidth - col1 - col2;
+    const col3 = 75;
+    const col2 = tableWidth - col1 - col3;
+
+    const tableTopY = tableY + tableHeight;
+    const tableContentTopY = tableTopY - headerHeight;
 
     drawBox(page, tableX, tableY, tableWidth, tableHeight, {
         borderColor: black,
         borderWidth: 1,
     });
 
-    drawBox(page, tableX, tableY + tableHeight - 24, tableWidth, 24, {
+    drawBox(page, tableX, tableTopY - headerHeight, tableWidth, headerHeight, {
         borderColor: black,
         borderWidth: 1,
         fillColor: tableGray,
     });
 
-    drawBox(page, tableX + col1 + col2, tableY, col3, tableHeight - 24, {
+    drawBox(page, tableX + col1 + col2, tableY, col3, tableHeight, {
         borderColor: black,
         borderWidth: 0,
         fillColor: lightGray,
     });
 
-    page.drawLine({
-        start: { x: tableX + col1, y: tableY },
-        end: { x: tableX + col1, y: tableY + tableHeight },
-        thickness: 1,
-        color: black,
-    });
-
-    page.drawLine({
-        start: { x: tableX + col1 + col2, y: tableY },
-        end: { x: tableX + col1 + col2, y: tableY + tableHeight },
-        thickness: 1,
-        color: black,
-    });
+    drawLine(page, tableX + col1, tableY, tableX + col1, tableTopY);
+    drawLine(page, tableX + col1 + col2, tableY, tableX + col1 + col2, tableTopY);
+    drawLine(page, tableX, tableContentTopY, tableX + tableWidth, tableContentTopY);
 
     drawCenteredText(
         page,
         "Fahrzeug | Vehicle",
         tableX,
-        tableY + tableHeight - 16,
+        tableTopY - 15,
         col1,
         helveticaBold,
-        7,
+        6.5,
     );
 
     drawCenteredText(
         page,
         "Fahrgestellnummer | Chassi number .:",
         tableX + col1,
-        tableY + tableHeight - 16,
+        tableTopY - 15,
         col2,
         helveticaBold,
-        7,
+        6.5,
     );
 
     drawCenteredText(
         page,
         "Ges.-Preis",
         tableX + col1 + col2,
-        tableY + tableHeight - 16,
+        tableTopY - 15,
         col3,
         helveticaBold,
-        6.5,
+        6.2,
     );
 
-    drawWrappedLines(
+    const vehicleLabelX = tableX + 16;
+    const vehicleValueX = tableX + 72;
+    const vehicleStartY = tableContentTopY - 12;
+    const vehicleLineHeight = 25;
+
+    drawText(page, "Marke:", vehicleLabelX, vehicleStartY, {
+        font: helveticaBold,
+        size: 7,
+    });
+
+    drawWrappedText(page, safeText(data.vehicle.manufacturer), vehicleValueX, vehicleStartY, {
+        font: helveticaBold,
+        size: 7,
+        lineHeight: 8,
+        maxWidth: col1 - 86,
+        maxLines: 2,
+    });
+
+    drawText(page, "Art/Typ:", vehicleLabelX, vehicleStartY - vehicleLineHeight, {
+        font: helveticaBold,
+        size: 7,
+    });
+
+    drawWrappedText(page, safeText(data.vehicle.model), vehicleValueX, vehicleStartY - vehicleLineHeight, {
+        font: helveticaBold,
+        size: 7,
+        lineHeight: 8,
+        maxWidth: col1 - 86,
+        maxLines: 2,
+    });
+
+    drawText(page, getThirdVehicleLineLabel(data.invoiceType), vehicleLabelX, vehicleStartY - vehicleLineHeight * 2, {
+        font: helveticaBold,
+        size: 7,
+    });
+
+    drawWrappedText(page, getThirdVehicleLineValue(data), vehicleValueX + 26, vehicleStartY - vehicleLineHeight * 2, {
+        font: helveticaBold,
+        size: 7,
+        lineHeight: 8,
+        maxWidth: col1 - 112,
+        maxLines: 2,
+    });
+
+    drawCellText(
         page,
-        [
-            `Marke: ${safeText(data.vehicle.manufacturer)}`,
-            `Art/Typ: ${safeText(data.vehicle.model)}`,
-            `Erstzulassung/Baujahr: ${formatDate(
-                data.vehicle.firstRegistration,
-            )} / ${safeText(data.vehicle.constructionYear)}`,
-        ],
-        tableX + 18,
-        tableY + 112,
+        safeText(data.vehicle.vin),
+        tableX + col1,
+        tableContentTopY,
+        col2,
         {
             font: helveticaBold,
-            size: 8,
-            lineHeight: 26,
+            size: 7,
+            lineHeight: 8,
+            paddingX: 18,
+            paddingTop: 14,
+            maxLines: 3,
         },
     );
 
-    drawText(page, safeText(data.vehicle.vin), tableX + col1 + 18, tableY + 112, {
-        font: helveticaBold,
-        size: 8,
-    });
-
-    drawText(
+    drawCellText(
         page,
         "Der Verkauf erfolgt ohne jeglicher Gewährleistung und Garantie!",
-        tableX + col1 + 30,
-        tableY + 78,
+        tableX + col1,
+        tableContentTopY - 50,
+        col2,
         {
             font: helveticaBold,
-            size: 7.5,
+            size: 7,
+            lineHeight: 9,
+            paddingX: 28,
+            paddingTop: 10,
+            maxLines: 3,
+            align: "center",
         },
     );
 
-    drawRightAlignedText(
+    drawCellText(
         page,
         formatCurrency(data.amounts.netAmount),
-        tableX + col1 + col2 + col3 - 6,
-        tableY + 112,
-        helveticaBold,
-        6.5,
+        tableX + col1 + col2,
+        tableContentTopY,
+        col3,
+        {
+            font: helveticaBold,
+            size: 6.2,
+            lineHeight: 7,
+            paddingX: 6,
+            paddingTop: 23,
+            maxLines: 2,
+            align: "right",
+        },
     );
 
     /**
-     * Summenbereich
+     * Zahlungsbedingungen und Summenbereich
      */
-    const totalsX = 430;
-    const totalsY = 266;
-    const totalsBoxWidth = 95;
-    const totalsLabelX = 300;
+    const paymentTitleY = 188;
 
-    drawText(page, "Rechnungswert ohne MwSt.(EUR)", totalsLabelX, totalsY + 28, {
-        font: helvetica,
-        size: 6.5,
-    });
-
-    drawBox(page, totalsX, totalsY + 22, totalsBoxWidth, 18, {
-        borderColor: black,
-        borderWidth: 1,
-        fillColor: lightGray,
-    });
-
-    drawText(page, formatCurrency(data.amounts.netAmount), totalsX + 5, totalsY + 27, {
+    drawText(page, "Zahlungsbedingungen | Payment:", 42, paymentTitleY, {
         font: helveticaBold,
-        size: 6.5,
-    });
-
-    drawText(page, `davon ${data.amounts.vatRate}% MwST.`, totalsLabelX + 28, totalsY + 10, {
-        font: helvetica,
-        size: 6.5,
-    });
-
-    drawBox(page, totalsX, totalsY + 4, totalsBoxWidth, 18, {
-        borderColor: black,
-        borderWidth: 1,
-        fillColor: lightGray,
-    });
-
-    drawText(page, formatCurrency(data.amounts.vatAmount), totalsX + 5, totalsY + 9, {
-        font: helveticaBold,
-        size: 6.5,
-    });
-
-    drawText(page, "Butto - Gesamtpreis", totalsLabelX + 44, totalsY - 8, {
-        font: helveticaBold,
-        size: 6.5,
-    });
-
-    drawBox(page, totalsX, totalsY - 14, totalsBoxWidth, 18, {
-        borderColor: black,
-        borderWidth: 1,
-        fillColor: lightGray,
-    });
-
-    drawText(page, formatCurrency(data.amounts.grossAmount), totalsX + 5, totalsY - 9, {
-        font: helveticaBold,
-        size: 6.5,
-    });
-
-    /**
-     * Zahlungsbedingungen
-     */
-    drawText(page, "Zahlungsbedingungen | Payment:", 42, 292, {
-        font: helveticaBold,
-        size: 8,
+        size: 7.5,
     });
 
     drawWrappedLines(
@@ -565,26 +774,99 @@ export async function generateInvoicePdf(
             "Steuerfreie Ausfuhrlieferung gemäß § 4 Nr. 1a UStG. | Export delivery exempt from VAT according to § 4 No. 1a German VAT Act.",
         ],
         42,
-        274,
+        174,
         {
             font: helvetica,
-            size: 6.5,
-            lineHeight: 12,
+            size: 5.5,
+            lineHeight: 10,
+            maxWidth: 345,
         },
     );
 
+    const totalsX = tableX + col1 + col2;
+    const totalsY = 150;
+    const totalsBoxWidth = col3;
+    const totalsBoxHeight = 18;
+    const totalsLabelRightX = totalsX - 8;
+
+    drawRightAlignedText(
+        page,
+        "Rechnungswert ohne MwSt.(EUR)",
+        totalsLabelRightX,
+        totalsY + 41,
+        helvetica,
+        5.8,
+    );
+
+    drawBox(page, totalsX, totalsY + 35, totalsBoxWidth, totalsBoxHeight, {
+        borderColor: black,
+        borderWidth: 1,
+        fillColor: lightGray,
+    });
+
+    drawRightAlignedText(
+        page,
+        formatCurrency(data.amounts.netAmount),
+        totalsX + totalsBoxWidth - 6,
+        totalsY + 41,
+        helveticaBold,
+        5.8,
+    );
+
+    drawRightAlignedText(
+        page,
+        `davon ${data.amounts.vatRate}% MwST.`,
+        totalsLabelRightX,
+        totalsY + 23,
+        helvetica,
+        5.8,
+    );
+
+    drawBox(page, totalsX, totalsY + 17, totalsBoxWidth, totalsBoxHeight, {
+        borderColor: black,
+        borderWidth: 1,
+        fillColor: lightGray,
+    });
+
+    drawRightAlignedText(
+        page,
+        formatCurrency(data.amounts.vatAmount),
+        totalsX + totalsBoxWidth - 6,
+        totalsY + 23,
+        helveticaBold,
+        5.8,
+    );
+
+    drawRightAlignedText(
+        page,
+        "Brutto - Gesamtpreis",
+        totalsLabelRightX,
+        totalsY + 5,
+        helveticaBold,
+        5.8,
+    );
+
+    drawBox(page, totalsX, totalsY - 1, totalsBoxWidth, totalsBoxHeight, {
+        borderColor: black,
+        borderWidth: 1,
+        fillColor: lightGray,
+    });
+
+    drawRightAlignedText(
+        page,
+        formatCurrency(data.amounts.grossAmount),
+        totalsX + totalsBoxWidth - 6,
+        totalsY + 5,
+        helveticaBold,
+        5.8,
+    );
+
     /**
-     * Footer
+     * Footer - ohne "Automatisch erzeugt mit KFZ Pilot"
      */
     drawText(page, "WAW NUTZFAHRZEUGE", 190, 42, {
         font: helveticaBold,
         size: 20,
-        color: gray,
-    });
-
-    drawText(page, "Automatisch erzeugt mit KFZ Pilot", 42, 22, {
-        font: helveticaOblique,
-        size: 6,
         color: gray,
     });
 
