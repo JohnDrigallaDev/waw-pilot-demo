@@ -10,6 +10,9 @@ export type InventoryListRow = {
     vinLastSix: string;
     licensePlate: string | null;
 
+    stockStartDate: string | null;
+    stockEndDate: string | null;
+
     purchaseNumber: string | null;
     purchaseDate: string | null;
     sellerName: string | null;
@@ -137,6 +140,12 @@ function getInvoicePriority(invoiceType: string | null): number {
     if (invoiceType === "proforma") return 3;
 
     return 99;
+}
+
+function getVehicleCreatedDate(vehicle: VehicleQueryRow): string | null {
+    if (!vehicle.created_at) return null;
+
+    return vehicle.created_at.slice(0, 10);
 }
 
 export async function getInventoryListRows(): Promise<InventoryListRow[]> {
@@ -301,6 +310,7 @@ export async function getInventoryListRows(): Promise<InventoryListRow[]> {
                 : toNumber(vehicle.purchase_price_net);
 
         const additionalCostsNet = toNumber(vehicle.additional_costs_net);
+
         const saleNetAmount =
             sale?.net_amount !== null && sale?.net_amount !== undefined
                 ? toNumber(sale.net_amount)
@@ -312,6 +322,8 @@ export async function getInventoryListRows(): Promise<InventoryListRow[]> {
                 : null;
 
         const vin = vehicle.vin ?? "—";
+        const purchaseDate = purchase?.purchase_date ?? null;
+        const saleDate = sale?.sale_date ?? null;
 
         return {
             vehicleId: vehicle.id,
@@ -322,8 +334,11 @@ export async function getInventoryListRows(): Promise<InventoryListRow[]> {
             vinLastSix: vin === "—" ? "" : vin.slice(-6),
             licensePlate: vehicle.license_plate,
 
+            stockStartDate: purchaseDate ?? getVehicleCreatedDate(vehicle),
+            stockEndDate: saleDate,
+
             purchaseNumber: purchase?.purchase_number ?? null,
-            purchaseDate: purchase?.purchase_date ?? null,
+            purchaseDate,
             sellerName: getCustomerName(purchase?.customers),
             purchaseNetAmount,
 
@@ -331,7 +346,7 @@ export async function getInventoryListRows(): Promise<InventoryListRow[]> {
 
             saleId: sale?.id ?? null,
             saleNumber: sale?.sale_number ?? null,
-            saleDate: sale?.sale_date ?? null,
+            saleDate,
             buyerName: getCustomerName(sale?.customers),
             saleNetAmount,
 

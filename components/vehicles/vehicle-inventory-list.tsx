@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
     ArrowLeft,
+    CalendarDays,
     ClipboardList,
     Printer,
     Search,
@@ -67,6 +68,10 @@ function getSearchableText(row: InventoryListRow): string {
         row.vin,
         row.vinLastSix,
         row.licensePlate,
+        row.stockStartDate,
+        formatDate(row.stockStartDate),
+        row.stockEndDate,
+        formatDate(row.stockEndDate),
         row.purchaseNumber,
         row.purchaseDate,
         formatDate(row.purchaseDate),
@@ -87,18 +92,94 @@ function getSearchableText(row: InventoryListRow): string {
         .toLowerCase();
 }
 
+function wasInStockDuringPeriod({
+                                    row,
+                                    fromDate,
+                                    toDate,
+                                }: {
+    row: InventoryListRow;
+    fromDate: string;
+    toDate: string;
+}): boolean {
+    if (!fromDate && !toDate) return true;
+
+    const stockStartDate = row.stockStartDate ?? row.purchaseDate;
+    const stockEndDate = row.stockEndDate ?? row.saleDate;
+
+    if (!stockStartDate) return true;
+
+    const filterFromDate = fromDate || "0001-01-01";
+    const filterToDate = toDate || "9999-12-31";
+
+    return (
+        stockStartDate <= filterToDate &&
+        (!stockEndDate || stockEndDate >= filterFromDate)
+    );
+}
+
+function getFilterDescription({
+                                  query,
+                                  fromDate,
+                                  toDate,
+                                  totalCount,
+                                  filteredCount,
+                              }: {
+    query: string;
+    fromDate: string;
+    toDate: string;
+    totalCount: number;
+    filteredCount: number;
+}): string {
+    const hasDateFilter = Boolean(fromDate || toDate);
+    const hasSearchFilter = query.trim().length > 0;
+
+    if (!hasDateFilter && !hasSearchFilter) {
+        return "Alle Fahrzeuge";
+    }
+
+    const parts: string[] = [];
+
+    if (fromDate && toDate && fromDate === toDate) {
+        parts.push(`Inventur-Stichtag ${formatDate(fromDate)}`);
+    } else if (fromDate && toDate) {
+        parts.push(`Zeitraum ${formatDate(fromDate)} bis ${formatDate(toDate)}`);
+    } else if (fromDate) {
+        parts.push(`Bestand ab ${formatDate(fromDate)}`);
+    } else if (toDate) {
+        parts.push(`Bestand bis ${formatDate(toDate)}`);
+    }
+
+    if (hasSearchFilter) {
+        parts.push(`Suche: "${query.trim()}"`);
+    }
+
+    parts.push(`${filteredCount} von ${totalCount} Fahrzeugen`);
+
+    return parts.join(" · ");
+}
+
 export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
     const [query, setQuery] = useState("");
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
 
     const filteredRows = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
 
-        if (!normalizedQuery) return rows;
+        return rows.filter((row) => {
+            const matchesSearch =
+                !normalizedQuery ||
+                getSearchableText(row).includes(normalizedQuery);
 
-        return rows.filter((row) =>
-            getSearchableText(row).includes(normalizedQuery),
-        );
-    }, [query, rows]);
+            if (!matchesSearch) return false;
+
+            return wasInStockDuringPeriod({
+                row,
+                fromDate,
+                toDate,
+            });
+        });
+    }, [fromDate, query, rows, toDate]);
 
     const totalPurchaseNet = filteredRows.reduce(
         (sum, row) => sum + row.purchaseNetAmount,
@@ -120,13 +201,21 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
         0,
     );
 
+    const filterDescription = getFilterDescription({
+        query,
+        fromDate,
+        toDate,
+        totalCount: rows.length,
+        filteredCount: filteredRows.length,
+    });
+
     return (
         <div className="space-y-6 print:space-y-4">
             <div className="print:hidden">
                 <PageHeader
                     eyebrow="Fahrzeugbestand"
                     title="Bestandsliste"
-                    description="Kaufmännische Übersicht mit Bestandsnummer, Einkauf, Verkauf, Rechnungsnummer und Rohgewinn."
+                    description="Kaufmännische Übersicht mit Bestandsnummer, Einkauf, Verkauf, Rechnungsnummer, Rohgewinn und Inventur-Zeitraumfilter."
                     action={
                         <div className="flex flex-col gap-2 sm:flex-row">
                             <Button
@@ -159,7 +248,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                         Bestandsliste
                     </h1>
                     <p className="mt-1 text-xs font-medium text-slate-600">
-                        Einkauf, Verkauf, Rechnung und Rohgewinn je Fahrzeug
+                        {filterDescription}
                     </p>
                 </div>
             </div>
@@ -168,11 +257,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                 <SummaryCard
                     title="Fahrzeuge"
                     value={filteredRows.length.toString()}
-                    description={
-                        query.trim()
-                            ? `von ${rows.length} Fahrzeugen`
-                            : "Alle Fahrzeuge"
-                    }
+                    description={filterDescription}
                     icon={ClipboardList}
                 />
                 <SummaryCard
@@ -198,15 +283,80 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
             <Card className="rounded-[1.75rem] border-slate-200 bg-white/95 shadow-sm print:rounded-none print:border-0 print:shadow-none">
                 <CardContent className="p-0">
                     <div className="border-b border-slate-200 p-5 print:hidden">
-                        <div className="relative w-full md:max-w-xl">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                            <Input
-                                value={query}
-                                onChange={(event) => setQuery(event.target.value)}
-                                placeholder="Suche nach Bestandsnummer, FIN, Verkäufer, Käufer, VK-Nr., Rechnung, Betrag..."
-                                className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-semibold"
-                            />
+                        <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr_1fr_auto] xl:items-end">
+                            <div className="space-y-2">
+                                <label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                                    Suche
+                                </label>
+                                <div className="relative">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                                    <Input
+                                        value={query}
+                                        onChange={(event) => setQuery(event.target.value)}
+                                        placeholder="Suche nach Bestandsnummer, FIN, Verkäufer, Käufer, VK-Nr., Rechnung, Betrag..."
+                                        className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-semibold"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label
+                                    htmlFor="inventory-from-date"
+                                    className="text-xs font-black uppercase tracking-wide text-slate-500"
+                                >
+                                    Bestand von
+                                </label>
+                                <div className="relative">
+                                    <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                                    <Input
+                                        id="inventory-from-date"
+                                        type="date"
+                                        value={fromDate}
+                                        onChange={(event) => setFromDate(event.target.value)}
+                                        className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-semibold"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label
+                                    htmlFor="inventory-to-date"
+                                    className="text-xs font-black uppercase tracking-wide text-slate-500"
+                                >
+                                    Bestand bis
+                                </label>
+                                <div className="relative">
+                                    <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                                    <Input
+                                        id="inventory-to-date"
+                                        type="date"
+                                        value={toDate}
+                                        onChange={(event) => setToDate(event.target.value)}
+                                        className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-semibold"
+                                    />
+                                </div>
+                            </div>
+
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setQuery("");
+                                    setFromDate("");
+                                    setToDate("");
+                                }}
+                                className="h-12 rounded-2xl border-slate-200 bg-white font-extrabold"
+                            >
+                                Filter zurücksetzen
+                            </Button>
                         </div>
+
+                        <p className="mt-3 text-xs font-semibold text-slate-500">
+                            Zeitraumfilter für Inventur: Ein Fahrzeug wird angezeigt,
+                            wenn es im gewählten Zeitraum im Bestand war. Für einen
+                            Stichtag bei „Bestand von“ und „Bestand bis“ dasselbe Datum
+                            eintragen.
+                        </p>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -268,6 +418,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                         <td className="px-4 py-3 font-black text-slate-950 print:px-1 print:py-1">
                                             {row.stockNumber}
                                         </td>
+
                                         <td className="px-4 py-3 print:px-1 print:py-1">
                                             <div className="font-extrabold text-slate-950">
                                                 {row.vehicleLabel}
@@ -276,6 +427,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                                 {row.licensePlate ?? "Ohne Kennzeichen"}
                                             </div>
                                         </td>
+
                                         <td className="px-4 py-3 font-mono text-xs font-bold text-slate-600 print:px-1 print:py-1 print:text-[7px]">
                                             {row.vin}
                                             {row.vinLastSix ? (
@@ -284,6 +436,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                                 </div>
                                             ) : null}
                                         </td>
+
                                         <td className="px-4 py-3 print:px-1 print:py-1">
                                             <div className="font-bold text-slate-950">
                                                 {formatDate(row.purchaseDate)}
@@ -292,30 +445,39 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                                 {row.purchaseNumber ?? "—"}
                                             </div>
                                         </td>
+
                                         <td className="px-4 py-3 font-semibold text-slate-700 print:px-1 print:py-1">
                                             {row.sellerName ?? "—"}
                                         </td>
+
                                         <td className="px-4 py-3 text-right font-bold text-slate-950 print:px-1 print:py-1">
                                             {formatMoney(row.purchaseNetAmount)}
                                         </td>
+
                                         <td className="px-4 py-3 text-right font-bold text-slate-700 print:px-1 print:py-1">
                                             {formatMoney(row.additionalCostsNet)}
                                         </td>
+
                                         <td className="px-4 py-3 font-black text-slate-950 print:px-1 print:py-1">
                                             {row.saleNumber ?? "—"}
                                         </td>
+
                                         <td className="px-4 py-3 font-bold text-slate-950 print:px-1 print:py-1">
                                             {formatDate(row.saleDate)}
                                         </td>
+
                                         <td className="px-4 py-3 font-black text-slate-950 print:px-1 print:py-1">
                                             {row.invoiceNumber ?? "—"}
                                         </td>
+
                                         <td className="px-4 py-3 font-semibold text-slate-700 print:px-1 print:py-1">
                                             {row.buyerName ?? "—"}
                                         </td>
+
                                         <td className="px-4 py-3 text-right font-bold text-slate-950 print:px-1 print:py-1">
                                             {formatMoney(row.saleNetAmount)}
                                         </td>
+
                                         <td
                                             className={cn(
                                                 "px-4 py-3 text-right font-black print:px-1 print:py-1",
@@ -328,6 +490,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                         >
                                             {formatMoney(row.rawProfitNet)}
                                         </td>
+
                                         <td className="px-4 py-3 print:px-1 print:py-1">
                                                 <span
                                                     className={cn(
@@ -367,7 +530,10 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                     <td className="px-4 py-3 text-right print:px-1 print:py-1">
                                         {formatMoney(totalAdditionalCostsNet)}
                                     </td>
-                                    <td colSpan={4} className="px-4 py-3 print:px-1 print:py-1" />
+                                    <td
+                                        colSpan={4}
+                                        className="px-4 py-3 print:px-1 print:py-1"
+                                    />
                                     <td className="px-4 py-3 text-right print:px-1 print:py-1">
                                         {formatMoney(totalSaleNet)}
                                     </td>
