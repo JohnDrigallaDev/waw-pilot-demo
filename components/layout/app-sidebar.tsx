@@ -8,6 +8,14 @@ import { LogOut } from "lucide-react";
 import { mainNavigation, secondaryNavigation } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
+function isNavigationItemActive(pathname: string, href: string): boolean {
+    if (href === "/dashboard") {
+        return pathname === "/dashboard";
+    }
+
+    return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AppSidebar() {
     return (
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/15 lg:flex lg:flex-col">
@@ -51,9 +59,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <div className="flex-1 overflow-y-auto px-3 py-5">
                 <nav className="space-y-1.5">
                     {mainNavigation.map((item) => {
-                        const isActive =
-                            pathname === item.href ||
-                            pathname.startsWith(`${item.href}/`);
+                        const isActive = isNavigationItemActive(pathname, item.href);
 
                         return (
                             <Link
@@ -87,9 +93,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 <div className="mt-7 border-t border-white/10 pt-6">
                     <nav className="space-y-1.5">
                         {secondaryNavigation.map((item) => {
-                            const isActive =
-                                pathname === item.href ||
-                                pathname.startsWith(`${item.href}/`);
+                            const isActive = isNavigationItemActive(pathname, item.href);
 
                             return (
                                 <Link
