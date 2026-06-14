@@ -10,6 +10,7 @@ import {
     FileText,
     LayoutDashboard,
     Receipt,
+    Route,
     Settings,
     ShoppingCart,
     Users,
@@ -56,6 +57,11 @@ export const mainNavigation = [
         title: "Kassenbuch",
         href: "/dashboard/cashbook",
         icon: CreditCard,
+    },
+    {
+        title: "Reisekosten",
+        href: "/dashboard/travel-expenses",
+        icon: Route,
     },
     {
         title: "Kennzeichen",

@@ -1,5 +1,5 @@
-import { TravelExpenseForm } from "@/components/reports/travel-expense-form";
+import { redirect } from "next/navigation";
 
-export default function NewTravelExpensePage() {
-    return <TravelExpenseForm />;
+export default function OldNewTravelExpensePage() {
+    redirect("/dashboard/travel-expenses/new");
 }

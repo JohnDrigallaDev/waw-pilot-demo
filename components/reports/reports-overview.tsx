@@ -6,7 +6,6 @@ import {
     CalendarDays,
     Car,
     Download,
-    FilePlus2,
     FileWarning,
     Receipt,
     ShoppingCart,
@@ -62,23 +61,13 @@ export function ReportsOverview({ data }: ReportsOverviewProps) {
                 title="Auswertungen"
                 description=""
                 action={
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Link
-                            href="/dashboard/reports/travel-expenses/new"
-                            className="inline-flex h-11 items-center justify-center rounded-2xl border border-cyan-200 bg-white px-4 text-sm font-extrabold text-cyan-800 transition hover:bg-cyan-50"
-                        >
-                            <FilePlus2 className="mr-2 size-4" />
-                            Reisekostenformular erstellen
-                        </Link>
-
-                        <Link
-                            href={exportHref}
-                            className="inline-flex h-11 items-center justify-center rounded-2xl bg-cyan-700 px-4 text-sm font-extrabold text-white transition hover:bg-cyan-800"
-                        >
-                            <Download className="mr-2 size-4" />
-                            CSV exportieren
-                        </Link>
-                    </div>
+                    <Link
+                        href={exportHref}
+                        className="inline-flex h-11 items-center justify-center rounded-2xl bg-cyan-700 px-4 text-sm font-extrabold text-white transition hover:bg-cyan-800"
+                    >
+                        <Download className="mr-2 size-4" />
+                        CSV exportieren
+                    </Link>
                 }
             />
 

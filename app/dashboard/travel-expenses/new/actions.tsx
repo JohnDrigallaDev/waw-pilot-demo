@@ -198,7 +198,7 @@ export async function createTravelExpenseFormAction(
         };
     }
 
-    revalidatePath("/dashboard/reports");
+    revalidatePath("/dashboard/travel-expenses");
     revalidatePath("/dashboard/documents");
 
     redirect(`/dashboard/documents?createdDocument=${document.id}`);

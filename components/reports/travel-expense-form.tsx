@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { CalendarDays, FileText, Save, Truck, UserRound } from "lucide-react";
 
-import { createTravelExpenseFormAction } from "@/app/dashboard/reports/travel-expenses/new/actions";
+import { createTravelExpenseFormAction } from "@/app/dashboard/travel-expenses/new/actions";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,7 +37,7 @@ export function TravelExpenseForm() {
                         variant="outline"
                         className="rounded-2xl border-slate-200 bg-white font-bold"
                     >
-                        <Link href="/dashboard/reports">Zurück</Link>
+                        <Link href="/dashboard/travel-expenses">Zurück</Link>
                     </Button>
                 }
             />
@@ -162,7 +162,7 @@ export function TravelExpenseForm() {
                             variant="outline"
                             className="h-12 rounded-2xl border-slate-200 bg-white font-bold"
                         >
-                            <Link href="/dashboard/reports">Abbrechen</Link>
+                            <Link href="/dashboard/travel-expenses">Abbrechen</Link>
                         </Button>
 
                         <Button
