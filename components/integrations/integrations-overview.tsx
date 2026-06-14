@@ -13,6 +13,7 @@ import {
 
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 
 const integrations = [
@@ -171,33 +172,13 @@ function IntegrationStatCard({
     icon: typeof Plug;
     tone: "success" | "warning" | "info";
 }) {
-    const toneClasses = {
-        success: "border-emerald-100 bg-emerald-50 text-emerald-700",
-        warning: "border-amber-100 bg-amber-50 text-amber-700",
-        info: "border-cyan-100 bg-cyan-50 text-cyan-700",
-    };
-
     return (
-        <Card className="rounded-[1.5rem] border-slate-200 bg-white/90 shadow-sm">
-            <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <p className="text-sm font-bold text-slate-500">{label}</p>
-                        <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-950">
-                            {value}
-                        </p>
-                        <p className="mt-2 text-xs font-semibold text-slate-500">
-                            {description}
-                        </p>
-                    </div>
-
-                    <div
-                        className={`flex size-11 items-center justify-center rounded-2xl border ${toneClasses[tone]}`}
-                    >
-                        <Icon className="size-5" />
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+        <CompactStatCard
+            label={label}
+            value={value}
+            description={description}
+            icon={Icon}
+            tone={tone}
+        />
     );
 }

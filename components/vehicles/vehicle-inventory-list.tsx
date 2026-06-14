@@ -13,6 +13,7 @@ import {
 
 import type { InventoryListRow } from "@/lib/vehicles/inventory-list-queries";
 import { PageHeader } from "@/components/shared/page-header";
+import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -588,24 +589,12 @@ function SummaryCard({
     icon: typeof ClipboardList;
 }) {
     return (
-        <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
-            <CardContent className="flex items-center gap-4 p-5">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700">
-                    <Icon className="size-5" />
-                </div>
-
-                <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-                        {title}
-                    </p>
-                    <p className="mt-1 truncate text-xl font-black text-slate-950">
-                        {value}
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                        {description}
-                    </p>
-                </div>
-            </CardContent>
-        </Card>
+        <CompactStatCard
+            label={title}
+            value={value}
+            description={description}
+            icon={Icon}
+            tone="info"
+        />
     );
 }

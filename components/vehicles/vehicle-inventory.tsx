@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PageHeader } from "@/components/shared/page-header";
+import { CompactStatCard } from "@/components/cards/compact-stat-card";
 
 type VehicleTab = "current" | "sold";
 
@@ -208,31 +209,13 @@ function InventoryStatCard({
                                danger = false,
                            }: InventoryStatCardProps) {
     return (
-        <Card className="group rounded-[1.5rem] border-slate-200 bg-white/90 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/80">
-            <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <p className="text-sm font-bold text-slate-500">{label}</p>
-                        <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-950">
-                            {value}
-                        </p>
-                        <p className="mt-2 text-xs font-semibold text-slate-500">
-                            {description}
-                        </p>
-                    </div>
-
-                    <div
-                        className={
-                            danger
-                                ? "flex size-11 items-center justify-center rounded-2xl border border-red-100 bg-red-50 text-red-700"
-                                : "flex size-11 items-center justify-center rounded-2xl border border-cyan-100 bg-cyan-50 text-cyan-700"
-                        }
-                    >
-                        <Icon className="size-5" />
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+        <CompactStatCard
+            label={label}
+            value={value}
+            description={description}
+            icon={Icon}
+            tone={danger ? "danger" : "info"}
+        />
     );
 }
 

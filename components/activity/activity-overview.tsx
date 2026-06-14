@@ -5,6 +5,7 @@ import { Activity, Clock3, Search, UserRound } from "lucide-react";
 
 import type { ActivityLogRow } from "@/lib/activity/activity-queries";
 import { PageHeader } from "@/components/shared/page-header";
+import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
@@ -221,34 +222,14 @@ function ActivityStatCard({
     icon: typeof Activity;
     tone: "cyan" | "emerald" | "amber";
 }) {
-    const toneClasses = {
-        cyan: "border-cyan-100 bg-cyan-50 text-cyan-700",
-        emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
-        amber: "border-amber-100 bg-amber-50 text-amber-700",
-    };
-
     return (
-        <Card className="rounded-[1.5rem] border-slate-200 bg-white/90 shadow-sm">
-            <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <p className="text-sm font-bold text-slate-500">{label}</p>
-                        <p className="mt-3 text-2xl font-extrabold tracking-tight text-slate-950">
-                            {value}
-                        </p>
-                        <p className="mt-2 text-xs font-semibold text-slate-500">
-                            {description}
-                        </p>
-                    </div>
-
-                    <div
-                        className={`flex size-11 items-center justify-center rounded-2xl border ${toneClasses[tone]}`}
-                    >
-                        <Icon className="size-5" />
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+        <CompactStatCard
+            label={label}
+            value={value}
+            description={description}
+            icon={Icon}
+            tone={tone === "cyan" ? "info" : tone === "amber" ? "warning" : "success"}
+        />
     );
 }
 
