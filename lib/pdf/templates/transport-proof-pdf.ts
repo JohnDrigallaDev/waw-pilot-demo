@@ -1,16 +1,11 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import {
-    createPdfLayout,
-    drawHorizontalLine,
-    drawPdfFooter,
-    drawPdfHeader,
-    drawSignatureLine,
-    drawText,
-    hexToRgb,
-} from "@/lib/pdf/core/pdf-layout";
-import { pdfTheme } from "@/lib/pdf/core/pdf-theme";
+    StandardFonts,
+    rgb,
+    type PDFFont,
+    type PDFPage,
+} from "pdf-lib";
+
+import { createPdfLayout } from "@/lib/pdf/core/pdf-layout";
 import { formatPdfDate } from "@/lib/pdf/core/pdf-format";
 import type { SaleGeneratedDocumentData } from "@/lib/pdf/generated-documents/sale-document-data";
 
@@ -26,8 +21,8 @@ function getTransportTypeLabel(type: string | null | undefined): string {
     const labels: Record<string, string> = {
         self_pickup: "Abnehmer befördert selbst",
         customer_forwarder: "Spedition / Beauftragter des Abnehmers",
-        seller_transport: "Lieferung durch WAW",
-        other: "Sonstiges",
+        seller_transport: "Lieferung durch WAW Nutzfahrzeuge",
+        other: "Sonstige Verbringung",
     };
 
     if (!type) return "—";
@@ -35,93 +30,274 @@ function getTransportTypeLabel(type: string | null | undefined): string {
     return labels[type] ?? type;
 }
 
-async function drawLogo(ctx: Awaited<ReturnType<typeof createPdfLayout>>) {
-    try {
-        const logoPath = path.join(
-            process.cwd(),
-            "public",
-            "brand",
-            "waw-logo.png",
-        );
+function getVehicleType(data: SaleGeneratedDocumentData): string {
+    if (!data.vehicle) return "—";
 
-        const logoBytes = await readFile(logoPath);
-        const logoImage = await ctx.pdfDoc.embedPng(logoBytes);
-
-        const logoWidth = 95;
-        const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
-
-        ctx.page.drawImage(logoImage, {
-            x: ctx.width - ctx.margin - logoWidth,
-            y: ctx.height - ctx.margin - logoHeight + 4,
-            width: logoWidth,
-            height: logoHeight,
-        });
-    } catch {
-        drawText(ctx, "WAW", ctx.width - ctx.margin - 70, ctx.height - ctx.margin, {
-            size: 18,
-            bold: true,
-            color: pdfTheme.colors.primaryDark,
-        });
-    }
+    return [
+        data.vehicle.manufacturer,
+        data.vehicle.model,
+        data.vehicle.vehicleType,
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || "—";
 }
 
-function drawFieldRow(
-    ctx: Awaited<ReturnType<typeof createPdfLayout>>,
-    label: string,
-    value: string,
-    x: number,
-    y: number,
-    labelWidth = 165,
-    valueWidth = 310,
-): number {
-    drawText(ctx, label, x, y, {
-        size: pdfTheme.fontSize.small,
-        bold: true,
-        color: pdfTheme.colors.mutedText,
-        maxWidth: labelWidth,
-    });
-
-    const finalY = drawText(ctx, value, x + labelWidth, y, {
-        size: pdfTheme.fontSize.small,
-        color: pdfTheme.colors.text,
-        maxWidth: valueWidth,
-        lineHeight: 11,
-    });
-
-    return Math.min(y - 20, finalY - 20);
+function getDestination(data: SaleGeneratedDocumentData): string {
+    return [
+        data.export?.destinationCountry,
+        data.export?.destinationCity,
+    ]
+        .filter(Boolean)
+        .join(", ") || "—";
 }
 
-function drawCheckbox(
-    ctx: Awaited<ReturnType<typeof createPdfLayout>>,
-    x: number,
-    y: number,
-    label: string,
-    checked: boolean,
-): number {
-    ctx.page.drawRectangle({
-        x,
-        y: y - 2,
-        width: 10,
-        height: 10,
-        borderWidth: 1,
-        borderColor: hexToRgb(pdfTheme.colors.border),
-    });
+function getTransportDate(data: SaleGeneratedDocumentData): string {
+    return formatPdfDate(data.export?.transportDate ?? data.sale?.saleDate ?? null);
+}
 
-    if (checked) {
-        drawText(ctx, "X", x + 2.2, y - 0.5, {
-            size: 8,
-            bold: true,
-            color: pdfTheme.colors.primaryDark,
-        });
+function getIssuerDate(data: SaleGeneratedDocumentData): string {
+    return formatPdfDate(data.export?.transportDate ?? data.sale?.saleDate ?? null);
+}
+
+function splitLongWord(
+    word: string,
+    font: PDFFont,
+    size: number,
+    maxWidth: number,
+): string[] {
+    const parts: string[] = [];
+    let current = "";
+
+    for (const character of word) {
+        const next = `${current}${character}`;
+
+        if (font.widthOfTextAtSize(next, size) <= maxWidth || current.length === 0) {
+            current = next;
+            continue;
+        }
+
+        parts.push(current);
+        current = character;
     }
 
-    drawText(ctx, label, x + 18, y, {
-        size: pdfTheme.fontSize.small,
-        color: pdfTheme.colors.text,
-        maxWidth: 430,
+    if (current.length > 0) {
+        parts.push(current);
+    }
+
+    return parts;
+}
+
+function wrapText(
+    text: string,
+    font: PDFFont,
+    size: number,
+    maxWidth: number,
+): string[] {
+    const normalizedText = requireValue(text).replace(/\s+/g, " ").trim();
+
+    if (normalizedText === "—") return ["—"];
+
+    const words = normalizedText.split(" ");
+    const lines: string[] = [];
+    let currentLine = "";
+
+    for (const word of words) {
+        const testLine = currentLine.length > 0 ? `${currentLine} ${word}` : word;
+
+        if (font.widthOfTextAtSize(testLine, size) <= maxWidth) {
+            currentLine = testLine;
+            continue;
+        }
+
+        if (currentLine.length > 0) {
+            lines.push(currentLine);
+            currentLine = "";
+        }
+
+        if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+            currentLine = word;
+            continue;
+        }
+
+        const splitParts = splitLongWord(word, font, size, maxWidth);
+
+        for (const part of splitParts) {
+            if (currentLine.length > 0) {
+                lines.push(currentLine);
+            }
+
+            currentLine = part;
+        }
+    }
+
+    if (currentLine.length > 0) {
+        lines.push(currentLine);
+    }
+
+    return lines;
+}
+
+function drawWrappedText(
+    page: PDFPage,
+    text: string,
+    x: number,
+    y: number,
+    options: {
+        font: PDFFont;
+        size: number;
+        maxWidth: number;
+        lineHeight: number;
+        color?: ReturnType<typeof rgb>;
+        maxLines?: number;
+    },
+): number {
+    const lines = wrapText(text, options.font, options.size, options.maxWidth);
+    const visibleLines = options.maxLines ? lines.slice(0, options.maxLines) : lines;
+
+    visibleLines.forEach((line, index) => {
+        page.drawText(line, {
+            x,
+            y: y - index * options.lineHeight,
+            size: options.size,
+            font: options.font,
+            color: options.color ?? rgb(0, 0, 0),
+        });
     });
 
-    return y - 18;
+    return y - visibleLines.length * options.lineHeight;
+}
+
+function drawLine(
+    page: PDFPage,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+) {
+    page.drawLine({
+        start: { x: x1, y: y1 },
+        end: { x: x2, y: y2 },
+        thickness: 0.8,
+        color: rgb(0, 0, 0),
+    });
+}
+
+function drawValueLine(
+    page: PDFPage,
+    params: {
+        label: string;
+        value: string;
+        x: number;
+        y: number;
+        labelFont: PDFFont;
+        valueFont: PDFFont;
+        labelSize?: number;
+        valueSize?: number;
+        valueX?: number;
+        lineEndX: number;
+        valueMaxWidth?: number;
+    },
+): number {
+    const labelSize = params.labelSize ?? 10;
+    const valueSize = params.valueSize ?? 10;
+    const valueX = params.valueX ?? params.x + 110;
+    const valueMaxWidth = params.valueMaxWidth ?? params.lineEndX - valueX - 4;
+
+    page.drawText(params.label, {
+        x: params.x,
+        y: params.y,
+        size: labelSize,
+        font: params.labelFont,
+        color: rgb(0, 0, 0),
+    });
+
+    drawWrappedText(page, params.value, valueX, params.y, {
+        font: params.valueFont,
+        size: valueSize,
+        maxWidth: valueMaxWidth,
+        lineHeight: valueSize + 2,
+        maxLines: 2,
+    });
+
+    drawLine(page, valueX, params.y - 4, params.lineEndX, params.y - 4);
+
+    return params.y - 32;
+}
+
+function drawBlankLine(page: PDFPage, x: number, y: number, width: number): number {
+    drawLine(page, x, y, x + width, y);
+
+    return y - 24;
+}
+
+function drawCommunityTransportLine(
+    page: PDFPage,
+    params: {
+        x: number;
+        y: number;
+        lineEndX: number;
+        labelFont: PDFFont;
+        valueFont: PDFFont;
+        value: string;
+    },
+): number {
+    const label = "Das Fahrzeug in das übrige Gemeinschaftsgebiet wie folgt:";
+    const labelSize = 11;
+    const valueSize = 10;
+
+    page.drawText(label, {
+        x: params.x,
+        y: params.y,
+        size: labelSize,
+        font: params.labelFont,
+        color: rgb(0, 0, 0),
+    });
+
+    const labelWidth = params.labelFont.widthOfTextAtSize(label, labelSize);
+    const firstLineX = params.x + labelWidth + 8;
+    const firstLineWidth = params.lineEndX - firstLineX;
+
+    const valueLines = wrapText(
+        params.value,
+        params.valueFont,
+        valueSize,
+        firstLineWidth,
+    );
+
+    const firstLineValue = valueLines[0] ?? "";
+    const remainingValue = valueLines.slice(1).join(" ");
+
+    page.drawText(firstLineValue, {
+        x: firstLineX + 3,
+        y: params.y,
+        size: valueSize,
+        font: params.valueFont,
+        color: rgb(0, 0, 0),
+    });
+
+    drawLine(page, firstLineX, params.y - 4, params.lineEndX, params.y - 4);
+
+    if (remainingValue.length > 0) {
+        const secondLineY = params.y - 24;
+
+        drawWrappedText(page, remainingValue, params.x + 3, secondLineY, {
+            font: params.valueFont,
+            size: valueSize,
+            maxWidth: params.lineEndX - params.x,
+            lineHeight: 12,
+            maxLines: 2,
+        });
+
+        drawLine(page, params.x, secondLineY - 4, params.lineEndX, secondLineY - 4);
+
+        return secondLineY - 32;
+    }
+
+    const secondLineY = params.y - 24;
+    drawLine(page, params.x, secondLineY - 4, params.lineEndX, secondLineY - 4);
+
+    return secondLineY - 32;
 }
 
 export async function generateTransportProofPdf(
@@ -134,276 +310,141 @@ export async function generateTransportProofPdf(
     }
 
     const ctx = await createPdfLayout();
+    const page = ctx.page;
 
-    await drawLogo(ctx);
+    const timesRoman = await ctx.pdfDoc.embedFont(StandardFonts.TimesRoman);
+    const timesBold = await ctx.pdfDoc.embedFont(StandardFonts.TimesRomanBold);
 
-    let y = drawPdfHeader(ctx, {
-        title: "Verbringungsnachweis / Empfangsbestätigung",
-        subtitle:
-            "Nachweis über die Verbringung des Fahrzeugs in das übrige Gemeinschaftsgebiet",
-        documentNumber: data.sale.invoiceNumber
-            ? `Rechnung ${data.sale.invoiceNumber}`
-            : null,
-    });
+    const contentX = 70;
+    const contentWidth = ctx.width - contentX * 2;
+    const lineEndX = contentX + contentWidth;
 
-    drawText(ctx, "Angaben zum Fahrzeug", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
-    });
+    let y = ctx.height - 78;
 
-    y -= 24;
-
-    const vehicleDescription = [
-        data.vehicle.manufacturer,
-        data.vehicle.model,
-        data.vehicle.vehicleType,
-    ]
-        .filter(Boolean)
-        .join(" ");
-
-    y = drawFieldRow(
-        ctx,
-        "Fahrzeugtyp",
-        requireValue(vehicleDescription),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Fahrgestellnummer / VIN",
-        requireValue(data.vehicle.vin),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Interne Fahrzeugnummer",
-        requireValue(data.vehicle.internalNumber),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Rechnung",
-        data.sale.invoiceNumber
-            ? `${data.sale.invoiceNumber} vom ${formatPdfDate(data.sale.invoiceDate)}`
-            : "—",
-        ctx.margin,
-        y,
-    );
-
-    y -= 8;
-    drawHorizontalLine(ctx, y + 10);
-
-    drawText(ctx, "Angaben zur Verbringung", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
-    });
-
-    y -= 24;
-
-    y = drawFieldRow(
-        ctx,
-        "Verbringungs- / Übergabedatum",
-        formatPdfDate(data.export.transportDate),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Übergabeort / Empfangsort",
-        requireValue(data.export.destinationCity),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Empfangsland",
-        requireValue(data.export.destinationCountry),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Art der Verbringung",
-        getTransportTypeLabel(data.export.transportType),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Empfänger / Unterzeichner",
-        requireValue(data.export.receiverName),
-        ctx.margin,
-        y,
-    );
-
-    y -= 8;
-    drawHorizontalLine(ctx, y + 10);
-
-    drawText(ctx, "Abnehmer / Empfänger", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
-    });
-
-    y -= 24;
-
-    y = drawFieldRow(
-        ctx,
-        "Name",
-        requireValue(data.customer.name),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "Adresse",
-        requireValue(
-            [
-                data.customer.street,
-                [data.customer.postalCode, data.customer.city]
-                    .filter(Boolean)
-                    .join(" "),
-                data.customer.country,
-            ]
-                .filter(Boolean)
-                .join(", "),
-        ),
-        ctx.margin,
-        y,
-    );
-
-    y = drawFieldRow(
-        ctx,
-        "USt-ID",
-        requireValue(data.customer.vatId),
-        ctx.margin,
-        y,
-    );
-
-    y -= 8;
-    drawHorizontalLine(ctx, y + 10);
-
-    drawText(ctx, "Bestätigung", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
-    });
-
-    y -= 24;
-
-    drawText(
-        ctx,
-        "Hiermit wird bestätigt, dass das oben genannte Fahrzeug übernommen und in das oben genannte Empfangsland verbracht wurde bzw. verbracht wird.",
-        ctx.margin,
+    drawWrappedText(
+        page,
+        "Verbringungsnachweis und Empfangsbestätigung des Abnehmers gem. § 17a Abs. 2 Nr. 4 UStDV",
+        contentX,
         y,
         {
-            size: pdfTheme.fontSize.normal,
-            maxWidth: ctx.width - ctx.margin * 2,
-            lineHeight: 13,
+            font: timesBold,
+            size: 13,
+            maxWidth: contentWidth,
+            lineHeight: 16,
+            maxLines: 2,
         },
     );
+
+    y -= 54;
+
+    y = drawValueLine(page, {
+        label: "Das Fahrzeug Typ:",
+        value: getVehicleType(data),
+        x: contentX,
+        y,
+        labelFont: timesRoman,
+        valueFont: timesRoman,
+        labelSize: 11,
+        valueSize: 10,
+        valueX: contentX + 112,
+        lineEndX,
+    });
+
+    y = drawValueLine(page, {
+        label: "Fahrgestellnummer:",
+        value: requireValue(data.vehicle.vin),
+        x: contentX,
+        y,
+        labelFont: timesRoman,
+        valueFont: timesRoman,
+        labelSize: 11,
+        valueSize: 10,
+        valueX: contentX + 128,
+        lineEndX,
+    });
+
+    y = drawBlankLine(page, contentX, y, contentWidth);
+    y = drawBlankLine(page, contentX, y, contentWidth);
+    y = drawBlankLine(page, contentX, y, contentWidth);
+
+    y -= 4;
+
+    y = drawValueLine(page, {
+        label: "Am:",
+        value: getTransportDate(data),
+        x: contentX,
+        y,
+        labelFont: timesRoman,
+        valueFont: timesRoman,
+        labelSize: 11,
+        valueSize: 10,
+        valueX: contentX + 34,
+        lineEndX: contentX + 210,
+    });
+
+    page.drawText("In Hamburg übergeben.", {
+        x: contentX,
+        y,
+        size: 11,
+        font: timesRoman,
+        color: rgb(0, 0, 0),
+    });
+
+    y -= 32;
+
+    y = drawCommunityTransportLine(page, {
+        x: contentX,
+        y,
+        lineEndX,
+        labelFont: timesRoman,
+        valueFont: timesRoman,
+        value: `${getTransportTypeLabel(data.export.transportType)} nach ${getDestination(data)}`,
+    });
+
+    y -= 6;
+
+    const assuranceText =
+        "Der Abnehmer versichert, vorliegendes Geschäft in einer Eigenschaft als Unternehmer zu tätigen, dass ein Unternehmen innerhalb der Europäischen Union unter der angegebenen USt-IdNr. für Mehrwertsteuerzwecke registriert ist den innergemeinschaftlichen Erwerb in dem EU-Mitgliedstaat zu besteuern, in dem die USt-IdNr. registriert ist bzw. die Steuerschuld für die anschließende Lieferung im Falle eines Dreieckgeschäfts auf den eigenen im Bestimmungsland steuerpflichtigen Abnehmer zu übertragen und dass dem Erwerb kein sog. (§ 25a Geschäft) (Differenzbesteuerung) zugrunde liegt. Sofern der Liefergegenstand weiter veräußert wird, dem nachfolgenden Kunden die Verfügungsmacht und das Eigentum erst nach Verlassen der BR Deutschland (Grenzübertritt) übertragen wird.";
+
+    y = drawWrappedText(page, assuranceText, contentX, y, {
+        font: timesRoman,
+        size: 10,
+        maxWidth: contentWidth,
+        lineHeight: 14,
+    });
+
+    y -= 30;
+
+    y = drawValueLine(page, {
+        label: "Hamburg den:",
+        value: getIssuerDate(data),
+        x: contentX,
+        y,
+        labelFont: timesRoman,
+        valueFont: timesRoman,
+        labelSize: 11,
+        valueSize: 10,
+        valueX: contentX + 90,
+        lineEndX: contentX + 330,
+    });
+
+    y -= 28;
+
+    y = drawBlankLine(page, contentX, y, 285);
+    y = drawBlankLine(page, contentX, y, 285);
+    y = drawBlankLine(page, contentX, y, 285);
+
+    page.drawText("Unterschrift und Stempel vom Abnehmer/Beauftragter", {
+        x: contentX,
+        y: y + 8,
+        size: 10,
+        font: timesRoman,
+        color: rgb(0, 0, 0),
+    });
 
     y -= 42;
 
-    drawText(ctx, "Transportart", ctx.margin, y, {
-        size: pdfTheme.fontSize.normal,
-        bold: true,
-        color: pdfTheme.colors.text,
-    });
-
-    y -= 22;
-
-    y = drawCheckbox(
-        ctx,
-        ctx.margin,
-        y,
-        "Abnehmer befördert das Fahrzeug selbst.",
-        data.export.transportType === "self_pickup",
-    );
-
-    y = drawCheckbox(
-        ctx,
-        ctx.margin,
-        y,
-        "Spedition / Beauftragter des Abnehmers übernimmt die Verbringung.",
-        data.export.transportType === "customer_forwarder",
-    );
-
-    y = drawCheckbox(
-        ctx,
-        ctx.margin,
-        y,
-        "Lieferung erfolgt durch WAW Nutzfahrzeuge.",
-        data.export.transportType === "seller_transport",
-    );
-
-    y = drawCheckbox(
-        ctx,
-        ctx.margin,
-        y,
-        "Sonstige Verbringung.",
-        data.export.transportType === "other",
-    );
-
-    y -= 26;
-
-    drawText(
-        ctx,
-        "Die Angaben sind vom Abnehmer, Empfänger oder dessen Beauftragten zu bestätigen. Eine unterschriebene Version ist zur Verkaufsakte hochzuladen.",
-        ctx.margin,
-        y,
-        {
-            size: pdfTheme.fontSize.small,
-            color: pdfTheme.colors.mutedText,
-            maxWidth: ctx.width - ctx.margin * 2,
-            lineHeight: 12,
-        },
-    );
-
-    y -= 58;
-
-    drawText(
-        ctx,
-        `Ausstellungsdatum: ${formatPdfDate(new Date().toISOString())}`,
-        ctx.margin,
-        y,
-        {
-            size: pdfTheme.fontSize.normal,
-            bold: true,
-        },
-    );
-
-    y -= 62;
-
-    drawSignatureLine(
-        ctx,
-        ctx.margin,
-        y,
-        "Ort, Datum, Unterschrift / Stempel Abnehmer oder Beauftragter",
-        250,
-    );
-
-    drawSignatureLine(
-        ctx,
-        ctx.width - ctx.margin - 210,
-        y,
-        "Name in Druckschrift",
-        210,
-    );
-
-    drawPdfFooter(ctx);
+    drawBlankLine(page, contentX, y, 315);
 
     return ctx.pdfDoc.save();
 }
