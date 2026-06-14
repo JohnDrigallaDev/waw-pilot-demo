@@ -5,15 +5,7 @@ import { rgb } from "pdf-lib";
 
 import {
     createPdfLayout,
-    drawCompanyBlock,
-    drawCustomerBlock,
-    drawHorizontalLine,
-    drawPdfFooter,
-    drawPdfHeader,
-    drawSignatureLine,
     drawText,
-    drawVehicleSummary,
-    hexToRgb,
 } from "@/lib/pdf/core/pdf-layout";
 import { pdfTheme } from "@/lib/pdf/core/pdf-theme";
 import { formatPdfDate } from "@/lib/pdf/core/pdf-format";
@@ -25,6 +17,67 @@ function requireValue(value: string | number | null | undefined): string {
     const stringValue = String(value).trim();
 
     return stringValue.length > 0 ? stringValue : "—";
+}
+
+function getCustomerAddress(data: SaleGeneratedDocumentData): string {
+    if (!data.customer) return "—";
+
+    return [
+        data.customer.street,
+        [data.customer.postalCode, data.customer.city].filter(Boolean).join(" "),
+        data.customer.country,
+    ]
+        .filter(Boolean)
+        .join(", ");
+}
+
+function getVehicleType(data: SaleGeneratedDocumentData): string {
+    if (!data.vehicle) return "—";
+
+    return [
+        data.vehicle.manufacturer,
+        data.vehicle.model,
+        data.vehicle.vehicleType ? `(${data.vehicle.vehicleType})` : null,
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || "—";
+}
+
+function getVehicleNumber(data: SaleGeneratedDocumentData): string {
+    if (!data.vehicle) return "—";
+
+    return [
+        data.vehicle.vin,
+        data.vehicle.internalNumber,
+    ]
+        .filter(Boolean)
+        .join(" / ") || "—";
+}
+
+function getConstructionYearAndFirstRegistration(
+    data: SaleGeneratedDocumentData,
+): string {
+    if (!data.vehicle) return "—";
+
+    return [
+        data.vehicle.constructionYear
+            ? `Baujahr ${data.vehicle.constructionYear}`
+            : null,
+        data.vehicle.firstRegistration
+            ? `Erstzulassung ${formatPdfDate(data.vehicle.firstRegistration)}`
+            : null,
+    ]
+        .filter(Boolean)
+        .join(" / ") || "—";
+}
+
+function getInvoiceNumber(data: SaleGeneratedDocumentData): string {
+    return requireValue(data.sale?.invoiceNumber);
+}
+
+function getDocumentDate(data: SaleGeneratedDocumentData): string {
+    return formatPdfDate(data.sale?.saleDate ?? data.sale?.invoiceDate ?? null);
 }
 
 async function drawLogo(ctx: Awaited<ReturnType<typeof createPdfLayout>>) {
@@ -39,12 +92,12 @@ async function drawLogo(ctx: Awaited<ReturnType<typeof createPdfLayout>>) {
         const logoBytes = await readFile(logoPath);
         const logoImage = await ctx.pdfDoc.embedPng(logoBytes);
 
-        const logoWidth = 95;
+        const logoWidth = 105;
         const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
 
         ctx.page.drawImage(logoImage, {
             x: ctx.width - ctx.margin - logoWidth,
-            y: ctx.height - ctx.margin - logoHeight + 4,
+            y: ctx.height - ctx.margin - logoHeight + 6,
             width: logoWidth,
             height: logoHeight,
         });
@@ -57,6 +110,53 @@ async function drawLogo(ctx: Awaited<ReturnType<typeof createPdfLayout>>) {
     }
 }
 
+function drawFormRow(
+    ctx: Awaited<ReturnType<typeof createPdfLayout>>,
+    params: {
+        label: string;
+        value: string;
+        x: number;
+        y: number;
+        rowHeight?: number;
+    },
+): number {
+    const valueX = params.x + 220;
+    const valueWidth = ctx.width - ctx.margin - valueX;
+    const rowHeight = params.rowHeight ?? 36;
+
+    drawText(ctx, params.label, params.x, params.y, {
+        size: 10,
+        bold: true,
+        color: pdfTheme.colors.text,
+        maxWidth: 205,
+        lineHeight: 12,
+    });
+
+    drawText(ctx, params.value, valueX, params.y, {
+        size: 10,
+        color: pdfTheme.colors.text,
+        maxWidth: valueWidth,
+        lineHeight: 13,
+    });
+
+    return params.y - rowHeight;
+}
+
+function drawSimpleLine(
+    ctx: Awaited<ReturnType<typeof createPdfLayout>>,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+) {
+    ctx.page.drawLine({
+        start: { x: x1, y: y1 },
+        end: { x: x2, y: y2 },
+        thickness: 1,
+        color: rgb(0.08, 0.08, 0.08),
+    });
+}
+
 export async function generateHandoverProtocolPdf(
     data: SaleGeneratedDocumentData,
 ): Promise<Uint8Array> {
@@ -66,212 +166,154 @@ export async function generateHandoverProtocolPdf(
         );
     }
 
-    const customerForPdf = {
-        name: requireValue(data.customer.name),
-        street: data.customer.street ?? null,
-        postalCode: data.customer.postalCode ?? null,
-        city: data.customer.city ?? null,
-        country: data.customer.country ?? null,
-        email: data.customer.email ?? null,
-        phone: data.customer.phone ?? null,
-        vatId: data.customer.vatId ?? null,
-    };
-
-    const companyForPdf = {
-        legalName: requireValue(data.company.legalName),
-        street: requireValue(data.company.street),
-        postalCode: requireValue(data.company.postalCode),
-        city: requireValue(data.company.city),
-        country: requireValue(data.company.country),
-        email: data.company.email ?? null,
-        phone: data.company.phone ?? null,
-        vatId: data.company.vatId ?? null,
-        taxNumber: data.company.taxNumber ?? null,
-    };
-
-    const vehicleForPdf = {
-        internalNumber: requireValue(data.vehicle.internalNumber),
-        manufacturer: requireValue(data.vehicle.manufacturer),
-        model: requireValue(data.vehicle.model),
-        vehicleType: requireValue(data.vehicle.vehicleType),
-        vin: requireValue(data.vehicle.vin),
-        firstRegistration: data.vehicle.firstRegistration ?? null,
-        constructionYear: data.vehicle.constructionYear ?? null,
-    };
-
     const ctx = await createPdfLayout();
 
     await drawLogo(ctx);
 
-    let y = drawPdfHeader(ctx, {
-        title: "Übergabeprotokoll",
-        subtitle: `zur Rechnungsnummer: ${requireValue(data.sale.invoiceNumber)}`,
-        documentNumber: data.sale.invoiceNumber
-            ? `Rechnung ${data.sale.invoiceNumber}`
-            : null,
-    });
+    let y = ctx.height - ctx.margin - 30;
 
     drawText(
         ctx,
-        "Sehr geehrte Kundin, sehr geehrter Kunde,",
+        `Übergabeprotokoll zur Rechnungsnummer: ${getInvoiceNumber(data)}`,
         ctx.margin,
         y,
         {
-            size: pdfTheme.fontSize.normal,
+            size: 18,
             bold: true,
-        },
-    );
-
-    y -= 18;
-
-    drawText(
-        ctx,
-        "wir bedanken uns für Ihr Vertrauen, dass Sie uns mit dem Kauf eines Fahrzeugs entgegengebracht haben. Folgende Dokumente und Zubehör wurden Ihnen verbunden mit dem Fahrzeug ausgehändigt.",
-        ctx.margin,
-        y,
-        {
-            size: pdfTheme.fontSize.normal,
-            maxWidth: ctx.width - ctx.margin * 2,
-            lineHeight: 13,
-        },
-    );
-
-    y -= 54;
-
-    const leftX = ctx.margin;
-    const rightX = ctx.margin + 275;
-
-    drawText(ctx, "Käufer / Firma", leftX, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
-    });
-
-    drawText(ctx, "Verkäufer", rightX, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
-    });
-
-    y -= 20;
-
-    const customerEndY = drawCustomerBlock(ctx, customerForPdf, leftX, y);
-    const companyEndY = drawCompanyBlock(ctx, companyForPdf, rightX, y);
-
-    y = Math.min(customerEndY, companyEndY) - 24;
-
-    drawHorizontalLine(ctx, y + 10);
-
-    drawText(ctx, "Fahrzeugdaten", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
-    });
-
-    y -= 22;
-
-    y = drawVehicleSummary(ctx, vehicleForPdf, ctx.margin, y);
-
-    y -= 10;
-
-    drawText(ctx, "Baujahr / Erstzulassung", ctx.margin, y, {
-        size: pdfTheme.fontSize.small,
-        bold: true,
-        color: pdfTheme.colors.mutedText,
-    });
-
-    drawText(
-        ctx,
-        [
-            vehicleForPdf.constructionYear
-                ? `Baujahr ${vehicleForPdf.constructionYear}`
-                : null,
-            vehicleForPdf.firstRegistration
-                ? `Erstzulassung ${formatPdfDate(vehicleForPdf.firstRegistration)}`
-                : null,
-        ]
-            .filter(Boolean)
-            .join(" / ") || "—",
-        ctx.margin + 120,
-        y,
-        {
-            size: pdfTheme.fontSize.small,
             color: pdfTheme.colors.text,
-            maxWidth: 260,
+            maxWidth: 360,
+            lineHeight: 22,
         },
     );
 
-    y -= 34;
+    y -= 58;
 
-    drawText(ctx, "Übergebene Unterlagen und Zubehör", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
+    drawText(ctx, "Sehr geehrte Kundin, sehr geehrter Kunde", ctx.margin, y, {
+        size: 11,
         bold: true,
-        color: pdfTheme.colors.primaryDark,
+        color: pdfTheme.colors.text,
     });
 
     y -= 24;
 
-    const checklist = [
-        "Fahrzeugschein und Fahrzeugbrief",
+    drawText(
+        ctx,
+        "wir bedanken uns für Ihr Vertrauen, dass Sie uns mit dem Kauf eines Fahrzeugs entgegengebracht haben. Folgende Dokumente und Zubehör haben wir Ihnen verbunden mit dem Fahrzeug ausgehändigt.",
+        ctx.margin,
+        y,
+        {
+            size: 10,
+            color: pdfTheme.colors.text,
+            maxWidth: ctx.width - ctx.margin * 2,
+            lineHeight: 14,
+        },
+    );
+
+    y -= 76;
+
+    y = drawFormRow(ctx, {
+        label: "Firma/Käufer:",
+        value:
+            [
+                requireValue(data.customer.name),
+                getCustomerAddress(data),
+            ]
+                .filter((item) => item !== "—")
+                .join(", ") || "—",
+        x: ctx.margin,
+        y,
+        rowHeight: 40,
+    });
+
+    y = drawFormRow(ctx, {
+        label: "Fahrzeugtyp:",
+        value: getVehicleType(data),
+        x: ctx.margin,
+        y,
+        rowHeight: 36,
+    });
+
+    y = drawFormRow(ctx, {
+        label: "Fahrgestellnummer/Fahrzeug-Nr.:",
+        value: getVehicleNumber(data),
+        x: ctx.margin,
+        y,
+        rowHeight: 42,
+    });
+
+    y = drawFormRow(ctx, {
+        label: "Baujahr/Erstzulassung:",
+        value: getConstructionYearAndFirstRegistration(data),
+        x: ctx.margin,
+        y,
+        rowHeight: 38,
+    });
+
+    y -= 10;
+
+    const checklistItems = [
+        "Fahrzeugschein & Brief",
         "Fahrzeugschlüssel",
         "Fahrzeug",
     ];
 
-    checklist.forEach((item) => {
-        ctx.page.drawRectangle({
-            x: ctx.margin,
-            y: y - 2,
-            width: 10,
-            height: 10,
-            borderWidth: 1,
-            borderColor: hexToRgb(pdfTheme.colors.border),
-            color: rgb(1, 1, 1),
-        });
-
-        drawText(ctx, item, ctx.margin + 18, y, {
-            size: pdfTheme.fontSize.normal,
+    for (const item of checklistItems) {
+        drawText(ctx, `- ${item}`, ctx.margin + 18, y, {
+            size: 10,
+            bold: true,
             color: pdfTheme.colors.text,
         });
 
-        y -= 18;
+        y -= 22;
+    }
+
+    y -= 8;
+
+    drawText(ctx, "wurden Ihnen übergeben.", ctx.margin, y, {
+        size: 10,
+        color: pdfTheme.colors.text,
     });
 
-    y -= 18;
+    y -= 72;
 
-    drawText(
-        ctx,
-        "Die oben genannten Dokumente und Gegenstände wurden dem Käufer bzw. dessen Beauftragten übergeben.",
-        ctx.margin,
-        y,
-        {
-            size: pdfTheme.fontSize.normal,
-            maxWidth: ctx.width - ctx.margin * 2,
-            lineHeight: 13,
-        },
-    );
+    const signatureY = y;
+    const signatureLineWidth = 230;
 
-    y -= 56;
-
-    const dateText = `Datum: ${formatPdfDate(data.sale.saleDate)}`;
-
-    drawText(ctx, dateText, ctx.margin, y, {
-        size: pdfTheme.fontSize.normal,
+    drawText(ctx, "Unterschrift und Stempel", ctx.margin, signatureY + 28, {
+        size: 10,
         bold: true,
+        color: pdfTheme.colors.text,
     });
 
-    y -= 62;
-
-    drawSignatureLine(ctx, ctx.margin, y, "Unterschrift / Stempel Käufer", 210);
-
-    drawSignatureLine(
+    drawSimpleLine(
         ctx,
-        ctx.width - ctx.margin - 210,
-        y,
-        "Unterschrift / Stempel WAW Nutzfahrzeuge",
-        210,
+        ctx.margin,
+        signatureY,
+        ctx.margin + signatureLineWidth,
+        signatureY,
     );
 
-    drawPdfFooter(ctx);
+    const dateX = ctx.margin + 310;
+
+    drawText(ctx, `Datum: ${getDocumentDate(data)}`, dateX, signatureY + 28, {
+        size: 10,
+        bold: true,
+        color: pdfTheme.colors.text,
+    });
+
+    drawSimpleLine(
+        ctx,
+        dateX,
+        signatureY,
+        ctx.width - ctx.margin,
+        signatureY,
+    );
+
+    drawText(ctx, "WAW NUTZFAHRZEUGE", 215, 44, {
+        size: 14,
+        bold: true,
+        color: "#8c8c8c",
+    });
 
     return ctx.pdfDoc.save();
 }
