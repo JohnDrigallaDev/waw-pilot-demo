@@ -1,17 +1,11 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import {
-    createPdfLayout,
-    drawCustomerBlock,
-    drawHorizontalLine,
-    drawPdfFooter,
-    drawPdfHeader,
-    drawSignatureLine,
-    drawText,
-    hexToRgb,
-} from "@/lib/pdf/core/pdf-layout";
-import { pdfTheme } from "@/lib/pdf/core/pdf-theme";
+    StandardFonts,
+    rgb,
+    type PDFFont,
+    type PDFPage,
+} from "pdf-lib";
+
+import { createPdfLayout } from "@/lib/pdf/core/pdf-layout";
 import { formatPdfDate } from "@/lib/pdf/core/pdf-format";
 import type { SaleGeneratedDocumentData } from "@/lib/pdf/generated-documents/sale-document-data";
 
@@ -44,55 +38,269 @@ function getArrivalMonthLabel(month: string | null | undefined): string {
     return labels[month] ?? month;
 }
 
-async function drawLogo(ctx: Awaited<ReturnType<typeof createPdfLayout>>) {
-    try {
-        const logoPath = path.join(
-            process.cwd(),
-            "public",
-            "brand",
-            "waw-logo.png",
-        );
+function getCustomerAddress(data: SaleGeneratedDocumentData): string {
+    if (!data.customer) return "—";
 
-        const logoBytes = await readFile(logoPath);
-        const logoImage = await ctx.pdfDoc.embedPng(logoBytes);
-
-        const logoWidth = 95;
-        const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
-
-        ctx.page.drawImage(logoImage, {
-            x: ctx.width - ctx.margin - logoWidth,
-            y: ctx.height - ctx.margin - logoHeight + 4,
-            width: logoWidth,
-            height: logoHeight,
-        });
-    } catch {
-        drawText(ctx, "WAW", ctx.width - ctx.margin - 70, ctx.height - ctx.margin, {
-            size: 18,
-            bold: true,
-            color: pdfTheme.colors.primaryDark,
-        });
-    }
+    return [
+        data.customer.street,
+        [data.customer.postalCode, data.customer.city].filter(Boolean).join(" "),
+        data.customer.country,
+    ]
+        .filter(Boolean)
+        .join(", ");
 }
 
-function drawChoiceBox(
-    ctx: Awaited<ReturnType<typeof createPdfLayout>>,
+function getCustomerLine(data: SaleGeneratedDocumentData): string {
+    return [
+        requireValue(data.customer?.name),
+        getCustomerAddress(data),
+        data.customer?.email ? `E-Mail: ${data.customer.email}` : null,
+    ]
+        .filter(Boolean)
+        .join(", ");
+}
+
+function getVehicleDescription(data: SaleGeneratedDocumentData): string {
+    if (!data.vehicle) return "—";
+
+    return [
+        data.vehicle.manufacturer,
+        data.vehicle.model,
+        data.vehicle.vehicleType,
+        data.vehicle.vin ? `Fahrzeug-Identifikationsnummer: ${data.vehicle.vin}` : null,
+    ]
+        .filter(Boolean)
+        .join(", ")
+        .trim() || "—";
+}
+
+function getArrivalPeriod(data: SaleGeneratedDocumentData): string {
+    const month = getArrivalMonthLabel(data.export?.arrivalMonth);
+    const year = requireValue(data.export?.arrivalYear);
+
+    if (month === "—" && year === "—") return "—";
+
+    return `${month} ${year}`.trim();
+}
+
+function getDestination(data: SaleGeneratedDocumentData): string {
+    return [
+        data.export?.destinationCountry,
+        data.export?.destinationCity,
+    ]
+        .filter(Boolean)
+        .join(", ") || "—";
+}
+
+function getIssuerDate(data: SaleGeneratedDocumentData): string {
+    return formatPdfDate(data.sale?.saleDate ?? data.sale?.invoiceDate ?? null);
+}
+
+function splitLongWord(
+    word: string,
+    font: PDFFont,
+    size: number,
+    maxWidth: number,
+): string[] {
+    const parts: string[] = [];
+    let current = "";
+
+    for (const character of word) {
+        const next = `${current}${character}`;
+
+        if (font.widthOfTextAtSize(next, size) <= maxWidth || current.length === 0) {
+            current = next;
+            continue;
+        }
+
+        parts.push(current);
+        current = character;
+    }
+
+    if (current.length > 0) {
+        parts.push(current);
+    }
+
+    return parts;
+}
+
+function wrapText(
+    text: string,
+    font: PDFFont,
+    size: number,
+    maxWidth: number,
+): string[] {
+    const normalizedText = requireValue(text).replace(/\s+/g, " ").trim();
+
+    if (normalizedText === "—") return ["—"];
+
+    const words = normalizedText.split(" ");
+    const lines: string[] = [];
+    let currentLine = "";
+
+    for (const word of words) {
+        const testLine = currentLine.length > 0 ? `${currentLine} ${word}` : word;
+
+        if (font.widthOfTextAtSize(testLine, size) <= maxWidth) {
+            currentLine = testLine;
+            continue;
+        }
+
+        if (currentLine.length > 0) {
+            lines.push(currentLine);
+            currentLine = "";
+        }
+
+        if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+            currentLine = word;
+            continue;
+        }
+
+        const splitParts = splitLongWord(word, font, size, maxWidth);
+
+        for (const part of splitParts) {
+            if (currentLine.length > 0) {
+                lines.push(currentLine);
+            }
+
+            currentLine = part;
+        }
+    }
+
+    if (currentLine.length > 0) {
+        lines.push(currentLine);
+    }
+
+    return lines;
+}
+
+function drawTextLine(
+    page: PDFPage,
+    text: string,
     x: number,
     y: number,
-    label: string,
-) {
-    ctx.page.drawRectangle({
-        x,
-        y: y - 2,
-        width: 10,
-        height: 10,
-        borderWidth: 1,
-        borderColor: hexToRgb(pdfTheme.colors.border),
+    options: {
+        font: PDFFont;
+        size: number;
+        maxWidth?: number;
+        lineHeight?: number;
+        color?: ReturnType<typeof rgb>;
+        maxLines?: number;
+    },
+): number {
+    const lines = options.maxWidth
+        ? wrapText(text, options.font, options.size, options.maxWidth)
+        : [text];
+
+    const visibleLines = options.maxLines ? lines.slice(0, options.maxLines) : lines;
+    const lineHeight = options.lineHeight ?? options.size + 2;
+
+    visibleLines.forEach((line, index) => {
+        page.drawText(line, {
+            x,
+            y: y - index * lineHeight,
+            size: options.size,
+            font: options.font,
+            color: options.color ?? rgb(0, 0, 0),
+        });
     });
 
-    drawText(ctx, label, x + 17, y, {
-        size: pdfTheme.fontSize.small,
-        color: pdfTheme.colors.text,
-        maxWidth: 230,
+    return y - visibleLines.length * lineHeight;
+}
+
+function drawCenteredText(
+    page: PDFPage,
+    text: string,
+    centerX: number,
+    y: number,
+    options: {
+        font: PDFFont;
+        size: number;
+        maxWidth: number;
+        lineHeight?: number;
+        color?: ReturnType<typeof rgb>;
+    },
+): number {
+    const lines = wrapText(text, options.font, options.size, options.maxWidth);
+    const lineHeight = options.lineHeight ?? options.size + 3;
+
+    lines.forEach((line, index) => {
+        const textWidth = options.font.widthOfTextAtSize(line, options.size);
+
+        page.drawText(line, {
+            x: centerX - textWidth / 2,
+            y: y - index * lineHeight,
+            size: options.size,
+            font: options.font,
+            color: options.color ?? rgb(0, 0, 0),
+        });
+    });
+
+    return y - lines.length * lineHeight;
+}
+
+function drawLine(
+    page: PDFPage,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+) {
+    page.drawLine({
+        start: { x: x1, y: y1 },
+        end: { x: x2, y: y2 },
+        thickness: 0.7,
+        color: rgb(0, 0, 0),
+    });
+}
+
+function drawValueAboveLine(
+    page: PDFPage,
+    params: {
+        value: string;
+        hint: string;
+        x: number;
+        lineY: number;
+        width: number;
+        valueFont: PDFFont;
+        hintFont: PDFFont;
+        valueSize?: number;
+        hintSize?: number;
+        valueMaxLines?: number;
+        hintMaxLines?: number;
+    },
+) {
+    const valueSize = params.valueSize ?? 9;
+    const hintSize = params.hintSize ?? 6.2;
+    const valueLines = wrapText(params.value, params.valueFont, valueSize, params.width);
+    const visibleValueLines = valueLines.slice(0, params.valueMaxLines ?? 2);
+    const valueLineHeight = valueSize + 2;
+    const valueStartY = params.lineY + 6 + (visibleValueLines.length - 1) * valueLineHeight;
+
+    visibleValueLines.forEach((line, index) => {
+        page.drawText(line, {
+            x: params.x + 2,
+            y: valueStartY - index * valueLineHeight,
+            size: valueSize,
+            font: params.valueFont,
+            color: rgb(0, 0, 0),
+        });
+    });
+
+    drawLine(page, params.x, params.lineY, params.x + params.width, params.lineY);
+
+    const hintLines = wrapText(params.hint, params.hintFont, hintSize, params.width);
+    const visibleHintLines = hintLines.slice(0, params.hintMaxLines ?? 3);
+    const hintLineHeight = hintSize + 1.4;
+
+    visibleHintLines.forEach((line, index) => {
+        page.drawText(line, {
+            x: params.x + 2,
+            y: params.lineY - 11 - index * hintLineHeight,
+            size: hintSize,
+            font: params.hintFont,
+            color: rgb(0, 0, 0),
+        });
     });
 }
 
@@ -106,215 +314,261 @@ export async function generateEntryCertificatePdf(
     }
 
     const ctx = await createPdfLayout();
+    const page = ctx.page;
 
-    await drawLogo(ctx);
+    const timesRoman = await ctx.pdfDoc.embedFont(StandardFonts.TimesRoman);
+    const timesBold = await ctx.pdfDoc.embedFont(StandardFonts.TimesRomanBold);
 
-    let y = drawPdfHeader(ctx, {
-        title: "Gelangensbestätigung",
-        subtitle:
-            "Bestätigung über das Gelangen des Gegenstands einer innergemeinschaftlichen Lieferung in einen anderen EU-Mitgliedstaat",
-        documentNumber: data.sale.invoiceNumber
-            ? `Rechnung ${data.sale.invoiceNumber}`
-            : null,
+    const contentX = 82;
+    const contentWidth = ctx.width - contentX * 2;
+    const centerX = ctx.width / 2;
+
+    let y = ctx.height - 56;
+
+    drawCenteredText(page, "- 13 -", centerX, y, {
+        font: timesRoman,
+        size: 10,
+        maxWidth: contentWidth,
     });
 
-    drawText(
-        ctx,
-        "Angaben zum Abnehmer",
-        ctx.margin,
+    y -= 70;
+
+    drawCenteredText(
+        page,
+        "Anlage 1 zum Umsatzsteuer-Anwendungserlass (zu Abschnitt 6a.4)",
+        centerX,
         y,
         {
-            size: pdfTheme.fontSize.large,
-            bold: true,
-            color: pdfTheme.colors.primaryDark,
+            font: timesBold,
+            size: 11,
+            maxWidth: contentWidth,
         },
     );
-
-    y -= 20;
-
-    const customerForPdf = {
-        name: requireValue(data.customer.name),
-        street: data.customer.street ?? null,
-        postalCode: data.customer.postalCode ?? null,
-        city: data.customer.city ?? null,
-        country: data.customer.country ?? null,
-        email: data.customer.email ?? null,
-        phone: data.customer.phone ?? null,
-        vatId: data.customer.vatId ?? null,
-    };
-
-    y = drawCustomerBlock(ctx, customerForPdf, ctx.margin, y);
-
-    if (data.customer.vatId) {
-        drawText(ctx, `USt-ID: ${data.customer.vatId}`, ctx.margin, y - 2, {
-            size: pdfTheme.fontSize.small,
-            bold: true,
-            color: pdfTheme.colors.text,
-        });
-
-        y -= 16;
-    }
 
     y -= 16;
-    drawHorizontalLine(ctx, y + 8);
 
-    drawText(ctx, "Bestätigung", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
+    drawCenteredText(
+        page,
+        "- Muster einer Gelangensbestätigung im Sinne des § 17a Abs. 2 Nr. 2 UStDV -",
+        centerX,
+        y,
+        {
+            font: timesRoman,
+            size: 9,
+            maxWidth: contentWidth,
+        },
+    );
+
+    y -= 44;
+
+    drawCenteredText(
+        page,
+        "Bestätigung über das Gelangen des Gegenstands einer innergemeinschaftlichen Lieferung in einen anderen EU-Mitgliedstaat (Gelangensbestätigung)",
+        centerX,
+        y,
+        {
+            font: timesBold,
+            size: 12,
+            maxWidth: contentWidth,
+            lineHeight: 15,
+        },
+    );
+
+    /**
+     * Name und Anschrift Abnehmer
+     */
+    const customerLineY = 612;
+
+    drawValueAboveLine(page, {
+        value: getCustomerLine(data),
+        hint: "(Name und Anschrift des Abnehmers der innergemeinschaftlichen Lieferung, ggf. E-Mail-Adresse)",
+        x: contentX,
+        lineY: customerLineY,
+        width: contentWidth,
+        valueFont: timesRoman,
+        hintFont: timesRoman,
+        valueSize: 9,
+        hintSize: 6.2,
+        valueMaxLines: 2,
+        hintMaxLines: 2,
     });
 
-    y -= 24;
-
-    drawText(
-        ctx,
-        "Hiermit bestätige ich als Abnehmer, dass folgender Gegenstand einer innergemeinschaftlichen Lieferung in den unten genannten EU-Mitgliedstaat gelangt ist:",
-        ctx.margin,
-        y,
+    /**
+     * Bestätigungssatz
+     */
+    drawTextLine(
+        page,
+        "Hiermit bestätige ich als Abnehmer, dass ich folgenden Gegenstand¹) / dass folgender Gegenstand¹) einer innergemeinschaftlichen Lieferung",
+        contentX,
+        560,
         {
-            size: pdfTheme.fontSize.normal,
-            maxWidth: ctx.width - ctx.margin * 2,
-            lineHeight: 13,
+            font: timesRoman,
+            size: 11,
+            maxWidth: contentWidth,
+            lineHeight: 15,
+            maxLines: 2,
         },
     );
 
-    y -= 46;
-
-    const vehicleDescription = [
-        data.vehicle.manufacturer,
-        data.vehicle.model,
-        data.vehicle.vehicleType,
-    ]
-        .filter(Boolean)
-        .join(" ");
-
-    const rows = [
-        {
-            label: "Gegenstand",
-            value: `1 Fahrzeug, ${vehicleDescription}`,
-        },
-        {
-            label: "Fahrzeug-Identifikationsnummer",
-            value: data.vehicle.vin,
-        },
-        {
-            label: "Interne Fahrzeugnummer",
-            value: data.vehicle.internalNumber,
-        },
-        {
-            label: "Rechnung",
-            value: data.sale.invoiceNumber
-                ? `${data.sale.invoiceNumber} vom ${formatPdfDate(data.sale.invoiceDate)}`
-                : "—",
-        },
-        {
-            label: "Monat/Jahr des Gelangens",
-            value: `${getArrivalMonthLabel(data.export.arrivalMonth)} ${requireValue(
-                data.export.arrivalYear,
-            )}`,
-        },
-        {
-            label: "Mitgliedstaat und Ort",
-            value: `${requireValue(data.export.destinationCountry)}, ${requireValue(
-                data.export.destinationCity,
-            )}`,
-        },
-    ];
-
-    rows.forEach((row) => {
-        drawText(ctx, row.label, ctx.margin, y, {
-            size: pdfTheme.fontSize.small,
-            bold: true,
-            color: pdfTheme.colors.mutedText,
-            maxWidth: 145,
-        });
-
-        drawText(ctx, requireValue(row.value), ctx.margin + 165, y, {
-            size: pdfTheme.fontSize.small,
-            color: pdfTheme.colors.text,
-            maxWidth: ctx.width - ctx.margin * 2 - 165,
-            lineHeight: 11,
-        });
-
-        y -= 22;
+    /**
+     * Menge
+     */
+    drawValueAboveLine(page, {
+        value: "1 Fahrzeug",
+        hint: "(Menge des Gegenstands der Lieferung)",
+        x: contentX,
+        lineY: 490,
+        width: contentWidth,
+        valueFont: timesRoman,
+        hintFont: timesRoman,
+        valueSize: 9,
+        hintSize: 6.2,
+        valueMaxLines: 1,
+        hintMaxLines: 1,
     });
 
-    y -= 8;
-
-    drawText(ctx, "Art der Bestätigung", ctx.margin, y, {
-        size: pdfTheme.fontSize.large,
-        bold: true,
-        color: pdfTheme.colors.primaryDark,
+    /**
+     * Bezeichnung
+     */
+    drawValueAboveLine(page, {
+        value: getVehicleDescription(data),
+        hint: "(handelsübliche Bezeichnung, bei Fahrzeugen zusätzlich die Fahrzeug-Identifikationsnummer)",
+        x: contentX,
+        lineY: 430,
+        width: contentWidth,
+        valueFont: timesRoman,
+        hintFont: timesRoman,
+        valueSize: 9,
+        hintSize: 6.2,
+        valueMaxLines: 2,
+        hintMaxLines: 1,
     });
 
-    y -= 24;
+    page.drawText("im", {
+        x: contentX,
+        y: 386,
+        size: 11,
+        font: timesRoman,
+        color: rgb(0, 0, 0),
+    });
 
-    drawChoiceBox(
-        ctx,
-        ctx.margin,
-        y,
-        "Der Gegenstand wurde durch den liefernden Unternehmer befördert oder versendet.",
-    );
+    /**
+     * Monat/Jahr Erhalt
+     */
+    drawValueAboveLine(page, {
+        value: getArrivalPeriod(data),
+        hint: "(Monat und Jahr des Erhalts des Liefergegenstands im Mitgliedstaat, in den der Liefergegenstand gelangt ist, wenn der liefernde Unternehmer den Liefergegenstand befördert oder versendet hat oder wenn der Abnehmer den Liefergegenstand versendet hat)",
+        x: contentX,
+        lineY: 338,
+        width: contentWidth,
+        valueFont: timesRoman,
+        hintFont: timesRoman,
+        valueSize: 9,
+        hintSize: 6.2,
+        valueMaxLines: 1,
+        hintMaxLines: 3,
+    });
 
-    y -= 20;
+    /**
+     * Monat/Jahr Ende Beförderung
+     */
+    drawValueAboveLine(page, {
+        value: getArrivalPeriod(data),
+        hint: "(Monat und Jahr des Endes der Beförderung, wenn der Abnehmer den Liefergegenstand selbst befördert hat)",
+        x: contentX,
+        lineY: 264,
+        width: contentWidth,
+        valueFont: timesRoman,
+        hintFont: timesRoman,
+        valueSize: 9,
+        hintSize: 6.2,
+        valueMaxLines: 1,
+        hintMaxLines: 2,
+    });
 
-    drawChoiceBox(
-        ctx,
-        ctx.margin,
-        y,
-        "Der Gegenstand wurde durch den Abnehmer versendet.",
-    );
+    page.drawText("in / nach¹)", {
+        x: contentX,
+        y: 224,
+        size: 11,
+        font: timesRoman,
+        color: rgb(0, 0, 0),
+    });
 
-    y -= 20;
+    /**
+     * Mitgliedstaat und Ort
+     */
+    drawValueAboveLine(page, {
+        value: getDestination(data),
+        hint: "(Mitgliedstaat und Ort, wohin der Liefergegenstand im Rahmen einer Beförderung oder Versendung gelangt ist)",
+        x: contentX,
+        lineY: 176,
+        width: contentWidth,
+        valueFont: timesRoman,
+        hintFont: timesRoman,
+        valueSize: 9,
+        hintSize: 6.2,
+        valueMaxLines: 1,
+        hintMaxLines: 2,
+    });
 
-    drawChoiceBox(
-        ctx,
-        ctx.margin,
-        y,
-        "Der Gegenstand wurde durch den Abnehmer selbst befördert.",
-    );
+    page.drawText("erhalten habe / gelangt ist¹).", {
+        x: contentX,
+        y: 132,
+        size: 11,
+        font: timesRoman,
+        color: rgb(0, 0, 0),
+    });
 
-    y -= 34;
+    /**
+     * Datum und Unterschrift
+     */
+    const signatureLineY = 84;
+    const signatureWidth = contentWidth;
 
-    drawText(
-        ctx,
-        "Diese Bestätigung ist vom Abnehmer oder dessen Vertretungsberechtigten zu unterschreiben. Der Name des Unterzeichnenden ist in Druckschrift anzugeben.",
-        ctx.margin,
-        y,
+    page.drawText(getIssuerDate(data), {
+        x: contentX + 2,
+        y: signatureLineY + 9,
+        size: 9,
+        font: timesRoman,
+        color: rgb(0, 0, 0),
+    });
+
+    drawLine(page, contentX, signatureLineY, contentX + signatureWidth, signatureLineY);
+
+    drawTextLine(
+        page,
+        "(Datum der Ausstellung der Bestätigung)",
+        contentX + 2,
+        signatureLineY - 12,
         {
-            size: pdfTheme.fontSize.small,
-            color: pdfTheme.colors.mutedText,
-            maxWidth: ctx.width - ctx.margin * 2,
-            lineHeight: 12,
+            font: timesRoman,
+            size: 6.2,
+            maxWidth: 190,
+            lineHeight: 7,
         },
     );
 
-    y -= 52;
+    drawTextLine(
+        page,
+        "(Unterschrift des Abnehmers oder seines Vertretungsberechtigten sowie Name des Unterzeichnenden in Druckschrift)",
+        contentX + 230,
+        signatureLineY - 12,
+        {
+            font: timesRoman,
+            size: 6.2,
+            maxWidth: contentWidth - 230,
+            lineHeight: 7,
+            maxLines: 2,
+        },
+    );
 
-    drawText(ctx, `Ausstellungsdatum: ${formatPdfDate(new Date().toISOString())}`, ctx.margin, y, {
-        size: pdfTheme.fontSize.normal,
-        bold: true,
+    page.drawText("¹) Nichtzutreffendes streichen.", {
+        x: contentX + 2,
+        y: 34,
+        size: 7,
+        font: timesRoman,
+        color: rgb(0, 0, 0),
     });
-
-    y -= 62;
-
-    drawSignatureLine(
-        ctx,
-        ctx.margin,
-        y,
-        "Unterschrift des Abnehmers / Vertretungsberechtigten",
-        230,
-    );
-
-    drawSignatureLine(
-        ctx,
-        ctx.width - ctx.margin - 230,
-        y,
-        "Name des Unterzeichnenden in Druckschrift",
-        230,
-    );
-
-    drawPdfFooter(ctx);
 
     return ctx.pdfDoc.save();
 }
