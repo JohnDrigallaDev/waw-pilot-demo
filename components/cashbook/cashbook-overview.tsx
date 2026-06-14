@@ -155,67 +155,76 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                 <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
                     <CardContent className="p-0">
                         <div className="border-b border-slate-200 bg-white p-5">
-                            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                                <div>
+                            <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
+                                <div className="min-w-0">
                                     <h2 className="text-xl font-extrabold text-slate-950">
                                         Buchungsliste
                                     </h2>
-                                    <p className="mt-1 text-sm font-medium text-slate-500">
+                                    <p className="mt-1 max-w-xl text-sm font-medium leading-6 text-slate-500">
                                         Kassenbuch mit Bezug zu Kunde, Fahrzeug, Verkauf, Ankauf, Rechnung und Beleg.
                                     </p>
                                 </div>
 
-                                <div className="flex w-full flex-col gap-3 xl:max-w-3xl xl:flex-row">
-                                    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
-                                        <FilterButton
-                                            active={paymentFilter === "all"}
-                                            onClick={() => setPaymentFilter("all")}
+                                <div className="grid w-full gap-3 sm:grid-cols-2 2xl:w-auto 2xl:min-w-[38rem] 2xl:grid-cols-[11rem_13rem_1fr]">
+                                    <div className="space-y-1.5">
+                                        <label
+                                            htmlFor="payment-filter"
+                                            className="text-xs font-extrabold uppercase tracking-wide text-slate-400"
                                         >
-                                            Alle
-                                        </FilterButton>
-                                        <FilterButton
-                                            active={paymentFilter === "cash"}
-                                            onClick={() => setPaymentFilter("cash")}
+                                            Zahlungsart
+                                        </label>
+                                        <select
+                                            id="payment-filter"
+                                            value={paymentFilter}
+                                            onChange={(event) =>
+                                                setPaymentFilter(event.target.value as CashbookFilter)
+                                            }
+                                            className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-extrabold text-slate-700 outline-none transition focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                                         >
-                                            Bar
-                                        </FilterButton>
-                                        <FilterButton
-                                            active={paymentFilter === "bank"}
-                                            onClick={() => setPaymentFilter("bank")}
-                                        >
-                                            Bank
-                                        </FilterButton>
+                                            <option value="all">Alle</option>
+                                            <option value="cash">Bar</option>
+                                            <option value="bank">Bank</option>
+                                        </select>
                                     </div>
 
-                                    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
-                                        <FilterButton
-                                            active={entryTypeFilter === "all"}
-                                            onClick={() => setEntryTypeFilter("all")}
+                                    <div className="space-y-1.5">
+                                        <label
+                                            htmlFor="entry-type-filter"
+                                            className="text-xs font-extrabold uppercase tracking-wide text-slate-400"
                                         >
-                                            Alles
-                                        </FilterButton>
-                                        <FilterButton
-                                            active={entryTypeFilter === "income"}
-                                            onClick={() => setEntryTypeFilter("income")}
+                                            Typ
+                                        </label>
+                                        <select
+                                            id="entry-type-filter"
+                                            value={entryTypeFilter}
+                                            onChange={(event) =>
+                                                setEntryTypeFilter(event.target.value as EntryTypeFilter)
+                                            }
+                                            className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-extrabold text-slate-700 outline-none transition focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                                         >
-                                            Einnahmen
-                                        </FilterButton>
-                                        <FilterButton
-                                            active={entryTypeFilter === "expense"}
-                                            onClick={() => setEntryTypeFilter("expense")}
-                                        >
-                                            Ausgaben
-                                        </FilterButton>
+                                            <option value="all">Alles</option>
+                                            <option value="income">Einnahmen</option>
+                                            <option value="expense">Ausgaben</option>
+                                        </select>
                                     </div>
 
-                                    <div className="relative flex-1">
-                                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                                        <Input
-                                            value={query}
-                                            onChange={(event) => setQuery(event.target.value)}
-                                            placeholder="Buchung suchen..."
-                                            className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-medium"
-                                        />
+                                    <div className="space-y-1.5 sm:col-span-2 2xl:col-span-1">
+                                        <label
+                                            htmlFor="cashbook-search"
+                                            className="text-xs font-extrabold uppercase tracking-wide text-slate-400"
+                                        >
+                                            Suche
+                                        </label>
+                                        <div className="relative">
+                                            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                                            <Input
+                                                id="cashbook-search"
+                                                value={query}
+                                                onChange={(event) => setQuery(event.target.value)}
+                                                placeholder="Buchung suchen..."
+                                                className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-medium"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -653,30 +662,6 @@ function getEntryTargetHref(entry: CashbookEntryRow): string | null {
     }
 
     return null;
-}
-
-function FilterButton({
-                          active,
-                          onClick,
-                          children,
-                      }: {
-    active: boolean;
-    onClick: () => void;
-    children: React.ReactNode;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={
-                active
-                    ? "h-9 rounded-xl bg-white px-3 text-sm font-extrabold text-slate-950 shadow-sm"
-                    : "h-9 rounded-xl px-3 text-sm font-extrabold text-slate-500 transition hover:text-slate-950"
-            }
-        >
-            {children}
-        </button>
-    );
 }
 
 type CashbookStatCardProps = {
