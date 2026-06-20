@@ -1,6 +1,7 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
+import type { SaleType } from "@/lib/sales/sale-queries";
 import {
     PDFDocument,
     StandardFonts,
@@ -11,6 +12,7 @@ import {
 
 export type InvoicePdfData = {
     invoiceType: InvoiceType;
+    saleType: SaleType;
     invoiceNumber: string;
     invoiceDate: string;
 
@@ -445,6 +447,57 @@ function getThirdVehicleLineValue(data: InvoicePdfData): string {
     )}`;
 }
 
+function getCustomerAddressLines(data: InvoicePdfData): string[] {
+    return [
+        data.customer.name,
+        data.customer.street,
+        [data.customer.postalCode, data.customer.city]
+            .filter(Boolean)
+            .join(" "),
+        data.customer.country,
+        data.customer.vatId ? `USt-ID: ${data.customer.vatId}` : null,
+    ].filter((line): line is string => Boolean(line && line.trim().length > 0));
+}
+
+function getSaleTypeInvoiceLabel(saleType: SaleType): string {
+    if (saleType === "eu") {
+        return "EU-Lieferung";
+    }
+
+    if (saleType === "export_third_country") {
+        return "Drittland Export";
+    }
+
+    return "Inland Deutschland";
+}
+
+function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
+    const baseLines = [
+        "Betrag wird auf das Konto überwiesen. | Payment via bank transfer in advance.",
+        "",
+        "Delivery terms: EXW (Ex Works) according to Incoterms",
+        "Das KFZ wird unter Ausschluss jeder Gewährleistung, so wie es steht, verkauft. | Sold without warranty or guarantee .",
+    ];
+
+    if (data.saleType === "eu") {
+        return [
+            ...baseLines,
+            "",
+            "Steuerfreie innergemeinschaftliche Lieferung gemäß § 4 Nr. 1b UStG i.V.m. § 6a UStG. | Intra-Community supply exempt from VAT.",
+        ];
+    }
+
+    if (data.saleType === "export_third_country") {
+        return [
+            ...baseLines,
+            "",
+            "Steuerfreie Ausfuhrlieferung gemäß § 4 Nr. 1a UStG. | Export delivery exempt from VAT according to § 4 No. 1a German VAT Act.",
+        ];
+    }
+
+    return baseLines;
+}
+
 export async function generateInvoicePdf(
     data: InvoicePdfData,
 ): Promise<Uint8Array> {
@@ -470,6 +523,28 @@ export async function generateInvoicePdf(
         size: data.invoiceType === "standard" ? 22 : 21,
         color: data.invoiceType === "standard" ? gray : black,
         maxWidth: 340,
+    });
+
+    /**
+     * Empfängeradresse / Käufer
+     */
+    drawText(page, "Käufer | Buyer:", 42, 662, {
+        font: helveticaBold,
+        size: 7.2,
+        color: gray,
+    });
+
+    drawWrappedLines(page, getCustomerAddressLines(data), 42, 646, {
+        font: helveticaBold,
+        size: 7,
+        lineHeight: 10,
+        maxWidth: 245,
+    });
+
+    drawText(page, getSaleTypeInvoiceLabel(data.saleType), 42, 586, {
+        font: helveticaBold,
+        size: 6.5,
+        color: gray,
     });
 
     /**
@@ -765,14 +840,7 @@ export async function generateInvoicePdf(
 
     drawWrappedLines(
         page,
-        [
-            "Betrag wird auf das Konto überwiesen. | Payment via bank transfer in advance.",
-            "",
-            "Delivery terms: EXW (Ex Works) according to Incoterms",
-            "Das KFZ wird unter Ausschluss jeder Gewährleistung, so wie es steht, verkauft. | Sold without warranty or guarantee .",
-            "",
-            "Steuerfreie Ausfuhrlieferung gemäß § 4 Nr. 1a UStG. | Export delivery exempt from VAT according to § 4 No. 1a German VAT Act.",
-        ],
+        getPaymentAndTaxLines(data),
         42,
         174,
         {

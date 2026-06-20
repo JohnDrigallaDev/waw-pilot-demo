@@ -1,7 +1,8 @@
 import { getCurrentCompanyId } from "@/lib/company";
 import type { InvoicePdfData } from "@/lib/pdf/invoice-pdf";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
+import type { SaleType } from "@/lib/sales/sale-queries";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CompanyRelation = {
     legal_name: string;
@@ -37,6 +38,10 @@ type VehicleRelation = {
     construction_year: number | null;
 };
 
+type SaleRelation = {
+    sale_type: SaleType | null;
+};
+
 type SupabaseRelation<T> = T | T[] | null;
 
 type InvoiceQueryResult = {
@@ -51,6 +56,7 @@ type InvoiceQueryResult = {
     companies: SupabaseRelation<CompanyRelation>;
     customers: SupabaseRelation<CustomerRelation>;
     vehicles: SupabaseRelation<VehicleRelation>;
+    sales: SupabaseRelation<SaleRelation>;
 };
 
 function getSingleRelation<T>(relation: SupabaseRelation<T>): T | null {
@@ -76,6 +82,18 @@ function getCustomerName(customer: CustomerRelation | null): string {
         .trim();
 
     return privateName.length > 0 ? privateName : "Unbekannte Privatperson";
+}
+
+function getSaleTypeValue(sale: SaleRelation | null): SaleType {
+    if (
+        sale?.sale_type === "inland" ||
+        sale?.sale_type === "eu" ||
+        sale?.sale_type === "export_third_country"
+    ) {
+        return sale.sale_type;
+    }
+
+    return "inland";
 }
 
 export async function getInvoicePdfData(
@@ -126,6 +144,9 @@ export async function getInvoicePdfData(
         vin,
         first_registration,
         construction_year
+      ),
+      sales (
+        sale_type
       )
     `,
         )
@@ -146,6 +167,7 @@ export async function getInvoicePdfData(
     const company = getSingleRelation(invoice.companies);
     const customer = getSingleRelation(invoice.customers);
     const vehicle = getSingleRelation(invoice.vehicles);
+    const sale = getSingleRelation(invoice.sales);
 
     if (!company || !customer || !vehicle) {
         throw new Error(
@@ -155,6 +177,7 @@ export async function getInvoicePdfData(
 
     return {
         invoiceType: invoice.invoice_type ?? "standard",
+        saleType: getSaleTypeValue(sale),
         invoiceNumber: invoice.invoice_number,
         invoiceDate: invoice.invoice_date,
         company: {

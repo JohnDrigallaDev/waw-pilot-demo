@@ -16,11 +16,33 @@ export function SaleInvoiceTypeActions({
                                            saleId,
                                            existingInvoiceTypes = [],
                                        }: SaleInvoiceTypeActionsProps) {
+    const hasStandard = existingInvoiceTypes.includes("standard");
     const hasProforma = existingInvoiceTypes.includes("proforma");
     const hasDownPayment = existingInvoiceTypes.includes("down_payment");
 
     return (
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            <form action={createSaleInvoiceAction}>
+                <input type="hidden" name="sale_id" value={saleId} />
+                <input type="hidden" name="invoice_type" value="standard" />
+
+                <InvoiceSubmitButton
+                    icon="receipt"
+                    label={
+                        hasStandard
+                            ? "Rechnung vorhanden"
+                            : "Rechnung erstellen"
+                    }
+                    description={
+                        hasStandard
+                            ? "Bereits in der Rechnungsliste unten sichtbar"
+                            : "Erstellt die normale Verkaufsrechnung"
+                    }
+                    disabled={hasStandard}
+                    done={hasStandard}
+                />
+            </form>
+
             <form action={createSaleInvoiceAction}>
                 <input type="hidden" name="sale_id" value={saleId} />
                 <input type="hidden" name="invoice_type" value="proforma" />
