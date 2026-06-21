@@ -32,6 +32,8 @@ const supportedGeneratedDocumentTypes = new Set<GeneratedDocumentType>([
     "handover_protocol",
     "entry_certificate",
     "transport_proof",
+    "license_plate_consent",
+    "travel_expense_form",
 ]);
 
 export function SaleGeneratedDocumentsCard({
@@ -302,7 +304,10 @@ function GeneratedDocumentRow({
                         <input type="hidden" name="sale_id" value={saleId} />
                         <input type="hidden" name="document_type" value={document.type} />
 
-                        <GenerateSaleDocumentSubmitButton disabled={!canGenerateNow} />
+                        <GenerateSaleDocumentSubmitButton
+                            disabled={!canGenerateNow}
+                            isGenerated={Boolean(document.generatedDocument?.id)}
+                        />
                     </form>
 
                     {canOpenGenerated ? (

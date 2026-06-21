@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 
 type GenerateSaleDocumentSubmitButtonProps = {
     disabled: boolean;
+    isGenerated?: boolean;
 };
 
 export function GenerateSaleDocumentSubmitButton({
                                                      disabled,
+                                                     isGenerated = false,
                                                  }: GenerateSaleDocumentSubmitButtonProps) {
     const { pending } = useFormStatus();
 
@@ -18,14 +20,22 @@ export function GenerateSaleDocumentSubmitButton({
         <Button
             type="submit"
             disabled={disabled || pending}
-            className="h-11 w-full rounded-2xl bg-cyan-700 font-extrabold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className={
+                isGenerated
+                    ? "h-11 w-full rounded-2xl bg-emerald-700 font-extrabold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-70"
+                    : "h-11 w-full rounded-2xl bg-cyan-700 font-extrabold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
+            }
         >
             {pending ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (
                 <FileText className="mr-2 size-4" />
             )}
-            {pending ? "Wird erzeugt..." : "Erzeugen"}
+            {pending
+                ? "PDF wird erstellt..."
+                : isGenerated
+                    ? "Neu erzeugen"
+                    : "PDF erzeugen"}
         </Button>
     );
 }

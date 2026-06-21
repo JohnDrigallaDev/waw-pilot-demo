@@ -30,14 +30,17 @@ function getGeneratedDocumentType(
     value: string | null,
 ): GeneratedDocumentType | null {
     if (
+        value === "invoice_pdf" ||
+        value === "proforma_invoice" ||
         value === "handover_protocol" ||
         value === "entry_certificate" ||
         value === "transport_proof" ||
-        value === "proforma_invoice" ||
+        value === "license_plate_consent" ||
+        value === "travel_expense_form" ||
+        value === "purchase_contract" ||
         value === "sales_contract" ||
         value === "abd_checklist" ||
-        value === "exit_note_checklist" ||
-        value === "invoice_pdf"
+        value === "exit_note_checklist"
     ) {
         return value;
     }
@@ -297,6 +300,6 @@ export async function generateSaleDocumentAction(formData: FormData) {
     redirect(
         `/dashboard/sales/${saleId}?generatedDocument=${encodeURIComponent(
             documentType,
-        )}#automatic-documents`,
+        )}&refresh=${Date.now()}#automatic-documents`,
     );
 }

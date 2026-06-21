@@ -114,6 +114,13 @@ export function SaleDetail({
                 />
             ) : null}
 
+            {generatedDocumentType ? (
+                <FlashMessage
+                    message="Dokument wurde erfolgreich erzeugt."
+                    description="Die PDF wurde gespeichert und ist unten im Bereich „Automatische Dokumente“ verfügbar."
+                />
+            ) : null}
+
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <DetailStatCard
                     label="Verkaufstyp"
