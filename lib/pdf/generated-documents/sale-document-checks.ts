@@ -91,10 +91,6 @@ function getSaleType(
     return "inland";
 }
 
-function isExportDocument(type: GeneratedDocumentType): boolean {
-    return type === "entry_certificate" || type === "transport_proof";
-}
-
 function getGenerationMode(params: {
     definition: GeneratedDocumentDefinition;
     saleType: "inland" | "eu" | "export_third_country";
@@ -106,7 +102,11 @@ function getGenerationMode(params: {
         return "external";
     }
 
-    if (isExportDocument(params.definition.type) && params.saleType === "inland") {
+    if (params.definition.type === "entry_certificate" && params.saleType !== "eu") {
+        return "not_relevant";
+    }
+
+    if (params.definition.type === "transport_proof" && params.saleType === "inland") {
         return "not_relevant";
     }
 

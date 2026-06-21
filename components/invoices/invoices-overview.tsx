@@ -205,7 +205,7 @@ export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
     ).length;
 
     const filteredInvoices = useMemo(() => {
-        const normalizedQuery = query.trim().toLowerCase();
+        const normalizedQuery = normalizeSearchText(query);
 
         return invoices.filter((invoice) => {
             const matchesFilter =
