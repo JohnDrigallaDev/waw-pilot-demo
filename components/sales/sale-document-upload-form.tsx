@@ -13,6 +13,21 @@ type SaleDocumentUploadFormProps = {
     existingFileName?: string | null;
 };
 
+function isNextRedirectError(error: unknown): boolean {
+    if (!error || typeof error !== "object") {
+        return false;
+    }
+
+    const maybeRedirectError = error as {
+        message?: unknown;
+        digest?: unknown;
+    };
+
+    return [maybeRedirectError.message, maybeRedirectError.digest].some(
+        (value) => typeof value === "string" && value.includes("NEXT_REDIRECT"),
+    );
+}
+
 export function SaleDocumentUploadForm({
                                            saleId,
                                            documentType,
@@ -23,6 +38,7 @@ export function SaleDocumentUploadForm({
     const inputId = useId();
     const formRef = useRef<HTMLFormElement>(null);
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isPending, startTransition] = useTransition();
 
     const hasExistingDocument = Boolean(existingDocumentId);
@@ -38,10 +54,24 @@ export function SaleDocumentUploadForm({
 
         if (!(file instanceof File) || file.size === 0) return;
 
+        setErrorMessage(null);
         setSelectedFileName(file.name);
 
         startTransition(async () => {
-            await uploadSaleDocumentAction(formData);
+            try {
+                await uploadSaleDocumentAction(formData);
+            } catch (error) {
+                if (isNextRedirectError(error)) {
+                    throw error;
+                }
+
+                setErrorMessage(
+                    error instanceof Error
+                        ? error.message
+                        : "Datei konnte nicht hochgeladen werden.",
+                );
+                setSelectedFileName(null);
+            }
         });
     }
 
@@ -133,6 +163,12 @@ export function SaleDocumentUploadForm({
                     onChange={handleFileChange}
                 />
             </label>
+
+            {errorMessage ? (
+                <p className="mt-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                    {errorMessage}
+                </p>
+            ) : null}
         </form>
     );
 }

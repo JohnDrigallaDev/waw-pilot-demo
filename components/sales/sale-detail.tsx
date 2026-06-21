@@ -58,6 +58,7 @@ type SaleDetailProps = {
     generatedDocumentType?: string | null;
     invoiceCreatedNumber?: string | null;
     invoiceRegeneratedNumber?: string | null;
+    documentUploaded?: boolean;
     documentDeleted?: boolean;
     travelExpenseCreated?: boolean;
 };
@@ -69,6 +70,7 @@ export function SaleDetail({
                                generatedDocumentType = null,
                                invoiceCreatedNumber = null,
                                invoiceRegeneratedNumber = null,
+                               documentUploaded = false,
                                documentDeleted = false,
                                travelExpenseCreated = false,
                            }: SaleDetailProps) {
@@ -82,6 +84,9 @@ export function SaleDetail({
         customerId: sale.customer.id,
     });
     const travelExpenseHref = `/dashboard/travel-expenses/new?${travelExpenseSearchParams.toString()}`;
+    const visibleDocuments = sale.documents.filter(
+        (document) => document.status !== "missing",
+    );
 
     return (
         <div className="space-y-6">
@@ -121,6 +126,13 @@ export function SaleDetail({
                 <FlashMessage
                     message="Dokument wurde gelöscht."
                     description="Das Pflichtdokument wurde aus der Verkaufsakte entfernt und kann bei Bedarf neu hochgeladen werden."
+                />
+            ) : null}
+
+            {documentUploaded ? (
+                <FlashMessage
+                    message="Dokument wurde hochgeladen."
+                    description="Das Dokument wurde gespeichert und der Verkaufsakte zugeordnet."
                 />
             ) : null}
 
@@ -436,9 +448,9 @@ export function SaleDetail({
                                 />
                             </div>
 
-                            {sale.documents.length > 0 ? (
+                            {visibleDocuments.length > 0 ? (
                                 <div className="divide-y divide-slate-100">
-                                    {sale.documents.map((document) => (
+                                    {visibleDocuments.map((document) => (
                                         <div
                                             key={document.id}
                                             className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"

@@ -203,7 +203,7 @@ export async function uploadSaleDocumentAction(formData: FormData) {
     revalidatePath("/dashboard/sales");
     revalidatePath("/dashboard/documents");
 
-    redirect(`/dashboard/sales/${saleId}`);
+    redirect(`/dashboard/sales/${saleId}?documentUploaded=1&refresh=${Date.now()}`);
 }
 
 export async function deleteSaleDocumentAction(formData: FormData) {
