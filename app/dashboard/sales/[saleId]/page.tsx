@@ -12,6 +12,7 @@ type SaleDetailPageProps = {
         invoiceCreated?: string;
         invoiceRegenerated?: string;
         documentDeleted?: string;
+        travelExpenseCreated?: string;
     }>;
 };
 
@@ -39,6 +40,7 @@ export default async function SaleDetailPage({
             invoiceCreatedNumber={resolvedSearchParams.invoiceCreated ?? null}
             invoiceRegeneratedNumber={resolvedSearchParams.invoiceRegenerated ?? null}
             documentDeleted={resolvedSearchParams.documentDeleted === "1"}
+            travelExpenseCreated={resolvedSearchParams.travelExpenseCreated === "1"}
         />
     );
 }

@@ -8,6 +8,7 @@ import {
     FileWarning,
     Receipt,
     RefreshCcw,
+    Route,
     Trash2,
     Truck,
     UserRound,
@@ -58,6 +59,7 @@ type SaleDetailProps = {
     invoiceCreatedNumber?: string | null;
     invoiceRegeneratedNumber?: string | null;
     documentDeleted?: boolean;
+    travelExpenseCreated?: boolean;
 };
 
 export function SaleDetail({
@@ -68,11 +70,18 @@ export function SaleDetail({
                                invoiceCreatedNumber = null,
                                invoiceRegeneratedNumber = null,
                                documentDeleted = false,
+                               travelExpenseCreated = false,
                            }: SaleDetailProps) {
     const isDocumentComplete = sale.missing_required_documents_count === 0;
     const existingInvoiceTypes = sale.invoices.map(
         (invoice) => invoice.invoice_type,
     );
+    const travelExpenseSearchParams = new URLSearchParams({
+        saleId: sale.id,
+        vehicleId: sale.vehicle.id,
+        customerId: sale.customer.id,
+    });
+    const travelExpenseHref = `/dashboard/travel-expenses/new?${travelExpenseSearchParams.toString()}`;
 
     return (
         <div className="space-y-6">
@@ -119,6 +128,13 @@ export function SaleDetail({
                 <FlashMessage
                     message="Dokument wurde erfolgreich erzeugt."
                     description="Die PDF wurde gespeichert und ist unten im Bereich „Automatische Dokumente“ verfügbar."
+                />
+            ) : null}
+
+            {travelExpenseCreated ? (
+                <FlashMessage
+                    message="Reisekosten wurden erfasst."
+                    description="Das Reisekostenformular wurde erzeugt und mit dieser Verkaufsakte verknüpft."
                 />
             ) : null}
 
@@ -224,6 +240,47 @@ export function SaleDetail({
                                     value={formatCurrency(sale.profit_net)}
                                     strong
                                 />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="p-5">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                <SectionTitle
+                                    icon={Route}
+                                    title="Reisekosten & Nebenkosten"
+                                    description="Erfasse Fahrtkosten, Hotel, Verpflegung oder sonstige Kosten zu diesem Verkauf."
+                                />
+                                <div className="flex shrink-0 items-center rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-cyan-700">
+                                    Verkaufsbezug
+                                </div>
+                            </div>
+
+                            <p className="mt-4 text-sm font-medium leading-6 text-slate-600">
+                                Diese Kosten können später für Auswertung, Dokumentation und Abrechnung genutzt werden.
+                            </p>
+
+                            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                                <Button
+                                    asChild
+                                    className="rounded-2xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
+                                >
+                                    <Link href={travelExpenseHref}>
+                                        <Route className="mr-2 size-4" />
+                                        Reisekosten erfassen
+                                    </Link>
+                                </Button>
+
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="rounded-2xl border-slate-200 bg-white font-bold"
+                                >
+                                    <Link href="/dashboard/travel-expenses">
+                                        Alle Reisekosten öffnen
+                                    </Link>
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>

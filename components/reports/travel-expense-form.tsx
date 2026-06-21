@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { CalendarDays, FileText, Save, Truck, UserRound } from "lucide-react";
+import { CalendarDays, FileText, Route, Save, Truck, UserRound } from "lucide-react";
 
 import { createTravelExpenseFormAction } from "@/app/dashboard/travel-expenses/new/actions";
 import { PageHeader } from "@/components/shared/page-header";
@@ -17,13 +17,31 @@ const initialState = {
     message: "",
 };
 
-export function TravelExpenseForm() {
+export type TravelExpenseInitialValues = {
+    saleId?: string | null;
+    vehicleId?: string | null;
+    customerId?: string | null;
+    visitedCustomer?: string | null;
+    location?: string | null;
+    vehicleOrPlate?: string | null;
+    purpose?: string | null;
+};
+
+export function TravelExpenseForm({
+                                      initialValues,
+                                  }: {
+    initialValues?: TravelExpenseInitialValues;
+}) {
     const [state, formAction, isPending] = useActionState(
         createTravelExpenseFormAction,
         initialState,
     );
 
     const today = new Date().toISOString().slice(0, 10);
+    const hasSaleContext = Boolean(initialValues?.saleId);
+    const backHref = initialValues?.saleId
+        ? `/dashboard/sales/${initialValues.saleId}`
+        : "/dashboard/travel-expenses";
 
     return (
         <div className="space-y-6">
@@ -37,15 +55,41 @@ export function TravelExpenseForm() {
                         variant="outline"
                         className="rounded-2xl border-slate-200 bg-white font-bold"
                     >
-                        <Link href="/dashboard/travel-expenses">Zurück</Link>
+                        <Link href={backHref}>Zurück</Link>
                     </Button>
                 }
             />
 
             <form action={formAction} className="space-y-6">
+                {initialValues?.saleId ? (
+                    <input type="hidden" name="sale_id" value={initialValues.saleId} />
+                ) : null}
+                {initialValues?.vehicleId ? (
+                    <input type="hidden" name="vehicle_id" value={initialValues.vehicleId} />
+                ) : null}
+                {initialValues?.customerId ? (
+                    <input type="hidden" name="customer_id" value={initialValues.customerId} />
+                ) : null}
+
                 {state.message ? (
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
                         {state.message}
+                    </div>
+                ) : null}
+
+                {hasSaleContext ? (
+                    <div className="flex items-start gap-3 rounded-[1.5rem] border border-cyan-100 bg-cyan-50/80 p-4 text-cyan-900">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-cyan-700 shadow-sm">
+                            <Route className="size-5" />
+                        </div>
+                        <div>
+                            <p className="font-extrabold">
+                                Du erfasst Reisekosten für diesen Verkauf.
+                            </p>
+                            <p className="mt-1 text-sm font-medium leading-6 text-cyan-800">
+                                Fahrzeug und Kunde wurden soweit möglich vorausgewählt.
+                            </p>
+                        </div>
                     </div>
                 ) : null}
 
@@ -89,6 +133,7 @@ export function TravelExpenseForm() {
                                 label="Besuchter Kunde / Firma *"
                                 name="visited_customer"
                                 required
+                                defaultValue={initialValues?.visitedCustomer ?? undefined}
                                 placeholder="z. B. Müller GmbH"
                             />
 
@@ -96,6 +141,7 @@ export function TravelExpenseForm() {
                                 label="Ort *"
                                 name="location"
                                 required
+                                defaultValue={initialValues?.location ?? undefined}
                                 placeholder="z. B. Berlin"
                             />
 
@@ -103,6 +149,7 @@ export function TravelExpenseForm() {
                                 label="Fahrzeug / Kennzeichen *"
                                 name="vehicle_or_plate"
                                 required
+                                defaultValue={initialValues?.vehicleOrPlate ?? undefined}
                                 placeholder="z. B. HH-WA 123"
                             />
 
@@ -110,6 +157,7 @@ export function TravelExpenseForm() {
                                 label="Zweck der Fahrt *"
                                 name="purpose"
                                 required
+                                defaultValue={initialValues?.purpose ?? undefined}
                                 placeholder="z. B. Fahrzeugabholung"
                             />
                         </div>
@@ -162,7 +210,7 @@ export function TravelExpenseForm() {
                             variant="outline"
                             className="h-12 rounded-2xl border-slate-200 bg-white font-bold"
                         >
-                            <Link href="/dashboard/travel-expenses">Abbrechen</Link>
+                            <Link href={backHref}>Abbrechen</Link>
                         </Button>
 
                         <Button

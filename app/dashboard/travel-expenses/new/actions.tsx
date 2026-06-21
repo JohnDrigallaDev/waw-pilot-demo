@@ -58,6 +58,9 @@ export async function createTravelExpenseFormAction(
     const startMileage = getNumberValue(formData, "start_mileage");
     const endMileage = getNumberValue(formData, "end_mileage");
     const notes = getStringValue(formData, "notes");
+    const saleId = getStringValue(formData, "sale_id");
+    const vehicleId = getStringValue(formData, "vehicle_id");
+    const customerId = getStringValue(formData, "customer_id");
 
     if (!driverName) {
         return {
@@ -170,6 +173,9 @@ export async function createTravelExpenseFormAction(
             mime_type: "application/pdf",
             file_size: pdfBytes.byteLength,
             generated_by_system: true,
+            sale_id: saleId,
+            vehicle_id: vehicleId,
+            customer_id: customerId,
         })
         .select("id")
         .single();
@@ -200,6 +206,13 @@ export async function createTravelExpenseFormAction(
 
     revalidatePath("/dashboard/travel-expenses");
     revalidatePath("/dashboard/documents");
+    if (saleId) {
+        revalidatePath(`/dashboard/sales/${saleId}`);
+    }
+
+    if (saleId) {
+        redirect(`/dashboard/sales/${saleId}?travelExpenseCreated=1`);
+    }
 
     redirect(`/dashboard/documents?createdDocument=${document.id}`);
 }
