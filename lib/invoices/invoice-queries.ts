@@ -32,8 +32,10 @@ export type InvoiceRow = {
     created_at: string;
 
     customer_name: string;
+    customer_country: string | null;
     vehicle_internal_number: string;
     vehicle_name: string;
+    vehicle_type: string | null;
     vin: string;
     pdf_file_name: string | null;
 };
@@ -68,12 +70,14 @@ type InvoiceQueryRow = {
         company_name: string | null;
         first_name: string | null;
         last_name: string | null;
+        country: string | null;
     } | null;
 
     vehicles: {
         internal_number: string;
         manufacturer: string;
         model: string;
+        vehicle_type: string | null;
         vin: string;
     } | null;
 };
@@ -144,12 +148,14 @@ export async function getInvoices(): Promise<InvoiceRow[]> {
         type,
         company_name,
         first_name,
-        last_name
+        last_name,
+        country
       ),
       vehicles (
         internal_number,
         manufacturer,
         model,
+        vehicle_type,
         vin
       )
     `,
@@ -193,10 +199,12 @@ export async function getInvoices(): Promise<InvoiceRow[]> {
                 created_at: invoice.created_at,
 
                 customer_name: getCustomerName(customer),
+                customer_country: customer?.country ?? null,
                 vehicle_internal_number: vehicle?.internal_number ?? "—",
                 vehicle_name: vehicle
                     ? `${vehicle.manufacturer} ${vehicle.model}`
                     : "Unbekanntes Fahrzeug",
+                vehicle_type: vehicle?.vehicle_type ?? null,
                 vin: vehicle?.vin ?? "—",
                 pdf_file_name: getInvoiceFileName(invoiceType, invoice.invoice_number),
             };

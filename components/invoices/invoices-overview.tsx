@@ -40,6 +40,154 @@ type InvoicesOverviewProps = {
 
 type InvoiceFilter = "all" | "standard" | "proforma" | "down_payment";
 
+function normalizeSearchText(value: string): string {
+    return value
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/ß/g, "ss")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function parseSearchAmount(value: string): number | null {
+    const cleanedValue = value
+        .replace(/€/g, "")
+        .replace(/\s/g, "")
+        .trim();
+
+    if (!cleanedValue || !/[0-9]/.test(cleanedValue)) return null;
+
+    let normalizedValue = cleanedValue;
+    const hasComma = normalizedValue.includes(",");
+    const hasDot = normalizedValue.includes(".");
+
+    if (hasComma && hasDot) {
+        normalizedValue = normalizedValue.replace(/\./g, "").replace(",", ".");
+    } else if (hasComma) {
+        normalizedValue = normalizedValue.replace(",", ".");
+    } else if (hasDot) {
+        const parts = normalizedValue.split(".");
+        const lastPart = parts.at(-1);
+
+        if (parts.length > 2 || lastPart?.length === 3) {
+            normalizedValue = parts.join("");
+        }
+    }
+
+    const amount = Number(normalizedValue);
+
+    return Number.isFinite(amount) ? amount : null;
+}
+
+function getAmountSearchValues(amount: number): string[] {
+    const fixedAmount = amount.toFixed(2);
+    const roundedAmount = String(Math.round(amount));
+    const germanAmount = new Intl.NumberFormat("de-DE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(amount);
+
+    return [
+        fixedAmount,
+        fixedAmount.replace(".", ","),
+        fixedAmount.replace(".", ""),
+        roundedAmount,
+        germanAmount,
+        germanAmount.replace(/\./g, ""),
+        germanAmount.replace(/\./g, "").replace(",", "."),
+        `${germanAmount} €`,
+        `€${germanAmount}`,
+    ].map(normalizeSearchText);
+}
+
+function invoiceMatchesAmount(invoice: InvoiceRow, rawQuery: string): boolean {
+    const normalizedQuery = normalizeSearchText(rawQuery.replace(/€/g, ""));
+    const queryAmount = parseSearchAmount(rawQuery);
+    const invoiceAmounts = [
+        invoice.net_amount,
+        invoice.vat_amount,
+        invoice.gross_amount,
+    ];
+
+    return invoiceAmounts.some((amount) => {
+        if (queryAmount !== null && Math.abs(amount - queryAmount) < 0.005) {
+            return true;
+        }
+
+        return getAmountSearchValues(amount).some((amountValue) =>
+            amountValue.includes(normalizedQuery),
+        );
+    });
+}
+
+function getInvoiceSearchAliases(invoice: InvoiceRow): string[] {
+    const aliases = ["datev"];
+
+    if (invoice.invoice_type === "standard") {
+        aliases.push("normal", "normale rechnung");
+    }
+
+    if (invoice.invoice_type === "proforma") {
+        aliases.push("pro forma");
+    }
+
+    if (invoice.invoice_type === "down_payment") {
+        aliases.push("anzahlung", "anzahlungs rechnung");
+    }
+
+    if (invoice.payment_status === "open") {
+        aliases.push("offen", "unbezahlt");
+    }
+
+    if (invoice.payment_status === "partial") {
+        aliases.push("teilweise", "teilweise bezahlt", "teilbezahlt");
+    }
+
+    if (invoice.payment_status === "paid") {
+        aliases.push("bezahlt");
+    }
+
+    if (invoice.datev_status === "sent") {
+        aliases.push("datev gesendet");
+    }
+
+    if (invoice.datev_status === "not_sent") {
+        aliases.push("datev offen", "datev nicht gesendet", "nicht gesendet");
+    }
+
+    return aliases;
+}
+
+function getInvoiceSearchText(invoice: InvoiceRow): string {
+    return normalizeSearchText(
+        [
+            invoice.invoice_number,
+            getInvoiceTypeLabel(invoice.invoice_type),
+            invoice.invoice_type,
+            getInvoiceStatusLabel(invoice.status),
+            invoice.status,
+            getInvoicePaymentStatusLabel(invoice.payment_status),
+            invoice.payment_status,
+            getInvoiceDatevStatusLabel(invoice.datev_status),
+            invoice.datev_status,
+            invoice.customer_name,
+            invoice.customer_country,
+            invoice.vehicle_internal_number,
+            invoice.vehicle_name,
+            invoice.vehicle_type,
+            invoice.vin,
+            invoice.pdf_file_name,
+            formatCurrency(invoice.net_amount),
+            formatCurrency(invoice.vat_amount),
+            formatCurrency(invoice.gross_amount),
+            ...getInvoiceSearchAliases(invoice),
+        ]
+            .filter(Boolean)
+            .join(" "),
+    );
+}
+
 export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
     const [query, setQuery] = useState("");
     const [invoiceFilter, setInvoiceFilter] = useState<InvoiceFilter>("all");
@@ -67,21 +215,10 @@ export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
 
             if (!normalizedQuery) return true;
 
-            const searchableText = [
-                invoice.invoice_number,
-                getInvoiceTypeLabel(invoice.invoice_type),
-                invoice.invoice_type,
-                invoice.customer_name,
-                invoice.vehicle_internal_number,
-                invoice.vehicle_name,
-                invoice.vin,
-                invoice.pdf_file_name,
-            ]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase();
-
-            return searchableText.includes(normalizedQuery);
+            return (
+                getInvoiceSearchText(invoice).includes(normalizedQuery) ||
+                invoiceMatchesAmount(invoice, query)
+            );
         });
     }, [query, invoices, invoiceFilter]);
 
@@ -159,7 +296,7 @@ export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
                                     Rechnungsliste
                                 </h2>
                                 <p className="mt-1 text-sm font-medium text-slate-500">
-                                    Suche nach Rechnungsnummer, Typ, Kunde, Fahrzeug, VIN oder PDF-Datei.
+                                    Suche nach Rechnung, Kunde, Fahrzeug, FIN, Betrag oder Status.
                                 </p>
                             </div>
 
@@ -168,7 +305,7 @@ export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
                                 <Input
                                     value={query}
                                     onChange={(event) => setQuery(event.target.value)}
-                                    placeholder="Rechnung suchen..."
+                                    placeholder="Suche nach Rechnung, Kunde, Fahrzeug, FIN, Betrag oder Status..."
                                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-medium"
                                 />
                             </div>
@@ -663,7 +800,7 @@ function EmptyInvoicesState() {
                 Keine Rechnungen gefunden
             </h3>
             <p className="mt-2 max-w-md text-sm font-medium text-slate-500">
-                Passe deine Suche an oder erzeuge eine neue Rechnung über einen Verkauf.
+                Passe deine Suche an oder setze den Filter zurück.
             </p>
         </div>
     );
