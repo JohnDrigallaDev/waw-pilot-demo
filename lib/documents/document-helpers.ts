@@ -29,11 +29,11 @@ export function getDocumentTypeLabel(type: string): string {
 
         commercial_register: "Handelsregisterauszug",
         business_registration: "Gewerbeschein",
-        owner_id: "Ausweis Inhaber",
+        owner_id: "Ausweis vom Inhaber / Käufer",
         customer_id: "Ausweis Kunde",
         tax_number_document: "Steuernummer",
 
-        customs: "Zolldokument / Ausfuhrnachweis",
+        customs: "Zolldokument / Ausfuhrnachweis / Ausgangsvermerk",
         cashbook_receipt: "Kassenbuch-Beleg",
 
         license_plate_document: "Kennzeichen-Dokument",

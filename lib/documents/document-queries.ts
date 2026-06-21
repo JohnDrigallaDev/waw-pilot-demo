@@ -136,6 +136,7 @@ export async function getDocuments(): Promise<DocumentRow[]> {
     `,
         )
         .eq("company_id", companyId)
+        .neq("status", "missing")
         .order("created_at", { ascending: false });
 
     if (error) {

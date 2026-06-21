@@ -95,8 +95,7 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
     ).length;
 
     const needsReviewDocuments = documents.filter(
-        (document) =>
-            document.status === "needs_review" || document.status === "missing",
+        (document) => document.status === "needs_review",
     ).length;
 
     const generatedDocuments = documents.filter(
@@ -144,8 +143,7 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
                 (documentFilter === "cashbook" &&
                     document.document_type === "cashbook_receipt") ||
                 (documentFilter === "needs_review" &&
-                    (document.status === "needs_review" ||
-                        document.status === "missing"));
+                    document.status === "needs_review");
 
             if (!matchesFilter) return false;
 
@@ -201,9 +199,9 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
                     icon={FileText}
                 />
                 <DocumentStatCard
-                    label="Zu prüfen / fehlend"
+                    label="Zu prüfen"
                     value={needsReviewDocuments}
-                    description="Dokumente mit Handlungsbedarf"
+                    description="Dokumente mit Prüfbedarf"
                     icon={FileWarning}
                     danger={needsReviewDocuments > 0}
                 />
