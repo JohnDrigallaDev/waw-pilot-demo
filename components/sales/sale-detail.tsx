@@ -37,6 +37,7 @@ import { formatDate } from "@/lib/format/date";
 import { getDocumentTypeLabel } from "@/lib/documents/document-helpers";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { StatusLegend } from "@/components/shared/status-legend";
 import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -120,6 +121,8 @@ export function SaleDetail({
                     description="Die PDF wurde gespeichert und ist unten im Bereich „Automatische Dokumente“ verfügbar."
                 />
             ) : null}
+
+            <StatusLegend />
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <DetailStatCard
