@@ -338,10 +338,15 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
     });
 
     const requiredDocumentStatuses = requiredDocuments.map((requiredDocument) => {
+        const acceptedDocumentTypes =
+            requiredDocument.acceptedDocumentTypes ?? [
+                requiredDocument.documentType,
+            ];
+
         const matchingDocument =
             documents.find(
                 (document) =>
-                    document.document_type === requiredDocument.documentType &&
+                    acceptedDocumentTypes.includes(document.document_type) &&
                     document.status === "available",
             ) ?? null;
 

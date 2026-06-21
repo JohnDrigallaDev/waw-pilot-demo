@@ -371,6 +371,11 @@ export function SaleDetail({
                                                         {requiredDocument.label}
                                                     </p>
                                                 </div>
+                                                {requiredDocument.helperText ? (
+                                                    <p className="mt-1 text-sm font-semibold text-slate-500">
+                                                        {requiredDocument.helperText}
+                                                    </p>
+                                                ) : null}
 
                                                 {requiredDocument.document ? (
                                                     <div className="mt-2 space-y-2">
@@ -425,13 +430,42 @@ export function SaleDetail({
                                             </StatusBadge>
                                         </div>
 
-                                        <SaleDocumentUploadForm
-                                            saleId={sale.id}
-                                            documentType={requiredDocument.documentType}
-                                            documentLabel={requiredDocument.label}
-                                            existingDocumentId={requiredDocument.document?.id ?? null}
-                                            existingFileName={requiredDocument.document?.file_name ?? null}
-                                        />
+                                        {requiredDocument.uploadOptions ? (
+                                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                                {requiredDocument.uploadOptions.map((uploadOption) => {
+                                                    const isExistingOption =
+                                                        requiredDocument.document?.document_type ===
+                                                        uploadOption.documentType;
+
+                                                    return (
+                                                        <SaleDocumentUploadForm
+                                                            key={uploadOption.documentType}
+                                                            saleId={sale.id}
+                                                            documentType={uploadOption.documentType}
+                                                            documentLabel={uploadOption.label}
+                                                            existingDocumentId={
+                                                                isExistingOption
+                                                                    ? requiredDocument.document?.id ?? null
+                                                                    : null
+                                                            }
+                                                            existingFileName={
+                                                                isExistingOption
+                                                                    ? requiredDocument.document?.file_name ?? null
+                                                                    : null
+                                                            }
+                                                        />
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <SaleDocumentUploadForm
+                                                saleId={sale.id}
+                                                documentType={requiredDocument.documentType}
+                                                documentLabel={requiredDocument.label}
+                                                existingDocumentId={requiredDocument.document?.id ?? null}
+                                                existingFileName={requiredDocument.document?.file_name ?? null}
+                                            />
+                                        )}
                                     </div>
                                 ))}
                             </div>

@@ -3,6 +3,12 @@ import type { SaleType } from "@/lib/sales/sale-queries";
 export type RequiredDocumentDefinition = {
     documentType: string;
     label: string;
+    acceptedDocumentTypes?: string[];
+    uploadOptions?: {
+        documentType: string;
+        label: string;
+    }[];
+    helperText?: string;
 };
 
 export type SaleDocumentInput = {
@@ -12,23 +18,31 @@ export type SaleDocumentInput = {
 
 const BASE_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
     {
-        documentType: "invoice",
-        label: "Rechnung",
-    },
-    {
-        documentType: "vehicle_registration",
-        label: "Fahrzeugschein",
+        documentType: "handover_protocol",
+        label: "Übergabeprotokoll / Übergabebestätigung",
     },
     {
         documentType: "owner_id",
-        label: "Ausweis Kunde",
+        label: "Ausweis vom Inhaber / Käufer",
     },
 ];
 
-const COMPANY_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
+const INLAND_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
     {
         documentType: "commercial_register",
-        label: "Handelsregisterauszug",
+        label: "Handelsregisterauszug oder Gewerbeschein",
+        acceptedDocumentTypes: ["commercial_register", "business_registration"],
+        uploadOptions: [
+            {
+                documentType: "commercial_register",
+                label: "Handelsregisterauszug",
+            },
+            {
+                documentType: "business_registration",
+                label: "Gewerbeschein",
+            },
+        ],
+        helperText: "Eines von beiden ist erforderlich.",
     },
 ];
 
@@ -41,38 +55,26 @@ const EU_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
         documentType: "transport_proof",
         label: "Verbringungsnachweis",
     },
-    {
-        documentType: "handover_protocol",
-        label: "Übergabeprotokoll",
-    },
 ];
 
 const THIRD_COUNTRY_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
     {
-        documentType: "export_accompanying_document",
-        label: "Ausfuhrbegleitdokument / ABD",
-    },
-    {
-        documentType: "exit_note",
-        label: "Ausgangsvermerk",
-    },
-    {
-        documentType: "handover_protocol",
-        label: "Übergabeprotokoll",
+        documentType: "customs",
+        label: "Zolldokument / Ausfuhrnachweis / Ausgangsvermerk",
     },
 ];
 
 export function getRequiredDocumentsForSale({
                                                 saleType,
-                                                isCompanyCustomer,
+                                                isCompanyCustomer: _isCompanyCustomer,
                                             }: {
     saleType: SaleType;
     isCompanyCustomer: boolean;
 }): RequiredDocumentDefinition[] {
     const requiredDocuments = [...BASE_REQUIRED_DOCUMENTS];
 
-    if (isCompanyCustomer) {
-        requiredDocuments.push(...COMPANY_REQUIRED_DOCUMENTS);
+    if (saleType === "inland") {
+        requiredDocuments.push(...INLAND_REQUIRED_DOCUMENTS);
     }
 
     if (saleType === "eu") {
@@ -100,8 +102,16 @@ export function evaluateRequiredDocuments({
     );
 
     const missingDocuments = requiredDocuments.filter(
-        (requiredDocument) =>
-            !availableDocumentTypes.has(requiredDocument.documentType),
+        (requiredDocument) => {
+            const acceptedDocumentTypes =
+                requiredDocument.acceptedDocumentTypes ?? [
+                    requiredDocument.documentType,
+                ];
+
+            return !acceptedDocumentTypes.some((documentType) =>
+                availableDocumentTypes.has(documentType),
+            );
+        },
     );
 
     return {

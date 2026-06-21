@@ -106,7 +106,7 @@ function getGenerationMode(params: {
         return "not_relevant";
     }
 
-    if (params.definition.type === "transport_proof" && params.saleType === "inland") {
+    if (params.definition.type === "transport_proof" && params.saleType !== "eu") {
         return "not_relevant";
     }
 

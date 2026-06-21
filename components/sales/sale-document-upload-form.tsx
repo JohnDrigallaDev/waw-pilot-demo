@@ -96,6 +96,10 @@ export function SaleDocumentUploadForm({
                 />
             ) : null}
 
+            <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-slate-500">
+                {documentLabel}
+            </p>
+
             <label
                 htmlFor={inputId}
                 className={
