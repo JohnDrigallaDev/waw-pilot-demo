@@ -148,8 +148,8 @@ export function SaleForm({
 
                             {vehicles.length === 0 ? (
                                 <p className="text-sm font-bold text-amber-700">
-                                    Es gibt aktuell keine Fahrzeuge im Bestand. Lege zuerst einen
-                                    Ankauf an.
+                                    Es gibt aktuell keine verfügbaren Fahrzeuge im Bestand.
+                                    Lege zuerst einen Ankauf an oder prüfe reservierte Fahrzeuge.
                                 </p>
                             ) : null}
                         </div>

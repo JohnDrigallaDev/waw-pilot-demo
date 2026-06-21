@@ -308,6 +308,30 @@ export async function createSaleAction(
         };
     }
 
+    const { data: vehicleData, error: vehicleLoadError } = await supabase
+        .from("vehicles")
+        .select("internal_number, manufacturer, model, status")
+        .eq("id", vehicleId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (vehicleLoadError || !vehicleData) {
+        return {
+            success: false,
+            message: `Fahrzeug konnte nicht geladen werden: ${
+                vehicleLoadError?.message ?? "Nicht gefunden"
+            }`,
+        };
+    }
+
+    if (vehicleData.status !== "in_stock" && vehicleData.status !== "reserved") {
+        return {
+            success: false,
+            message:
+                "Dieses Fahrzeug wurde bereits verkauft und kann nicht erneut verkauft werden.",
+        };
+    }
+
     if (buyerMode === "new") {
         const createdCustomer = await createBuyerCustomerFromSaleForm(
             supabase,
@@ -354,22 +378,6 @@ export async function createSaleAction(
 
     const vatAmount = roundMoney(netAmount * (vatRate / 100));
     const grossAmount = roundMoney(netAmount + vatAmount);
-
-    const { data: vehicleData, error: vehicleLoadError } = await supabase
-        .from("vehicles")
-        .select("internal_number, manufacturer, model")
-        .eq("id", vehicleId)
-        .eq("company_id", companyId)
-        .single();
-
-    if (vehicleLoadError || !vehicleData) {
-        return {
-            success: false,
-            message: `Fahrzeug konnte nicht geladen werden: ${
-                vehicleLoadError?.message ?? "Nicht gefunden"
-            }`,
-        };
-    }
 
     let saleNumber: string;
 
