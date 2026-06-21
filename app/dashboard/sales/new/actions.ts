@@ -58,6 +58,20 @@ function requiresExportDetails(saleType: SaleType): boolean {
     return saleType === "eu" || saleType === "export_third_country";
 }
 
+function getDefaultVatRateForSaleType(saleType: SaleType): number {
+    return saleType === "inland" ? 19 : 0;
+}
+
+function resolveVatRate(formData: FormData, saleType: SaleType): number {
+    const submittedVatRate = getNumberValue(formData, "vat_rate");
+
+    if (submittedVatRate === null || submittedVatRate < 0 || submittedVatRate > 100) {
+        return getDefaultVatRateForSaleType(saleType);
+    }
+
+    return submittedVatRate;
+}
+
 function getNewCustomerType(formData: FormData): CustomerType {
     const value = getStringValue(formData, "new_customer_type");
 
@@ -252,7 +266,7 @@ export async function createSaleAction(
     const saleDate = getStringValue(formData, "sale_date");
     const saleType = getSaleTypeValue(formData);
     const netAmount = getNumberValue(formData, "net_amount");
-    const vatRate = getNumberValue(formData, "vat_rate") ?? 19;
+    const vatRate = resolveVatRate(formData, saleType);
     const notes = getStringValue(formData, "notes");
 
     const exportDestinationCity = getStringValue(

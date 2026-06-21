@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ChangeEventHandler } from "react";
 import {
     Building2,
     CalendarDays,
@@ -69,6 +69,33 @@ type SaleFormProps = {
     defaultCustomerId?: string | null;
 };
 
+function getDefaultVatRateForSaleType(saleType: SaleType): string {
+    return saleType === "inland" ? "19" : "0";
+}
+
+function parseDecimalInput(value: string): number | null {
+    const normalizedValue = value.trim().replace(",", ".");
+    const numberValue = Number(normalizedValue);
+
+    return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
+}
+
+function getTaxHint(saleType: SaleType): string {
+    if (saleType === "eu") {
+        return "EU-Verkauf: steuerfreie innergemeinschaftliche Lieferung möglich. Bitte USt-IdNr. und Nachweise prüfen.";
+    }
+
+    if (saleType === "export_third_country") {
+        return "Drittlandexport: steuerfreie Ausfuhrlieferung möglich. Bitte Ausfuhrnachweise/Zollnachweise prüfen.";
+    }
+
+    return "Inlandsverkauf mit deutscher Umsatzsteuer.";
+}
+
 export function SaleForm({
                              customers,
                              vehicles,
@@ -88,10 +115,21 @@ export function SaleForm({
         useState<NewCustomerType>("company");
 
     const [saleType, setSaleType] = useState<SaleType>("inland");
+    const [netAmount, setNetAmount] = useState("");
+    const [vatRate, setVatRate] = useState("19");
     const requiresExportDetails =
         saleType === "eu" || saleType === "export_third_country";
 
     const today = new Date().toISOString().slice(0, 10);
+    const previewNetAmount = parseDecimalInput(netAmount) ?? 0;
+    const previewVatRate = parseDecimalInput(vatRate) ?? 0;
+    const previewVatAmount = roundMoney(previewNetAmount * (previewVatRate / 100));
+    const previewGrossAmount = roundMoney(previewNetAmount + previewVatAmount);
+
+    function handleSaleTypeChange(nextSaleType: SaleType) {
+        setSaleType(nextSaleType);
+        setVatRate(getDefaultVatRateForSaleType(nextSaleType));
+    }
 
     return (
         <div className="space-y-6">
@@ -371,22 +409,31 @@ export function SaleForm({
                                 title="Inland"
                                 description="Normaler Verkauf innerhalb Deutschlands."
                                 checked={saleType === "inland"}
-                                onChange={setSaleType}
+                                onChange={handleSaleTypeChange}
                             />
                             <SaleTypeOption
                                 value="eu"
                                 title="EU-Verkauf"
                                 description="Gelangensbestätigung und Verbringungsnachweis nötig."
                                 checked={saleType === "eu"}
-                                onChange={setSaleType}
+                                onChange={handleSaleTypeChange}
                             />
                             <SaleTypeOption
                                 value="export_third_country"
                                 title="Drittlandexport"
                                 description="ABD, Ausgangsvermerk und Exportdokumente nötig."
                                 checked={saleType === "export_third_country"}
-                                onChange={setSaleType}
+                                onChange={handleSaleTypeChange}
                             />
+                        </div>
+
+                        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="flex items-start gap-3">
+                                <Info className="mt-0.5 size-5 shrink-0 text-cyan-700" />
+                                <p className="text-sm font-semibold leading-6 text-slate-700">
+                                    {getTaxHint(saleType)}
+                                </p>
+                            </div>
                         </div>
 
                         <div
@@ -571,6 +618,8 @@ export function SaleForm({
                                 name="net_amount"
                                 type="number"
                                 step="0.01"
+                                value={netAmount}
+                                onChange={(event) => setNetAmount(event.target.value)}
                                 required
                             />
                             <FormField
@@ -578,7 +627,8 @@ export function SaleForm({
                                 name="vat_rate"
                                 type="number"
                                 step="0.01"
-                                defaultValue="19"
+                                value={vatRate}
+                                onChange={(event) => setVatRate(event.target.value)}
                             />
                             <FormField
                                 label="Verkaufsdatum *"
@@ -587,6 +637,12 @@ export function SaleForm({
                                 defaultValue={today}
                                 required
                             />
+                        </div>
+
+                        <div className="grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
+                            <AmountPreview label="Netto" value={previewNetAmount} />
+                            <AmountPreview label="MwSt." value={previewVatAmount} />
+                            <AmountPreview label="Brutto" value={previewGrossAmount} />
                         </div>
 
                         <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
@@ -755,6 +811,19 @@ function SectionTitle({
     );
 }
 
+function AmountPreview({ label, value }: { label: string; value: number }) {
+    return (
+        <div className="min-w-0 rounded-2xl border border-white bg-white p-3 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                {label}
+            </p>
+            <p className="mt-1 truncate text-lg font-extrabold text-slate-950">
+                {formatCurrency(value)}
+            </p>
+        </div>
+    );
+}
+
 function FormField({
                        label,
                        name,
@@ -763,6 +832,8 @@ function FormField({
                        defaultValue,
                        placeholder,
                        step,
+                       value,
+                       onChange,
                    }: {
     label: string;
     name: string;
@@ -771,6 +842,8 @@ function FormField({
     defaultValue?: string;
     placeholder?: string;
     step?: string;
+    value?: string;
+    onChange?: ChangeEventHandler<HTMLInputElement>;
 }) {
     return (
         <div className="space-y-2">
@@ -785,6 +858,8 @@ function FormField({
                 defaultValue={defaultValue}
                 placeholder={placeholder}
                 step={step}
+                value={value}
+                onChange={onChange}
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-medium"
             />
         </div>
