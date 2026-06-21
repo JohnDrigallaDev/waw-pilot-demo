@@ -51,6 +51,8 @@ type SaleDetailProps = {
     generatedDocuments: SaleGeneratedDocumentCheck[];
     exportDetails: SaleExportDetails;
     generatedDocumentType?: string | null;
+    invoiceCreatedNumber?: string | null;
+    invoiceRegeneratedNumber?: string | null;
 };
 
 export function SaleDetail({
@@ -58,6 +60,8 @@ export function SaleDetail({
                                generatedDocuments,
                                exportDetails,
                                generatedDocumentType = null,
+                               invoiceCreatedNumber = null,
+                               invoiceRegeneratedNumber = null,
                            }: SaleDetailProps) {
     const isDocumentComplete = sale.missing_required_documents_count === 0;
     const existingInvoiceTypes = sale.invoices.map(
@@ -83,6 +87,27 @@ export function SaleDetail({
                     </Button>
                 }
             />
+
+            {invoiceCreatedNumber || invoiceRegeneratedNumber ? (
+                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                            <CheckCircle2 className="size-5" />
+                        </div>
+
+                        <div>
+                            <p className="font-extrabold text-emerald-950">
+                                {invoiceCreatedNumber
+                                    ? `Rechnung ${invoiceCreatedNumber} wurde erfolgreich erstellt.`
+                                    : `PDF für Rechnung ${invoiceRegeneratedNumber} wurde neu generiert.`}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-emerald-800">
+                                Die Rechnung ist unten im Bereich „Rechnungen & Zahlung“ verfügbar und kann dort geöffnet oder heruntergeladen werden.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <DetailStatCard

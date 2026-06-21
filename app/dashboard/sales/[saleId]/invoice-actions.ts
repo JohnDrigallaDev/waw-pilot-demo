@@ -273,7 +273,11 @@ export async function createSaleInvoiceAction(formData: FormData) {
     revalidatePath("/dashboard/documents");
     revalidatePath("/dashboard/activities");
 
-    redirect(`/dashboard/sales/${saleId}`);
+    redirect(
+        `/dashboard/sales/${saleId}?invoiceCreated=${encodeURIComponent(
+            invoiceNumber,
+        )}`,
+    );
 }
 
 export async function regenerateSaleInvoicePdfAction(formData: FormData) {
@@ -349,7 +353,11 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
     revalidatePath("/dashboard/documents");
     revalidatePath("/dashboard/activities");
 
-    redirect(`/dashboard/sales/${saleId}`);
+    redirect(
+        `/dashboard/sales/${saleId}?invoiceRegenerated=${encodeURIComponent(
+            String(invoiceData.invoice_number),
+        )}`,
+    );
 }
 
 export async function markInvoicePaidAction(formData: FormData) {

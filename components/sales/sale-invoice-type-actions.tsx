@@ -28,11 +28,7 @@ export function SaleInvoiceTypeActions({
 
                 <InvoiceSubmitButton
                     icon="receipt"
-                    label={
-                        hasStandard
-                            ? "Rechnung vorhanden"
-                            : "Rechnung erstellen"
-                    }
+                    label={hasStandard ? "Rechnung vorhanden" : "Rechnung erstellen"}
                     description={
                         hasStandard
                             ? "Bereits in der Rechnungsliste unten sichtbar"
@@ -111,8 +107,8 @@ function InvoiceSubmitButton({
             variant="outline"
             className={
                 done
-                    ? "h-auto w-full justify-start rounded-3xl border-emerald-200 bg-emerald-50 p-4 text-left shadow-sm disabled:cursor-default disabled:opacity-100"
-                    : "h-auto w-full justify-start rounded-3xl border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50/40 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-70"
+                    ? "h-auto min-h-28 w-full items-start justify-start rounded-3xl border-emerald-200 bg-emerald-50 p-4 text-left shadow-sm disabled:cursor-default disabled:opacity-100"
+                    : "h-auto min-h-28 w-full items-start justify-start rounded-3xl border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50/40 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-70"
             }
         >
             <span
@@ -129,11 +125,11 @@ function InvoiceSubmitButton({
                 )}
             </span>
 
-            <span className="ml-3 min-w-0">
-                <span className="block font-extrabold text-slate-950">
+            <span className="ml-3 min-w-0 flex-1 overflow-hidden">
+                <span className="block whitespace-normal break-words text-base font-extrabold leading-snug text-slate-950">
                     {pending ? "Wird erstellt..." : label}
                 </span>
-                <span className="mt-1 block text-xs font-semibold text-slate-500">
+                <span className="mt-1 block whitespace-normal break-words text-xs font-semibold leading-relaxed text-slate-500">
                     {description}
                 </span>
             </span>

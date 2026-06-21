@@ -611,5 +611,13 @@ export async function createSaleAction(
         });
     }
 
+    if (invoiceNumber) {
+        redirect(
+            `/dashboard/sales/${saleId}?invoiceCreated=${encodeURIComponent(
+                invoiceNumber,
+            )}`,
+        );
+    }
+
     redirect(`/dashboard/sales/${saleId}`);
 }

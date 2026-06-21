@@ -9,6 +9,8 @@ type SaleDetailPageProps = {
     }>;
     searchParams: Promise<{
         generatedDocument?: string;
+        invoiceCreated?: string;
+        invoiceRegenerated?: string;
     }>;
 };
 
@@ -33,6 +35,8 @@ export default async function SaleDetailPage({
             generatedDocuments={generatedDocuments}
             exportDetails={exportDetails}
             generatedDocumentType={resolvedSearchParams.generatedDocument ?? null}
+            invoiceCreatedNumber={resolvedSearchParams.invoiceCreated ?? null}
+            invoiceRegeneratedNumber={resolvedSearchParams.invoiceRegenerated ?? null}
         />
     );
 }
