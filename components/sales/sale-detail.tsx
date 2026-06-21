@@ -287,7 +287,10 @@ export function SaleDetail({
                 </div>
 
                 <div className="space-y-6">
-                    <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                    <Card
+                        id="invoice-payments"
+                        className="scroll-mt-24 rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm"
+                    >
                         <CardContent className="p-5">
                             <SectionTitle
                                 icon={Receipt}

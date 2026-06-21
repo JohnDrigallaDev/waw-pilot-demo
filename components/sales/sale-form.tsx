@@ -60,6 +60,7 @@ function getYearOptions() {
 
 type BuyerMode = "existing" | "new";
 type NewCustomerType = "company" | "private";
+type SaleType = "inland" | "eu" | "export_third_country";
 
 type SaleFormProps = {
     customers: CustomerRow[];
@@ -85,6 +86,10 @@ export function SaleForm({
 
     const [newCustomerType, setNewCustomerType] =
         useState<NewCustomerType>("company");
+
+    const [saleType, setSaleType] = useState<SaleType>("inland");
+    const requiresExportDetails =
+        saleType === "eu" || saleType === "export_third_country";
 
     const today = new Date().toISOString().slice(0, 10);
 
@@ -365,27 +370,50 @@ export function SaleForm({
                                 value="inland"
                                 title="Inland"
                                 description="Normaler Verkauf innerhalb Deutschlands."
-                                defaultChecked
+                                checked={saleType === "inland"}
+                                onChange={setSaleType}
                             />
                             <SaleTypeOption
                                 value="eu"
                                 title="EU-Verkauf"
                                 description="Gelangensbestätigung und Verbringungsnachweis nötig."
+                                checked={saleType === "eu"}
+                                onChange={setSaleType}
                             />
                             <SaleTypeOption
                                 value="export_third_country"
                                 title="Drittlandexport"
                                 description="ABD, Ausgangsvermerk und Exportdokumente nötig."
+                                checked={saleType === "export_third_country"}
+                                onChange={setSaleType}
                             />
                         </div>
 
-                        <div className="rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
+                        <div
+                            className={
+                                requiresExportDetails
+                                    ? "rounded-3xl border border-amber-200 bg-amber-50 p-4"
+                                    : "rounded-3xl border border-cyan-100 bg-cyan-50 p-4"
+                            }
+                        >
                             <div className="flex items-start gap-3">
-                                <Info className="mt-0.5 size-5 shrink-0 text-cyan-700" />
-                                <p className="text-sm font-semibold leading-6 text-cyan-950">
-                                    Wenn EU-Verkauf oder Drittlandexport gewählt wird, sollten die
-                                    Export- und Verbringungsdaten möglichst direkt erfasst werden.
-                                    Fehlende Angaben können später in der Verkaufsakte ergänzt werden.
+                                <Info
+                                    className={
+                                        requiresExportDetails
+                                            ? "mt-0.5 size-5 shrink-0 text-amber-700"
+                                            : "mt-0.5 size-5 shrink-0 text-cyan-700"
+                                    }
+                                />
+                                <p
+                                    className={
+                                        requiresExportDetails
+                                            ? "text-sm font-semibold leading-6 text-amber-950"
+                                            : "text-sm font-semibold leading-6 text-cyan-950"
+                                    }
+                                >
+                                    {requiresExportDetails
+                                        ? "Für EU-Verkäufe und Drittlandexporte sind diese Angaben erforderlich, damit Gelangensbestätigung und Verbringungsnachweis erstellt werden können."
+                                        : "Bei Inland-Verkäufen sind Export- und Verbringungsdaten optional."}
                                 </p>
                             </div>
                         </div>
@@ -397,19 +425,31 @@ export function SaleForm({
                         <SectionTitle
                             icon={Globe2}
                             title="Export / EU-Lieferung"
-                            description="Optionale Angaben für Gelangensbestätigung und Verbringungsnachweis. Falls noch nicht bekannt, später in der Verkaufsakte ergänzen."
+                            description={
+                                requiresExportDetails
+                                    ? "Pflichtangaben für Gelangensbestätigung und Verbringungsnachweis."
+                                    : "Optionale Angaben für Gelangensbestätigung und Verbringungsnachweis."
+                            }
                         />
 
                         <div className="grid gap-4 md:grid-cols-2">
                             <FormField
-                                label="Zielort / Empfangsort"
+                                label={getRequiredLabel(
+                                    "Zielort / Empfangsort",
+                                    requiresExportDetails,
+                                )}
                                 name="export_destination_city"
+                                required={requiresExportDetails}
                                 placeholder="z. B. Wien"
                             />
 
                             <FormField
-                                label="Zielland / Empfangsland"
+                                label={getRequiredLabel(
+                                    "Zielland / Empfangsland",
+                                    requiresExportDetails,
+                                )}
                                 name="export_destination_country"
+                                required={requiresExportDetails}
                                 placeholder="z. B. Österreich"
                             />
 
@@ -418,11 +458,15 @@ export function SaleForm({
                                     htmlFor="export_arrival_month"
                                     className="font-bold text-slate-700"
                                 >
-                                    Monat des Gelangens
+                                    {getRequiredLabel(
+                                        "Monat des Gelangens",
+                                        requiresExportDetails,
+                                    )}
                                 </Label>
                                 <select
                                     id="export_arrival_month"
                                     name="export_arrival_month"
+                                    required={requiresExportDetails}
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                                     defaultValue=""
                                 >
@@ -439,11 +483,15 @@ export function SaleForm({
                                     htmlFor="export_arrival_year"
                                     className="font-bold text-slate-700"
                                 >
-                                    Jahr des Gelangens
+                                    {getRequiredLabel(
+                                        "Jahr des Gelangens",
+                                        requiresExportDetails,
+                                    )}
                                 </Label>
                                 <select
                                     id="export_arrival_year"
                                     name="export_arrival_year"
+                                    required={requiresExportDetails}
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                                     defaultValue=""
                                 >
@@ -456,9 +504,13 @@ export function SaleForm({
                             </div>
 
                             <FormField
-                                label="Verbringungs- / Übergabedatum"
+                                label={getRequiredLabel(
+                                    "Verbringungs- / Übergabedatum",
+                                    requiresExportDetails,
+                                )}
                                 name="export_transport_date"
                                 type="date"
+                                required={requiresExportDetails}
                             />
 
                             <div className="space-y-2">
@@ -466,11 +518,15 @@ export function SaleForm({
                                     htmlFor="export_transport_type"
                                     className="font-bold text-slate-700"
                                 >
-                                    Art der Verbringung
+                                    {getRequiredLabel(
+                                        "Art der Verbringung",
+                                        requiresExportDetails,
+                                    )}
                                 </Label>
                                 <select
                                     id="export_transport_type"
                                     name="export_transport_type"
+                                    required={requiresExportDetails}
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                                     defaultValue=""
                                 >
@@ -489,8 +545,12 @@ export function SaleForm({
                             </div>
 
                             <FormField
-                                label="Empfänger / Unterzeichner"
+                                label={getRequiredLabel(
+                                    "Empfänger / Unterzeichner",
+                                    requiresExportDetails,
+                                )}
                                 name="export_receiver_name"
+                                required={requiresExportDetails}
                                 placeholder="Name der unterschreibenden Person"
                             />
                         </div>
@@ -640,12 +700,14 @@ function SaleTypeOption({
                             value,
                             title,
                             description,
-                            defaultChecked = false,
+                            checked,
+                            onChange,
                         }: {
-    value: string;
+    value: SaleType;
     title: string;
     description: string;
-    defaultChecked?: boolean;
+    checked: boolean;
+    onChange: (value: SaleType) => void;
 }) {
     return (
         <label className="cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-emerald-200 hover:bg-emerald-50/60 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50 has-[:checked]:ring-4 has-[:checked]:ring-emerald-100">
@@ -653,7 +715,8 @@ function SaleTypeOption({
                 type="radio"
                 name="sale_type"
                 value={value}
-                defaultChecked={defaultChecked}
+                checked={checked}
+                onChange={() => onChange(value)}
                 className="sr-only"
             />
             <p className="font-extrabold text-slate-950">{title}</p>
@@ -662,6 +725,10 @@ function SaleTypeOption({
             </p>
         </label>
     );
+}
+
+function getRequiredLabel(label: string, required: boolean): string {
+    return required ? `${label} *` : label;
 }
 
 function SectionTitle({

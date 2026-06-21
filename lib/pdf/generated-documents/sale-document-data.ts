@@ -46,6 +46,7 @@ type SaleQueryRow = {
     company_id: string;
     buyer_customer_id: string;
     vehicle_id: string;
+    sale_type: string | null;
     sale_date: string;
     net_amount: number | string;
     vat_rate: number | string;
@@ -118,6 +119,7 @@ export async function getSaleGeneratedDocumentData(
             company_id,
             buyer_customer_id,
             vehicle_id,
+            sale_type,
             sale_date,
             net_amount,
             vat_rate,
@@ -258,6 +260,7 @@ export async function getSaleGeneratedDocumentData(
 
         sale: {
             id: sale.id,
+            saleType: sale.sale_type ?? "inland",
             saleDate: sale.sale_date,
             invoiceNumber: invoice?.invoice_number ?? null,
             invoiceDate: invoice?.invoice_date ?? null,

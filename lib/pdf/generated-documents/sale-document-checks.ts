@@ -1,6 +1,7 @@
 import {
     generatedDocumentDefinitions,
     getGeneratedDocumentsByContext,
+    isSupportedSaleGeneratedDocumentType,
     type GeneratedDocumentDefinition,
     type GeneratedDocumentStatus,
     type GeneratedDocumentType,
@@ -24,13 +25,16 @@ export type SaleGeneratedDocumentCheck = {
     label: string;
     description: string;
     requiresSignature: boolean;
+    generationMode: "automatic" | "external" | "planned" | "not_relevant";
+    externalActionLabel: string | null;
+    externalActionHref: string | null;
 
     customerId: string | null;
     vehicleId: string | null;
 
     status: GeneratedDocumentStatus;
     statusLabel: string;
-    statusTone: "success" | "warning" | "danger" | "info";
+    statusTone: "success" | "warning" | "danger" | "info" | "neutral";
 
     canGenerate: boolean;
     missingFields: {
@@ -73,6 +77,83 @@ const saleGeneratedDocumentTypes = new Set<GeneratedDocumentType>([
     "entry_certificate",
     "transport_proof",
 ]);
+
+type SaleDocumentGenerationMode =
+    SaleGeneratedDocumentCheck["generationMode"];
+
+function getSaleType(
+    saleType: string | null | undefined,
+): "inland" | "eu" | "export_third_country" {
+    if (saleType === "eu" || saleType === "export_third_country") {
+        return saleType;
+    }
+
+    return "inland";
+}
+
+function isExportDocument(type: GeneratedDocumentType): boolean {
+    return type === "entry_certificate" || type === "transport_proof";
+}
+
+function getGenerationMode(params: {
+    definition: GeneratedDocumentDefinition;
+    saleType: "inland" | "eu" | "export_third_country";
+}): SaleDocumentGenerationMode {
+    if (
+        params.definition.type === "invoice_pdf" ||
+        params.definition.type === "proforma_invoice"
+    ) {
+        return "external";
+    }
+
+    if (isExportDocument(params.definition.type) && params.saleType === "inland") {
+        return "not_relevant";
+    }
+
+    if (isSupportedSaleGeneratedDocumentType(params.definition.type)) {
+        return "automatic";
+    }
+
+    return "planned";
+}
+
+function getNonAutomaticStatus(params: {
+    generationMode: SaleDocumentGenerationMode;
+    generatedDocumentExists: boolean;
+}): GeneratedDocumentStatus {
+    if (params.generatedDocumentExists) {
+        return "generated_available";
+    }
+
+    if (params.generationMode === "external") {
+        return "external_process";
+    }
+
+    if (params.generationMode === "not_relevant") {
+        return "not_relevant";
+    }
+
+    return "generator_planned";
+}
+
+function getExternalAction(
+    type: GeneratedDocumentType,
+): Pick<
+    SaleGeneratedDocumentCheck,
+    "externalActionLabel" | "externalActionHref"
+> {
+    if (type === "invoice_pdf" || type === "proforma_invoice") {
+        return {
+            externalActionLabel: "Rechnungsbereich öffnen",
+            externalActionHref: "#invoice-payments",
+        };
+    }
+
+    return {
+        externalActionLabel: null,
+        externalActionHref: null,
+    };
+}
 
 function getDefinitionForSaleDocuments(): GeneratedDocumentDefinition[] {
     return generatedDocumentDefinitions.filter(
@@ -156,11 +237,13 @@ export async function getSaleGeneratedDocumentChecks(
 
     const documents = (documentsResult.data ?? []) as DocumentRow[];
     const definitions = getDefinitionForSaleDocuments();
+    const saleType = getSaleType(documentData.sale?.saleType);
+    const visibleDefinitions = definitions.filter(
+        (definition) =>
+            getGenerationMode({ definition, saleType }) !== "not_relevant",
+    );
 
-    return definitions.map((definition) => {
-        const validation: GeneratedDocumentValidationResult =
-            validateGeneratedDocumentData(definition.type, documentData);
-
+    return visibleDefinitions.map((definition) => {
         const generatedDocument = getGeneratedDocument(
             documents,
             definition.documentType,
@@ -171,13 +254,29 @@ export async function getSaleGeneratedDocumentChecks(
             definition.documentType,
         );
 
-        const status = getGeneratedDocumentStatus({
-            definition,
-            validation,
-            documentExists: Boolean(generatedDocument),
-            signedDocumentExists: Boolean(signedDocument),
-            sentToCustomer: false,
-        });
+        const generationMode = getGenerationMode({ definition, saleType });
+        const externalAction = getExternalAction(definition.type);
+        const validation: GeneratedDocumentValidationResult =
+            generationMode === "automatic"
+                ? validateGeneratedDocumentData(definition.type, documentData)
+                : {
+                    canGenerate: false,
+                    missingFields: [],
+                };
+
+        const status =
+            generationMode === "automatic"
+                ? getGeneratedDocumentStatus({
+                    definition,
+                    validation,
+                    documentExists: Boolean(generatedDocument),
+                    signedDocumentExists: Boolean(signedDocument),
+                    sentToCustomer: false,
+                })
+                : getNonAutomaticStatus({
+                    generationMode,
+                    generatedDocumentExists: Boolean(generatedDocument),
+                });
 
         return {
             type: definition.type,
@@ -185,6 +284,9 @@ export async function getSaleGeneratedDocumentChecks(
             label: definition.label,
             description: definition.description,
             requiresSignature: definition.requiresSignature,
+            generationMode,
+            externalActionLabel: externalAction.externalActionLabel,
+            externalActionHref: externalAction.externalActionHref,
 
             customerId: documentData.customerId ?? null,
             vehicleId: documentData.vehicleId ?? null,

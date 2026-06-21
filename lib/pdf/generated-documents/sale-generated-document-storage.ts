@@ -1,6 +1,7 @@
 import { getCurrentCompanyId } from "@/lib/company";
 import {
     getGeneratedDocumentDefinition,
+    isSupportedSaleGeneratedDocumentType,
     type GeneratedDocumentType,
 } from "@/lib/pdf/generated-documents/document-types";
 import { validateGeneratedDocumentData } from "@/lib/pdf/generated-documents/document-validation";
@@ -95,6 +96,12 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
 }): Promise<GenerateSaleDocumentResult> {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
+
+    if (!isSupportedSaleGeneratedDocumentType(params.documentType)) {
+        throw new Error(
+            "Dieser Dokumenttyp kann in der Verkaufsakte nicht automatisch erzeugt werden.",
+        );
+    }
 
     const definition = getGeneratedDocumentDefinition(params.documentType);
 

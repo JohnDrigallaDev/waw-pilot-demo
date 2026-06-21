@@ -44,6 +44,9 @@ export function getGeneratedDocumentStatusLabel(
         generated_available: "Erzeugt",
         sent_to_customer: "An Kunden gesendet",
         signed_received: "Unterschrieben vorhanden",
+        external_process: "Über anderen Bereich",
+        generator_planned: "Generator folgt",
+        not_relevant: "Nicht relevant",
     };
 
     return labels[status];
@@ -51,7 +54,7 @@ export function getGeneratedDocumentStatusLabel(
 
 export function getGeneratedDocumentStatusTone(
     status: GeneratedDocumentStatus,
-): "success" | "warning" | "danger" | "info" {
+): "success" | "warning" | "danger" | "info" | "neutral" {
     if (status === "signed_received" || status === "generated_available") {
         return "success";
     }
@@ -60,8 +63,16 @@ export function getGeneratedDocumentStatusTone(
         return "danger";
     }
 
-    if (status === "sent_to_customer") {
+    if (
+        status === "sent_to_customer" ||
+        status === "external_process" ||
+        status === "generator_planned"
+    ) {
         return "info";
+    }
+
+    if (status === "not_relevant") {
+        return "neutral";
     }
 
     return "warning";

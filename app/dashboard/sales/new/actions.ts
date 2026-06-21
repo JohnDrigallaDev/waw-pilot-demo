@@ -54,6 +54,10 @@ function getSaleTypeValue(formData: FormData): SaleType {
     return "inland";
 }
 
+function requiresExportDetails(saleType: SaleType): boolean {
+    return saleType === "eu" || saleType === "export_third_country";
+}
+
 function getNewCustomerType(formData: FormData): CustomerType {
     const value = getStringValue(formData, "new_customer_type");
 
@@ -277,6 +281,23 @@ export async function createSaleAction(
         return {
             success: false,
             message: "Bitte wähle eine gültige Zahlungsart aus.",
+        };
+    }
+
+    if (
+        requiresExportDetails(saleType) &&
+        (!exportDestinationCity ||
+            !exportDestinationCountry ||
+            !exportArrivalMonth ||
+            !exportArrivalYear ||
+            !exportTransportDate ||
+            !exportTransportType ||
+            !exportReceiverName)
+    ) {
+        return {
+            success: false,
+            message:
+                "Bitte fülle alle Export-/EU-Lieferdaten aus, da der Verkaufstyp EU-Verkauf oder Drittlandexport gewählt wurde.",
         };
     }
 

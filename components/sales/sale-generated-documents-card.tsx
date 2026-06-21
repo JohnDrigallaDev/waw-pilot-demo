@@ -14,7 +14,6 @@ import {
 import { generateSaleDocumentAction } from "@/app/dashboard/sales/[saleId]/generated-document-actions";
 import { SaleDocumentUploadForm } from "@/components/sales/sale-document-upload-form";
 import type { SaleGeneratedDocumentCheck } from "@/lib/pdf/generated-documents/sale-document-checks";
-import type { GeneratedDocumentType } from "@/lib/pdf/generated-documents/document-types";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,15 +25,6 @@ type SaleGeneratedDocumentsCardProps = {
     documents: SaleGeneratedDocumentCheck[];
     generatedDocumentType?: string | null;
 };
-
-const supportedGeneratedDocumentTypes = new Set<GeneratedDocumentType>([
-    "proforma_invoice",
-    "handover_protocol",
-    "entry_certificate",
-    "transport_proof",
-    "license_plate_consent",
-    "travel_expense_form",
-]);
 
 export function SaleGeneratedDocumentsCard({
                                                saleId,
@@ -128,8 +118,14 @@ function GeneratedDocumentRow({
     wasJustGenerated: boolean;
 }) {
     const canOpenGenerated = Boolean(document.generatedDocument?.id);
-    const isGenerationSupported = supportedGeneratedDocumentTypes.has(document.type);
-    const canGenerateNow = document.canGenerate && isGenerationSupported;
+    const isAutomaticDocument = document.generationMode === "automatic";
+    const canGenerateNow = document.canGenerate && isAutomaticDocument;
+    const showMissingFields = document.status === "missing_data";
+    const showSignatureStatus =
+        document.requiresSignature &&
+        (isAutomaticDocument ||
+            Boolean(document.generatedDocument) ||
+            Boolean(document.signedDocument));
 
     return (
         <div className="p-5">
@@ -146,21 +142,27 @@ function GeneratedDocumentRow({
                             {document.statusLabel}
                         </StatusBadge>
 
-                        {document.requiresSignature ? (
+                        {showSignatureStatus ? (
                             <StatusBadge tone="warning">
                                 Unterschrift nötig
                             </StatusBadge>
                         ) : (
                             <StatusBadge tone="neutral">
-                                Keine Unterschrift
+                                {document.requiresSignature
+                                    ? "Kein Rücklauf hier"
+                                    : "Keine Unterschrift"}
                             </StatusBadge>
                         )}
 
-                        {!isGenerationSupported ? (
-                            <StatusBadge tone="info">
-                                {document.type === "invoice_pdf"
-                                    ? "Über Rechnungsprozess"
-                                    : "Generator folgt"}
+                        {document.generationMode !== "automatic" ? (
+                            <StatusBadge
+                                tone={
+                                    document.generationMode === "not_relevant"
+                                        ? "neutral"
+                                        : "info"
+                                }
+                            >
+                                {getGenerationModeLabel(document)}
                             </StatusBadge>
                         ) : null}
                     </div>
@@ -177,7 +179,7 @@ function GeneratedDocumentRow({
                         />
                     ) : null}
 
-                    {document.missingFields.length > 0 ? (
+                    {showMissingFields ? (
                         <div className="mt-4 rounded-3xl border border-red-100 bg-red-50 p-4">
                             <div className="flex items-start gap-2">
                                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-600" />
@@ -198,17 +200,21 @@ function GeneratedDocumentRow({
                                     </ul>
 
                                     <div className="mt-4 flex flex-wrap gap-2">
-                                        <Button
-                                            asChild
-                                            variant="outline"
-                                            size="sm"
-                                            className="rounded-xl border-red-200 bg-white font-extrabold text-red-700 hover:bg-red-100"
-                                        >
-                                            <Link href="#export-details">
-                                                <PencilLine className="mr-2 size-3.5" />
-                                                Exportdaten ergänzen
-                                            </Link>
-                                        </Button>
+                                        {document.missingFields.some((field) =>
+                                            field.field.startsWith("export."),
+                                        ) ? (
+                                            <Button
+                                                asChild
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-xl border-red-200 bg-white font-extrabold text-red-700 hover:bg-red-100"
+                                            >
+                                                <Link href="#export-details">
+                                                    <PencilLine className="mr-2 size-3.5" />
+                                                    Exportdaten ergänzen
+                                                </Link>
+                                            </Button>
+                                        ) : null}
 
                                         {document.missingFields.some((field) =>
                                             field.field.startsWith("customer."),
@@ -243,16 +249,10 @@ function GeneratedDocumentRow({
                         <DocumentFileStatus
                             title="Generiertes Dokument"
                             document={document.generatedDocument}
-                            emptyText={
-                                document.canGenerate
-                                    ? isGenerationSupported
-                                        ? "Noch nicht erzeugt."
-                                        : "Generator für dieses Dokument wird als Nächstes umgesetzt."
-                                    : "Erzeugung erst nach vollständigen Daten möglich."
-                            }
+                            emptyText={getGeneratedDocumentEmptyText(document)}
                         />
 
-                        {document.requiresSignature ? (
+                        {showSignatureStatus ? (
                             <DocumentFileStatus
                                 title="Unterschriebenes Dokument"
                                 document={document.signedDocument}
@@ -269,7 +269,7 @@ function GeneratedDocumentRow({
                                             Unterschrift
                                         </p>
                                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-                                            Für dieses Dokument ist kein unterschriebener Rücklauf vorgesehen.
+                                            {getSignatureInfoText(document)}
                                         </p>
                                     </div>
                                 </div>
@@ -277,7 +277,7 @@ function GeneratedDocumentRow({
                         )}
                     </div>
 
-                    {document.requiresSignature && document.generatedDocument ? (
+                    {isAutomaticDocument && document.requiresSignature && document.generatedDocument ? (
                         <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
                             <p className="text-sm font-extrabold text-slate-950">
                                 Unterschriebenes Dokument hochladen
@@ -300,15 +300,19 @@ function GeneratedDocumentRow({
                 </div>
 
                 <div className="flex flex-col gap-2 xl:w-48">
-                    <form action={generateSaleDocumentAction}>
-                        <input type="hidden" name="sale_id" value={saleId} />
-                        <input type="hidden" name="document_type" value={document.type} />
+                    {isAutomaticDocument ? (
+                        <form action={generateSaleDocumentAction}>
+                            <input type="hidden" name="sale_id" value={saleId} />
+                            <input type="hidden" name="document_type" value={document.type} />
 
-                        <GenerateSaleDocumentSubmitButton
-                            disabled={!canGenerateNow}
-                            isGenerated={Boolean(document.generatedDocument?.id)}
-                        />
-                    </form>
+                            <GenerateSaleDocumentSubmitButton
+                                disabled={!canGenerateNow}
+                                isGenerated={Boolean(document.generatedDocument?.id)}
+                            />
+                        </form>
+                    ) : (
+                        <DocumentContextAction document={document} />
+                    )}
 
                     {canOpenGenerated ? (
                         <Button
@@ -327,6 +331,92 @@ function GeneratedDocumentRow({
                     ) : null}
                 </div>
             </div>
+        </div>
+    );
+}
+
+function getGenerationModeLabel(document: SaleGeneratedDocumentCheck): string {
+    if (document.generationMode === "external") {
+        return document.type === "proforma_invoice"
+            ? "Über Rechnungsbereich"
+            : "Über Rechnungsbereich";
+    }
+
+    if (document.generationMode === "planned") {
+        return "Generator folgt";
+    }
+
+    if (document.generationMode === "not_relevant") {
+        return "Für diesen Verkauf nicht relevant";
+    }
+
+    return "Automatisch erzeugbar";
+}
+
+function getGeneratedDocumentEmptyText(
+    document: SaleGeneratedDocumentCheck,
+): string {
+    if (document.generationMode === "external") {
+        return document.type === "proforma_invoice"
+            ? "Proforma-Rechnungen werden im Bereich „Rechnungen & Zahlung“ erzeugt."
+            : "Rechnungen werden im Bereich „Rechnungen & Zahlung“ erzeugt.";
+    }
+
+    if (document.generationMode === "planned") {
+        return "Der Generator für dieses Dokument ist vorbereitet, aber noch nicht umgesetzt.";
+    }
+
+    if (document.generationMode === "not_relevant") {
+        return "Dieses Dokument ist für diesen Verkaufstyp nicht erforderlich.";
+    }
+
+    if (document.canGenerate) {
+        return "Noch nicht erzeugt.";
+    }
+
+    return "Erzeugung erst nach vollständigen Pflichtdaten möglich.";
+}
+
+function getSignatureInfoText(document: SaleGeneratedDocumentCheck): string {
+    if (document.generationMode === "planned") {
+        return "Ein Rücklauf wird erst relevant, sobald der Generator verfügbar ist.";
+    }
+
+    if (document.generationMode === "not_relevant") {
+        return "Für diesen Verkauf ist kein Rücklauf für dieses Dokument vorgesehen.";
+    }
+
+    if (document.generationMode === "external") {
+        return "Der weitere Ablauf erfolgt im zuständigen Bereich.";
+    }
+
+    return "Für dieses Dokument ist kein unterschriebener Rücklauf vorgesehen.";
+}
+
+function DocumentContextAction({
+                                   document,
+                               }: {
+    document: SaleGeneratedDocumentCheck;
+}) {
+    if (document.externalActionHref && document.externalActionLabel) {
+        return (
+            <Button
+                asChild
+                variant="outline"
+                className="h-11 rounded-2xl border-cyan-200 bg-cyan-50 font-bold text-cyan-800 hover:bg-cyan-100"
+            >
+                <Link href={document.externalActionHref}>
+                    {document.externalActionLabel}
+                </Link>
+            </Button>
+        );
+    }
+
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-extrabold leading-5 text-slate-500">
+            {document.generationMode === "not_relevant"
+                ? "Keine Aktion nötig"
+                : "Noch kein Generator"}
         </div>
     );
 }

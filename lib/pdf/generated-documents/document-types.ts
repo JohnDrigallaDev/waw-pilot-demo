@@ -23,7 +23,10 @@ export type GeneratedDocumentStatus =
     | "generated_needs_signature"
     | "generated_available"
     | "sent_to_customer"
-    | "signed_received";
+    | "signed_received"
+    | "external_process"
+    | "generator_planned"
+    | "not_relevant";
 
 export type GeneratedDocumentDefinition = {
     type: GeneratedDocumentType;
@@ -155,5 +158,22 @@ export function getGeneratedDocumentsByContext(
 ): GeneratedDocumentDefinition[] {
     return generatedDocumentDefinitions.filter(
         (definition) => definition.context === context,
+    );
+}
+
+export const supportedSaleGeneratedDocumentTypes = [
+    "handover_protocol",
+    "entry_certificate",
+    "transport_proof",
+] as const satisfies readonly GeneratedDocumentType[];
+
+export type SupportedSaleGeneratedDocumentType =
+    (typeof supportedSaleGeneratedDocumentTypes)[number];
+
+export function isSupportedSaleGeneratedDocumentType(
+    type: GeneratedDocumentType,
+): type is SupportedSaleGeneratedDocumentType {
+    return supportedSaleGeneratedDocumentTypes.includes(
+        type as SupportedSaleGeneratedDocumentType,
     );
 }
