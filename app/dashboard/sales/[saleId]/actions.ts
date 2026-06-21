@@ -17,6 +17,19 @@ type ExistingDocumentQueryResult = {
     file_path: string | null;
 };
 
+type SaleDocumentDeleteQueryResult = {
+    id: string;
+    sale_id: string | null;
+    file_path: string | null;
+    source: string;
+    generated_by_system: boolean | null;
+};
+
+type SaleDocumentDeleteManyQueryResult = {
+    id: string;
+    file_path: string | null;
+};
+
 function getStringValue(formData: FormData, key: string): string | null {
     const value = formData.get(key);
 
@@ -191,4 +204,75 @@ export async function uploadSaleDocumentAction(formData: FormData) {
     revalidatePath("/dashboard/documents");
 
     redirect(`/dashboard/sales/${saleId}`);
+}
+
+export async function deleteSaleDocumentAction(formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const saleId = getStringValue(formData, "sale_id");
+    const documentId = getStringValue(formData, "document_id");
+
+    if (!saleId) {
+        throw new Error("Verkauf fehlt.");
+    }
+
+    if (!documentId) {
+        throw new Error("Dokument fehlt.");
+    }
+
+    const { data: documentData, error: documentError } = await supabase
+        .from("documents")
+        .select("id, sale_id, file_path, source, generated_by_system")
+        .eq("id", documentId)
+        .eq("company_id", companyId)
+        .eq("sale_id", saleId)
+        .single();
+
+    if (documentError || !documentData) {
+        throw new Error(
+            `Dokument konnte nicht geladen werden: ${
+                documentError?.message ?? "Nicht gefunden"
+            }`,
+        );
+    }
+
+    const document = documentData as SaleDocumentDeleteQueryResult;
+
+    if (document.source !== "uploaded" || document.generated_by_system) {
+        throw new Error(
+            "Dieses Dokument wurde vom System erzeugt und kann hier nicht gelöscht werden.",
+        );
+    }
+
+    if (document.file_path) {
+        await supabase.storage.from("documents").remove([document.file_path]);
+    }
+
+    const { error: documentUpdateError } = await supabase
+        .from("documents")
+        .update({
+            status: "missing",
+            file_path: null,
+            mime_type: null,
+            file_size: null,
+            file_name: "Gelöschtes Dokument",
+            generated_by_system: false,
+        })
+        .eq("id", document.id)
+        .eq("company_id", companyId)
+        .eq("sale_id", saleId);
+
+    if (documentUpdateError) {
+        throw new Error(
+            `Dokument wurde aus dem Storage entfernt, aber der Datenbankstatus konnte nicht aktualisiert werden: ${documentUpdateError.message}`,
+        );
+    }
+
+    revalidatePath(`/dashboard/sales/${saleId}`, "page");
+    revalidatePath(`/dashboard/sales/${saleId}`);
+    revalidatePath("/dashboard/sales");
+    revalidatePath("/dashboard/documents");
+
+    redirect(`/dashboard/sales/${saleId}?documentDeleted=1&refresh=${Date.now()}`);
 }

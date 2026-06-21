@@ -74,43 +74,43 @@ export function SaleDocumentUploadForm({
                         : "group flex cursor-pointer items-center gap-4 rounded-2xl border border-dashed border-amber-300 bg-white px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-md"
                 }
             >
-        <span
-            className={
-                isPending
-                    ? "flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"
-                    : hasExistingDocument
-                        ? "flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"
-                        : "flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 transition group-hover:bg-amber-200"
-            }
-        >
-          {isPending ? (
-              <Loader2 className="size-5 animate-spin" />
-          ) : hasExistingDocument ? (
-              <CheckCircle2 className="size-5" />
-          ) : (
-              <FileUp className="size-5" />
-          )}
-        </span>
+                <span
+                    className={
+                        isPending
+                            ? "flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"
+                            : hasExistingDocument
+                                ? "flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"
+                                : "flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 transition group-hover:bg-amber-200"
+                    }
+                >
+                    {isPending ? (
+                        <Loader2 className="size-5 animate-spin" />
+                    ) : hasExistingDocument ? (
+                        <CheckCircle2 className="size-5" />
+                    ) : (
+                        <FileUp className="size-5" />
+                    )}
+                </span>
 
                 <span className="min-w-0 flex-1">
-          <span className="block text-sm font-extrabold text-slate-950">
-            {isPending
-                ? "Datei wird hochgeladen..."
-                : hasExistingDocument
-                    ? "Dokument vorhanden"
-                    : selectedFileName
-                        ? "Datei wird vorbereitet..."
-                        : "Datei auswählen"}
-          </span>
+                    <span className="block text-sm font-extrabold text-slate-950">
+                        {isPending
+                            ? "Datei wird hochgeladen..."
+                            : hasExistingDocument
+                                ? "Dokument ersetzen"
+                                : selectedFileName
+                                    ? "Datei wird vorbereitet..."
+                                    : "Datei auswählen"}
+                    </span>
 
-          <span className="mt-1 block truncate text-xs font-semibold text-slate-500">
-            {isPending
-                ? selectedFileName ?? "Bitte kurz warten"
-                : hasExistingDocument
-                    ? displayFileName ?? "Datei gespeichert"
-                    : selectedFileName ?? "PDF, PNG, JPG oder WEBP"}
-          </span>
-        </span>
+                    <span className="mt-1 block truncate text-xs font-semibold text-slate-500">
+                        {isPending
+                            ? selectedFileName ?? "Bitte kurz warten"
+                            : hasExistingDocument
+                                ? displayFileName ?? "Aktuell gespeicherte Datei ersetzen"
+                                : selectedFileName ?? "PDF, PNG, JPG oder WEBP"}
+                    </span>
+                </span>
 
                 <span
                     className={
@@ -119,8 +119,8 @@ export function SaleDocumentUploadForm({
                             : "hidden rounded-xl bg-slate-950 px-3 py-2 text-xs font-extrabold text-white transition group-hover:bg-slate-800 sm:inline-flex"
                     }
                 >
-          {hasExistingDocument ? "Ersetzen" : "Durchsuchen"}
-        </span>
+                    {hasExistingDocument ? "Ersetzen" : "Durchsuchen"}
+                </span>
 
                 <input
                     id={inputId}

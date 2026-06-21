@@ -8,6 +8,7 @@ import {
     FileWarning,
     Receipt,
     RefreshCcw,
+    Trash2,
     Truck,
     UserRound,
     Wallet,
@@ -43,8 +44,10 @@ import {
     markInvoicePaidAction,
     regenerateSaleInvoicePdfAction,
 } from "@/app/dashboard/sales/[saleId]/invoice-actions";
+import { deleteSaleDocumentAction } from "@/app/dashboard/sales/[saleId]/actions";
 import { SaleExportDetailsForm } from "@/components/sales/sale-export-details-form";
 import type { SaleExportDetails } from "@/lib/sales/sale-export-details-queries";
+import { FlashMessage } from "@/components/shared/flash-message";
 
 type SaleDetailProps = {
     sale: SaleDetailType;
@@ -53,6 +56,7 @@ type SaleDetailProps = {
     generatedDocumentType?: string | null;
     invoiceCreatedNumber?: string | null;
     invoiceRegeneratedNumber?: string | null;
+    documentDeleted?: boolean;
 };
 
 export function SaleDetail({
@@ -62,6 +66,7 @@ export function SaleDetail({
                                generatedDocumentType = null,
                                invoiceCreatedNumber = null,
                                invoiceRegeneratedNumber = null,
+                               documentDeleted = false,
                            }: SaleDetailProps) {
     const isDocumentComplete = sale.missing_required_documents_count === 0;
     const existingInvoiceTypes = sale.invoices.map(
@@ -88,25 +93,25 @@ export function SaleDetail({
                 }
             />
 
-            {invoiceCreatedNumber || invoiceRegeneratedNumber ? (
-                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                            <CheckCircle2 className="size-5" />
-                        </div>
+            {invoiceCreatedNumber ? (
+                <FlashMessage
+                    message={`Rechnung ${invoiceCreatedNumber} wurde erfolgreich erstellt.`}
+                    description="Die Rechnung ist unten im Bereich „Rechnungen & Zahlung“ verfügbar und kann dort geöffnet oder heruntergeladen werden."
+                />
+            ) : null}
 
-                        <div>
-                            <p className="font-extrabold text-emerald-950">
-                                {invoiceCreatedNumber
-                                    ? `Rechnung ${invoiceCreatedNumber} wurde erfolgreich erstellt.`
-                                    : `PDF für Rechnung ${invoiceRegeneratedNumber} wurde neu generiert.`}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-emerald-800">
-                                Die Rechnung ist unten im Bereich „Rechnungen & Zahlung“ verfügbar und kann dort geöffnet oder heruntergeladen werden.
-                            </p>
-                        </div>
-                    </div>
-                </div>
+            {invoiceRegeneratedNumber ? (
+                <FlashMessage
+                    message={`PDF für Rechnung ${invoiceRegeneratedNumber} wurde neu generiert.`}
+                    description="Die aktualisierte PDF ist unten im Bereich „Rechnungen & Zahlung“ verfügbar."
+                />
+            ) : null}
+
+            {documentDeleted ? (
+                <FlashMessage
+                    message="Dokument wurde gelöscht."
+                    description="Das Pflichtdokument wurde aus der Verkaufsakte entfernt und kann bei Bedarf neu hochgeladen werden."
+                />
             ) : null}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -285,10 +290,6 @@ export function SaleDetail({
                                                     </p>
                                                 </div>
 
-                                                <p className="mt-1 text-sm font-medium text-slate-500">
-                                                    Typ: {getDocumentTypeLabel(requiredDocument.documentType)}
-                                                </p>
-
                                                 {requiredDocument.document ? (
                                                     <div className="mt-2 space-y-2">
                                                         <p className="text-sm font-semibold text-slate-600">
@@ -323,6 +324,13 @@ export function SaleDetail({
                                                                     Download
                                                                 </Link>
                                                             </Button>
+
+                                                            {requiredDocument.document.source === "uploaded" ? (
+                                                                <DeleteSaleDocumentButton
+                                                                    saleId={sale.id}
+                                                                    documentId={requiredDocument.document.id}
+                                                                />
+                                                            ) : null}
                                                         </div>
                                                     </div>
                                                 ) : null}
@@ -405,6 +413,12 @@ export function SaleDetail({
                                                                 Download
                                                             </Link>
                                                         </Button>
+                                                        {document.source === "uploaded" ? (
+                                                            <DeleteSaleDocumentButton
+                                                                saleId={sale.id}
+                                                                documentId={document.id}
+                                                            />
+                                                        ) : null}
                                                     </>
                                                 ) : null}
                                             </div>
@@ -560,6 +574,29 @@ function MarkSaleInvoicePaidButton({
                     ? "Anzahlung bezahlt"
                     : "Als bezahlt markieren"}
             </Button>
+        </form>
+    );
+}
+
+function DeleteSaleDocumentButton({
+                                      saleId,
+                                      documentId,
+                                  }: {
+    saleId: string;
+    documentId: string;
+}) {
+    return (
+        <form action={deleteSaleDocumentAction}>
+            <input type="hidden" name="sale_id" value={saleId} />
+            <input type="hidden" name="document_id" value={documentId} />
+
+            <button
+                type="submit"
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-red-200 bg-white px-3 text-sm font-bold text-red-700 shadow-sm transition hover:bg-red-50"
+            >
+                <Trash2 className="mr-1 size-3.5" />
+                Löschen
+            </button>
         </form>
     );
 }
