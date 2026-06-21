@@ -104,38 +104,41 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
     );
 
     const fileBaseName = getSaleGeneratedDocumentFileBaseName(params.documentType);
-    const numberPart = getSafeFilePart(documentData.sale?.invoiceNumber ?? params.saleId);
+    const numberPart = getSafeFilePart(
+        documentData.sale?.invoiceNumber ?? params.saleId,
+    );
 
     const fileName = `${fileBaseName}-${numberPart}.pdf`;
     const filePath = `generated-documents/sales/${params.saleId}/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-        .from("documents")
-        .upload(filePath, pdfBytes, {
+    const [uploadResult, existingDocumentResult] = await Promise.all([
+        supabase.storage.from("documents").upload(filePath, pdfBytes, {
             contentType: "application/pdf",
             upsert: true,
-        });
+        }),
+        supabase
+            .from("documents")
+            .select("id")
+            .eq("company_id", companyId)
+            .eq("sale_id", params.saleId)
+            .eq("document_type", definition.documentType)
+            .eq("source", "generated")
+            .maybeSingle(),
+    ]);
 
-    if (uploadError) {
+    if (uploadResult.error) {
         throw new Error(
-            `PDF konnte nicht gespeichert werden: ${uploadError.message}`,
+            `PDF konnte nicht gespeichert werden: ${uploadResult.error.message}`,
         );
     }
 
-    const { data: existingDocument, error: existingDocumentError } = await supabase
-        .from("documents")
-        .select("id")
-        .eq("company_id", companyId)
-        .eq("sale_id", params.saleId)
-        .eq("document_type", definition.documentType)
-        .eq("source", "generated")
-        .maybeSingle();
-
-    if (existingDocumentError) {
+    if (existingDocumentResult.error) {
         throw new Error(
-            `Vorhandenes Dokument konnte nicht geprüft werden: ${existingDocumentError.message}`,
+            `Vorhandenes Dokument konnte nicht geprüft werden: ${existingDocumentResult.error.message}`,
         );
     }
+
+    const existingDocument = existingDocumentResult.data;
 
     if (existingDocument?.id) {
         const { error: updateError } = await supabase

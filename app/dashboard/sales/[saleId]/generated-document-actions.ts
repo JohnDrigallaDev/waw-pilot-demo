@@ -291,11 +291,8 @@ export async function generateSaleDocumentAction(formData: FormData) {
         });
     }
 
-    revalidatePath(`/dashboard/sales/${saleId}`);
-    revalidatePath("/dashboard/sales");
+    revalidatePath(`/dashboard/sales/${saleId}`, "page");
     revalidatePath("/dashboard/documents");
-    revalidatePath("/dashboard/checks");
-    revalidatePath("/dashboard/activities");
 
     redirect(
         `/dashboard/sales/${saleId}?generatedDocument=${encodeURIComponent(
