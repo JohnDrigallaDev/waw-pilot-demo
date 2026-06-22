@@ -115,10 +115,27 @@ export function SaleForm({
         useState<NewCustomerType>("company");
 
     const [saleType, setSaleType] = useState<SaleType>("inland");
+    const [selectedCustomerId, setSelectedCustomerId] = useState(
+        defaultCustomerId ?? "",
+    );
     const [netAmount, setNetAmount] = useState("");
     const [vatRate, setVatRate] = useState("19");
     const requiresExportDetails =
         saleType === "eu" || saleType === "export_third_country";
+    const selectedCustomer =
+        customers.find((customer) => customer.id === selectedCustomerId) ?? null;
+    const selectedCustomerMissingTaxNumber =
+        buyerMode === "existing" &&
+        saleType === "inland" &&
+        Boolean(selectedCustomer) &&
+        !selectedCustomer?.tax_number;
+    const selectedCustomerMissingVatId =
+        buyerMode === "existing" &&
+        saleType === "eu" &&
+        Boolean(selectedCustomer) &&
+        !selectedCustomer?.vat_id;
+    const requiresNewCustomerTaxNumber = buyerMode === "new" && saleType === "inland";
+    const requiresNewCustomerVatId = buyerMode === "new" && saleType === "eu";
 
     const today = new Date().toISOString().slice(0, 10);
     const previewNetAmount = parseDecimalInput(netAmount) ?? 0;
@@ -252,7 +269,10 @@ export function SaleForm({
                                     name="buyer_customer_id"
                                     required
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
-                                    defaultValue={defaultCustomerId ?? ""}
+                                    value={selectedCustomerId}
+                                    onChange={(event) =>
+                                        setSelectedCustomerId(event.target.value)
+                                    }
                                 >
                                     <option value="">Käufer auswählen</option>
                                     {customers.map((customer) => (
@@ -266,6 +286,20 @@ export function SaleForm({
                                     <p className="text-sm font-bold text-amber-700">
                                         Es gibt noch keine Kunden. Wähle „Neuen Käufer direkt
                                         anlegen“, um den Käufer im Verkauf zu erfassen.
+                                    </p>
+                                ) : null}
+
+                                {selectedCustomerMissingTaxNumber ? (
+                                    <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                                        Für Inland-Verkäufe muss beim Kunden eine
+                                        Steuernummer hinterlegt sein.
+                                    </p>
+                                ) : null}
+
+                                {selectedCustomerMissingVatId ? (
+                                    <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                                        Für EU-Verkäufe sollte beim Kunden eine
+                                        USt-IdNr. hinterlegt sein.
                                     </p>
                                 ) : null}
                             </div>
@@ -384,10 +418,21 @@ export function SaleForm({
                                         type="email"
                                     />
                                     <FormField label="Telefon" name="new_customer_phone" />
-                                    <FormField label="USt-ID" name="new_customer_vat_id" />
                                     <FormField
-                                        label="Steuernummer"
+                                        label={getRequiredLabel(
+                                            "USt-ID",
+                                            requiresNewCustomerVatId,
+                                        )}
+                                        name="new_customer_vat_id"
+                                        required={requiresNewCustomerVatId}
+                                    />
+                                    <FormField
+                                        label={getRequiredLabel(
+                                            "Steuernummer",
+                                            requiresNewCustomerTaxNumber,
+                                        )}
                                         name="new_customer_tax_number"
+                                        required={requiresNewCustomerTaxNumber}
                                     />
                                 </div>
                             </div>

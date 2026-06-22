@@ -159,6 +159,7 @@ async function createBuyerCustomerFromSaleForm(
     supabase: ReturnType<typeof createServerSupabaseClient>,
     companyId: string,
     formData: FormData,
+    saleType: SaleType,
 ): Promise<
     | {
     success: true;
@@ -205,6 +206,22 @@ async function createBuyerCustomerFromSaleForm(
         return {
             success: false,
             message: "Bitte gib Vorname und Nachname für den neuen Käufer ein.",
+        };
+    }
+
+    if (saleType === "inland" && !taxNumber) {
+        return {
+            success: false,
+            message:
+                "Für Inland-Verkäufe muss beim Kunden eine Steuernummer hinterlegt sein.",
+        };
+    }
+
+    if (saleType === "eu" && !vatId) {
+        return {
+            success: false,
+            message:
+                "Für EU-Verkäufe muss beim Kunden eine USt-IdNr. hinterlegt sein.",
         };
     }
 
@@ -351,6 +368,7 @@ export async function createSaleAction(
             supabase,
             companyId,
             formData,
+            saleType,
         );
 
         if (!createdCustomer.success) {
@@ -373,6 +391,38 @@ export async function createSaleAction(
         return {
             success: false,
             message: "Bitte wähle einen Käufer aus oder lege einen neuen Käufer an.",
+        };
+    }
+
+    const { data: buyerCustomer, error: buyerCustomerLoadError } = await supabase
+        .from("customers")
+        .select("tax_number, vat_id")
+        .eq("id", buyerCustomerId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (buyerCustomerLoadError || !buyerCustomer) {
+        return {
+            success: false,
+            message: `Käufer konnte nicht geladen werden: ${
+                buyerCustomerLoadError?.message ?? "Nicht gefunden"
+            }`,
+        };
+    }
+
+    if (saleType === "inland" && !buyerCustomer.tax_number) {
+        return {
+            success: false,
+            message:
+                "Für Inland-Verkäufe muss beim Kunden eine Steuernummer hinterlegt sein.",
+        };
+    }
+
+    if (saleType === "eu" && !buyerCustomer.vat_id) {
+        return {
+            success: false,
+            message:
+                "Für EU-Verkäufe muss beim Kunden eine USt-IdNr. hinterlegt sein.",
         };
     }
 

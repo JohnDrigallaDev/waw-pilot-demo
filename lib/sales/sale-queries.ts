@@ -90,6 +90,8 @@ type SaleQueryRow = {
         first_name: string | null;
         last_name: string | null;
         country: string;
+        tax_number: string | null;
+        vat_id: string | null;
     } | null;
 
     invoices: SupabaseRelation<InvoiceRelation>;
@@ -167,7 +169,9 @@ export async function getSales(): Promise<SaleRow[]> {
         company_name,
         first_name,
         last_name,
-        country
+        country,
+        tax_number,
+        vat_id
       ),
       invoices (
         id,
@@ -203,6 +207,16 @@ export async function getSales(): Promise<SaleRow[]> {
             requiredDocuments,
             documents: relatedDocuments,
         });
+        const missingRequiredDataLabels = [
+            saleType === "inland" && !customer?.tax_number
+                ? "Steuernummer beim Kunden fehlt."
+                : null,
+            saleType === "eu" && !customer?.vat_id
+                ? "USt-IdNr. beim Kunden fehlt."
+                : null,
+        ].filter((label): label is string => Boolean(label));
+        const isDocumentCheckComplete =
+            documentCheck.isComplete && missingRequiredDataLabels.length === 0;
 
         return {
             id: sale.id,
@@ -216,7 +230,7 @@ export async function getSales(): Promise<SaleRow[]> {
             gross_amount: Number(sale.gross_amount),
             status: sale.status,
             payment_status: sale.payment_status,
-            document_check_status: documentCheck.isComplete ? "complete" : "missing",
+            document_check_status: isDocumentCheckComplete ? "complete" : "missing",
             datev_status: sale.datev_status,
             notes: sale.notes,
             created_at: sale.created_at,
@@ -238,7 +252,10 @@ export async function getSales(): Promise<SaleRow[]> {
             required_documents_count: documentCheck.requiredCount,
             available_required_documents_count: documentCheck.availableCount,
             missing_required_documents_count: documentCheck.missingCount,
-            missing_required_document_labels: documentCheck.missingLabels,
+            missing_required_document_labels: [
+                ...documentCheck.missingLabels,
+                ...missingRequiredDataLabels,
+            ],
         };
     });
 }

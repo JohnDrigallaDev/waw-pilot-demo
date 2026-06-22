@@ -74,7 +74,12 @@ export function SaleDetail({
                                documentDeleted = false,
                                travelExpenseCreated = false,
                            }: SaleDetailProps) {
-    const isDocumentComplete = sale.missing_required_documents_count === 0;
+    const missingRequirementLabels = [
+        ...sale.missing_required_labels,
+        ...sale.missing_required_data_labels,
+    ];
+    const missingRequirementCount = missingRequirementLabels.length;
+    const isRequirementComplete = missingRequirementCount === 0;
     const existingInvoiceTypes = sale.invoices.map(
         (invoice) => invoice.invoice_type,
     );
@@ -178,12 +183,12 @@ export function SaleDetail({
                     label="Pflichtdokumente"
                     value={`${sale.available_required_documents_count} von ${sale.required_documents_count}`}
                     description={
-                        isDocumentComplete
+                        isRequirementComplete
                             ? "Verkaufsakte vollständig"
-                            : `${sale.missing_required_documents_count} fehlen`
+                            : `${missingRequirementCount} Anforderungen offen`
                     }
                     icon={FileWarning}
-                    tone={isDocumentComplete ? "success" : "danger"}
+                    tone={isRequirementComplete ? "success" : "danger"}
                 />
             </section>
 
@@ -213,6 +218,10 @@ export function SaleDetail({
                                 />
                                 <InfoRow label="E-Mail" value={sale.customer.email ?? "—"} />
                                 <InfoRow label="Telefon" value={sale.customer.phone ?? "—"} />
+                                <InfoRow
+                                    label="Steuernummer"
+                                    value={sale.customer.tax_number ?? "—"}
+                                />
                                 <InfoRow label="USt-ID" value={sale.customer.vat_id ?? "—"} />
                             </div>
                         </CardContent>
@@ -350,6 +359,45 @@ export function SaleDetail({
                                     title="Pflichtdokumente"
                                     description="Fehlende Unterlagen direkt hochladen und automatisch der Verkaufsakte zuordnen."
                                 />
+
+                                <div
+                                    className={
+                                        isRequirementComplete
+                                            ? "mt-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-4"
+                                            : "mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-4"
+                                    }
+                                >
+                                    <div className="flex items-start gap-3">
+                                        {isRequirementComplete ? (
+                                            <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700" />
+                                        ) : (
+                                            <FileWarning className="mt-0.5 size-5 shrink-0 text-amber-700" />
+                                        )}
+
+                                        <div>
+                                            <p
+                                                className={
+                                                    isRequirementComplete
+                                                        ? "font-extrabold text-emerald-950"
+                                                        : "font-extrabold text-amber-950"
+                                                }
+                                            >
+                                                {isRequirementComplete
+                                                    ? "Pflichtanforderungen vollständig"
+                                                    : `${sale.required_documents_count - sale.missing_required_documents_count} von ${sale.required_documents_count} Pflichtdokumenten erfüllt, ${missingRequirementCount} Anforderung(en) offen`}
+                                            </p>
+                                            {isRequirementComplete ? (
+                                                <p className="mt-1 text-sm font-semibold text-emerald-800">
+                                                    Alle Pflichtdokumente und relevanten Kundendaten sind vorhanden.
+                                                </p>
+                                            ) : (
+                                                <p className="mt-1 text-sm font-semibold leading-6 text-amber-800">
+                                                    Fehlt: {missingRequirementLabels.join(", ")}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="divide-y divide-slate-100">

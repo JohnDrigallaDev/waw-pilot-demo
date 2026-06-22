@@ -81,6 +81,7 @@ type SaleDetailQueryRow = {
         country: string | null;
         email: string | null;
         phone: string | null;
+        tax_number: string | null;
         vat_id: string | null;
     } | null;
 
@@ -143,6 +144,7 @@ export type SaleDetail = {
         country: string | null;
         email: string | null;
         phone: string | null;
+        tax_number: string | null;
         vat_id: string | null;
     };
 
@@ -167,6 +169,8 @@ export type SaleDetail = {
     required_documents_count: number;
     available_required_documents_count: number;
     missing_required_documents_count: number;
+    missing_required_labels: string[];
+    missing_required_data_labels: string[];
 };
 
 function getManyRelation<T>(relation: SupabaseRelation<T>): T[] {
@@ -249,6 +253,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         country,
         email,
         phone,
+        tax_number,
         vat_id
       ),
       invoices (
@@ -360,6 +365,18 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
     const availableRequiredDocumentsCount = requiredDocumentStatuses.filter(
         (document) => document.isAvailable,
     ).length;
+    const missingRequiredLabels = requiredDocumentStatuses
+        .filter((document) => !document.isAvailable)
+        .map((document) => document.label);
+
+    const missingRequiredDataLabels = [
+        saleType === "inland" && !sale.customers.tax_number
+            ? "Steuernummer beim Kunden fehlt."
+            : null,
+        saleType === "eu" && !sale.customers.vat_id
+            ? "USt-IdNr. beim Kunden fehlt."
+            : null,
+    ].filter((label): label is string => Boolean(label));
 
     const purchasePriceNet = Number(sale.vehicles.purchase_price_net ?? 0);
     const additionalCostsNet = Number(sale.vehicles.additional_costs_net ?? 0);
@@ -390,6 +407,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             country: sale.customers.country,
             email: sale.customers.email,
             phone: sale.customers.phone,
+            tax_number: sale.customers.tax_number,
             vat_id: sale.customers.vat_id,
         },
 
@@ -415,5 +433,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         available_required_documents_count: availableRequiredDocumentsCount,
         missing_required_documents_count:
             requiredDocumentStatuses.length - availableRequiredDocumentsCount,
+        missing_required_labels: missingRequiredLabels,
+        missing_required_data_labels: missingRequiredDataLabels,
     };
 }
