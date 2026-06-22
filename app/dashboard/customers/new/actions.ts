@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { isValidPhoneNumber } from "@/lib/validation/phone";
 
 type CreateCustomerState = {
     success: boolean;
@@ -96,6 +97,13 @@ export async function createCustomerAction(
         };
     }
 
+    if (!isValidPhoneNumber(phone)) {
+        return {
+            success: false,
+            message: "Bitte gib eine gültige Telefonnummer ein.",
+        };
+    }
+
     const { data: customer, error } = await supabase
         .from("customers")
         .insert({
@@ -141,5 +149,5 @@ export async function createCustomerAction(
         entityId: customer.id as string,
     });
 
-    redirect("/dashboard/customers");
+    redirect("/dashboard/customers?customerSaved=1");
 }

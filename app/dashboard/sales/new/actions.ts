@@ -11,6 +11,7 @@ import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { SaleType } from "@/lib/sales/sale-queries";
 import { logActivity } from "@/lib/activity/activity-log";
+import { isValidPhoneNumber } from "@/lib/validation/phone";
 
 type CreateSaleState = {
     success: boolean;
@@ -222,6 +223,13 @@ async function createBuyerCustomerFromSaleForm(
             success: false,
             message:
                 "Für EU-Verkäufe muss beim Kunden eine USt-IdNr. hinterlegt sein.",
+        };
+    }
+
+    if (!isValidPhoneNumber(phone)) {
+        return {
+            success: false,
+            message: "Bitte gib eine gültige Telefonnummer ein.",
         };
     }
 

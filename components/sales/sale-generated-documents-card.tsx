@@ -118,6 +118,7 @@ function GeneratedDocumentRow({
     wasJustGenerated: boolean;
 }) {
     const canOpenGenerated = Boolean(document.generatedDocument?.id);
+    const canOpenSigned = Boolean(document.signedDocument?.id);
     const isAutomaticDocument = document.generationMode === "automatic";
     const canGenerateNow = document.canGenerate && isAutomaticDocument;
     const showMissingFields = document.status === "missing_data";
@@ -326,6 +327,22 @@ function GeneratedDocumentRow({
                             >
                                 <ExternalLink className="mr-2 size-4" />
                                 Öffnen
+                            </Link>
+                        </Button>
+                    ) : null}
+
+                    {canOpenSigned ? (
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="h-11 rounded-2xl border-emerald-200 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100"
+                        >
+                            <Link
+                                href={`/api/documents/${document.signedDocument?.id}/file`}
+                                target="_blank"
+                            >
+                                <ExternalLink className="mr-2 size-4" />
+                                Öffnen Neu
                             </Link>
                         </Button>
                     ) : null}

@@ -39,6 +39,9 @@ function getYearOptions() {
 }
 
 export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
+    const requiresExportDetails =
+        details.sale_type === "eu" || details.sale_type === "export_third_country";
+
     return (
         <Card
             id="export-details"
@@ -66,17 +69,25 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
 
                     <div className="grid gap-4 md:grid-cols-2">
                         <FormField
-                            label="Zielort / Empfangsort"
+                            label={getRequiredLabel(
+                                "Zielort / Empfangsort",
+                                requiresExportDetails,
+                            )}
                             name="export_destination_city"
                             defaultValue={details.export_destination_city ?? ""}
                             placeholder="z. B. Wien"
+                            required={requiresExportDetails}
                         />
 
                         <FormField
-                            label="Zielland / Empfangsland"
+                            label={getRequiredLabel(
+                                "Zielland / Empfangsland",
+                                requiresExportDetails,
+                            )}
                             name="export_destination_country"
                             defaultValue={details.export_destination_country ?? ""}
                             placeholder="z. B. Österreich"
+                            required={requiresExportDetails}
                         />
 
                         <div className="space-y-2">
@@ -84,11 +95,15 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                                 htmlFor="export_arrival_month"
                                 className="font-bold text-slate-700"
                             >
-                                Monat des Gelangens
+                                {getRequiredLabel(
+                                    "Monat des Gelangens",
+                                    requiresExportDetails,
+                                )}
                             </Label>
                             <select
                                 id="export_arrival_month"
                                 name="export_arrival_month"
+                                required={requiresExportDetails}
                                 defaultValue={details.export_arrival_month ?? ""}
                                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                             >
@@ -105,11 +120,15 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                                 htmlFor="export_arrival_year"
                                 className="font-bold text-slate-700"
                             >
-                                Jahr des Gelangens
+                                {getRequiredLabel(
+                                    "Jahr des Gelangens",
+                                    requiresExportDetails,
+                                )}
                             </Label>
                             <select
                                 id="export_arrival_year"
                                 name="export_arrival_year"
+                                required={requiresExportDetails}
                                 defaultValue={details.export_arrival_year ?? ""}
                                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                             >
@@ -122,10 +141,14 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                         </div>
 
                         <FormField
-                            label="Verbringungs- / Übergabedatum"
+                            label={getRequiredLabel(
+                                "Verbringungs- / Übergabedatum",
+                                requiresExportDetails,
+                            )}
                             name="export_transport_date"
                             type="date"
                             defaultValue={details.export_transport_date ?? ""}
+                            required={requiresExportDetails}
                         />
 
                         <div className="space-y-2">
@@ -133,11 +156,15 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                                 htmlFor="export_transport_type"
                                 className="font-bold text-slate-700"
                             >
-                                Art der Verbringung
+                                {getRequiredLabel(
+                                    "Art der Verbringung",
+                                    requiresExportDetails,
+                                )}
                             </Label>
                             <select
                                 id="export_transport_type"
                                 name="export_transport_type"
+                                required={requiresExportDetails}
                                 defaultValue={details.export_transport_type ?? ""}
                                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                             >
@@ -156,10 +183,14 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                         </div>
 
                         <FormField
-                            label="Empfänger / Unterzeichner"
+                            label={getRequiredLabel(
+                                "Empfänger / Unterzeichner",
+                                requiresExportDetails,
+                            )}
                             name="export_receiver_name"
                             defaultValue={details.export_receiver_name ?? ""}
                             placeholder="Name der unterschreibenden Person"
+                            required={requiresExportDetails}
                         />
                     </div>
 
@@ -189,18 +220,24 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
     );
 }
 
+function getRequiredLabel(label: string, required: boolean): string {
+    return required ? `${label} *` : label;
+}
+
 function FormField({
                        label,
                        name,
                        type = "text",
                        defaultValue,
                        placeholder,
+                       required = false,
                    }: {
     label: string;
     name: string;
     type?: string;
     defaultValue: string;
     placeholder?: string;
+    required?: boolean;
 }) {
     return (
         <div className="space-y-2">
@@ -213,6 +250,7 @@ function FormField({
                 type={type}
                 defaultValue={defaultValue}
                 placeholder={placeholder}
+                required={required}
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
             />
         </div>

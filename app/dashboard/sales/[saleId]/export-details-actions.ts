@@ -26,6 +26,21 @@ export async function updateSaleExportDetailsAction(formData: FormData) {
         throw new Error("Verkauf fehlt.");
     }
 
+    const { data: saleData, error: saleLoadError } = await supabase
+        .from("sales")
+        .select("sale_type")
+        .eq("id", saleId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (saleLoadError || !saleData) {
+        throw new Error(
+            `Verkauf konnte nicht geladen werden: ${
+                saleLoadError?.message ?? "Nicht gefunden"
+            }`,
+        );
+    }
+
     const destinationCity = getStringValue(formData, "export_destination_city");
     const destinationCountry = getStringValue(
         formData,
@@ -36,6 +51,22 @@ export async function updateSaleExportDetailsAction(formData: FormData) {
     const transportDate = getStringValue(formData, "export_transport_date");
     const transportType = getStringValue(formData, "export_transport_type");
     const receiverName = getStringValue(formData, "export_receiver_name");
+    const requiresExportDetails =
+        saleData.sale_type === "eu" ||
+        saleData.sale_type === "export_third_country";
+
+    if (
+        requiresExportDetails &&
+        (!destinationCity ||
+            !destinationCountry ||
+            !arrivalMonth ||
+            !arrivalYear ||
+            !transportDate ||
+            !transportType ||
+            !receiverName)
+    ) {
+        redirect(`/dashboard/sales/${saleId}?exportDataError=1#export-details`);
+    }
 
     const { data, error } = await supabase
         .from("sales")
@@ -67,5 +98,5 @@ export async function updateSaleExportDetailsAction(formData: FormData) {
     revalidatePath("/dashboard/documents");
     revalidatePath("/dashboard/checks");
 
-    redirect(`/dashboard/sales/${saleId}#export-details`);
+    redirect(`/dashboard/sales/${saleId}?exportDataSaved=1#export-details`);
 }

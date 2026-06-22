@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type SaleExportDetails = {
     sale_id: string;
+    sale_type: "inland" | "eu" | "export_third_country";
     export_destination_city: string | null;
     export_destination_country: string | null;
     export_arrival_month: string | null;
@@ -23,6 +24,7 @@ export async function getSaleExportDetails(
         .select(
             `
             id,
+            sale_type,
             export_destination_city,
             export_destination_country,
             export_arrival_month,
@@ -46,6 +48,10 @@ export async function getSaleExportDetails(
 
     return {
         sale_id: data.id as string,
+        sale_type:
+            data.sale_type === "eu" || data.sale_type === "export_third_country"
+                ? data.sale_type
+                : "inland",
         export_destination_city: data.export_destination_city,
         export_destination_country: data.export_destination_country,
         export_arrival_month: data.export_arrival_month,

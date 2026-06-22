@@ -199,5 +199,5 @@ export async function updateVehicleAction(
     revalidatePath(`/dashboard/vehicles/${vehicleId}/edit`);
     revalidatePath("/dashboard/activities");
 
-    redirect(`/dashboard/vehicles/${vehicleId}`);
+    redirect(`/dashboard/vehicles/${vehicleId}?vehicleSaved=1`);
 }

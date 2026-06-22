@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { isValidPhoneNumber } from "@/lib/validation/phone";
 
 function getStringValue(formData: FormData, key: string): string | null {
     const value = formData.get(key);
@@ -58,6 +59,10 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
     const phone = getStringValue(formData, "phone");
     const vatId = getStringValue(formData, "vat_id");
 
+    if (!isValidPhoneNumber(phone)) {
+        throw new Error("Bitte gib eine gültige Telefonnummer ein.");
+    }
+
     const { data, error } = await supabase
         .from("customers")
         .update({
@@ -100,5 +105,5 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
     revalidatePath("/dashboard/checks");
     revalidatePath("/dashboard/activities");
 
-    redirect(`/dashboard/customers/${customerId}`);
+    redirect(`/dashboard/customers/${customerId}?customerSaved=1`);
 }

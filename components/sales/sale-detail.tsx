@@ -9,7 +9,6 @@ import {
     Receipt,
     RefreshCcw,
     Route,
-    Trash2,
     Truck,
     UserRound,
     Wallet,
@@ -46,10 +45,10 @@ import {
     markInvoicePaidAction,
     regenerateSaleInvoicePdfAction,
 } from "@/app/dashboard/sales/[saleId]/invoice-actions";
-import { deleteSaleDocumentAction } from "@/app/dashboard/sales/[saleId]/actions";
 import { SaleExportDetailsForm } from "@/components/sales/sale-export-details-form";
 import type { SaleExportDetails } from "@/lib/sales/sale-export-details-queries";
 import { FlashMessage } from "@/components/shared/flash-message";
+import { DeleteSaleDocumentForm } from "@/components/sales/delete-sale-document-form";
 
 type SaleDetailProps = {
     sale: SaleDetailType;
@@ -61,6 +60,8 @@ type SaleDetailProps = {
     documentUploaded?: boolean;
     documentDeleted?: boolean;
     travelExpenseCreated?: boolean;
+    exportDataSaved?: boolean;
+    exportDataError?: boolean;
 };
 
 export function SaleDetail({
@@ -73,6 +74,8 @@ export function SaleDetail({
                                documentUploaded = false,
                                documentDeleted = false,
                                travelExpenseCreated = false,
+                               exportDataSaved = false,
+                               exportDataError = false,
                            }: SaleDetailProps) {
     const missingRequirementLabels = [
         ...sale.missing_required_labels,
@@ -153,6 +156,29 @@ export function SaleDetail({
                     message="Reisekosten wurden erfasst."
                     description="Das Reisekostenformular wurde erzeugt und mit dieser Verkaufsakte verknüpft."
                 />
+            ) : null}
+
+            {exportDataSaved ? (
+                <FlashMessage message="Export- / Verbringungsdaten wurden gespeichert." />
+            ) : null}
+
+            {exportDataError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
+                            <FileWarning className="size-5" />
+                        </div>
+                        <div>
+                            <p className="font-extrabold text-red-950">
+                                Bitte fülle alle Export- / Verbringungsdaten aus.
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-red-800">
+                                Zielort, Zielland, Gelangensmonat, Gelangensjahr,
+                                Übergabedatum, Art der Verbringung und Empfänger sind erforderlich.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             ) : null}
 
             <StatusLegend />
@@ -461,7 +487,7 @@ export function SaleDetail({
                                                             </Button>
 
                                                             {requiredDocument.document.source === "uploaded" ? (
-                                                                <DeleteSaleDocumentButton
+                                                                <DeleteSaleDocumentForm
                                                                     saleId={sale.id}
                                                                     documentId={requiredDocument.document.id}
                                                                 />
@@ -578,7 +604,7 @@ export function SaleDetail({
                                                             </Link>
                                                         </Button>
                                                         {document.source === "uploaded" ? (
-                                                            <DeleteSaleDocumentButton
+                                                            <DeleteSaleDocumentForm
                                                                 saleId={sale.id}
                                                                 documentId={document.id}
                                                             />
@@ -738,29 +764,6 @@ function MarkSaleInvoicePaidButton({
                     ? "Anzahlung bezahlt"
                     : "Als bezahlt markieren"}
             </Button>
-        </form>
-    );
-}
-
-function DeleteSaleDocumentButton({
-                                      saleId,
-                                      documentId,
-                                  }: {
-    saleId: string;
-    documentId: string;
-}) {
-    return (
-        <form action={deleteSaleDocumentAction}>
-            <input type="hidden" name="sale_id" value={saleId} />
-            <input type="hidden" name="document_id" value={documentId} />
-
-            <button
-                type="submit"
-                className="inline-flex h-9 items-center justify-center rounded-xl border border-red-200 bg-white px-3 text-sm font-bold text-red-700 shadow-sm transition hover:bg-red-50"
-            >
-                <Trash2 className="mr-1 size-3.5" />
-                Löschen
-            </button>
         </form>
     );
 }

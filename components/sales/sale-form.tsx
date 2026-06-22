@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState, type ChangeEventHandler } from "react";
+import {
+    useActionState,
+    useState,
+    type ChangeEventHandler,
+    type FormEventHandler,
+} from "react";
 import {
     Building2,
     CalendarDays,
@@ -19,6 +24,7 @@ import { getCustomerDisplayName } from "@/lib/customers/customer-helpers";
 import type { VehicleRow } from "@/lib/vehicles/vehicle-queries";
 import { getVehicleDisplayName } from "@/lib/vehicles/vehicle-helpers";
 import { formatCurrency } from "@/lib/format/currency";
+import { phoneInputPattern, sanitizePhoneInput } from "@/lib/validation/phone";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -417,7 +423,18 @@ export function SaleForm({
                                         name="new_customer_email"
                                         type="email"
                                     />
-                                    <FormField label="Telefon" name="new_customer_phone" />
+                                    <FormField
+                                        label="Telefon"
+                                        name="new_customer_phone"
+                                        type="tel"
+                                        pattern={phoneInputPattern}
+                                        title="Bitte gib eine gültige Telefonnummer ein."
+                                        onInput={(event) => {
+                                            event.currentTarget.value = sanitizePhoneInput(
+                                                event.currentTarget.value,
+                                            );
+                                        }}
+                                    />
                                     <FormField
                                         label={getRequiredLabel(
                                             "USt-ID",
@@ -879,6 +896,9 @@ function FormField({
                        step,
                        value,
                        onChange,
+                       pattern,
+                       title,
+                       onInput,
                    }: {
     label: string;
     name: string;
@@ -889,6 +909,9 @@ function FormField({
     step?: string;
     value?: string;
     onChange?: ChangeEventHandler<HTMLInputElement>;
+    pattern?: string;
+    title?: string;
+    onInput?: FormEventHandler<HTMLInputElement>;
 }) {
     return (
         <div className="space-y-2">
@@ -905,6 +928,9 @@ function FormField({
                 step={step}
                 value={value}
                 onChange={onChange}
+                pattern={pattern}
+                title={title}
+                onInput={onInput}
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-medium"
             />
         </div>

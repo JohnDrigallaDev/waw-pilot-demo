@@ -14,6 +14,8 @@ type SaleDetailPageProps = {
         documentDeleted?: string;
         documentUploaded?: string;
         travelExpenseCreated?: string;
+        exportDataSaved?: string;
+        exportDataError?: string;
     }>;
 };
 
@@ -43,6 +45,8 @@ export default async function SaleDetailPage({
             documentUploaded={resolvedSearchParams.documentUploaded === "1"}
             documentDeleted={resolvedSearchParams.documentDeleted === "1"}
             travelExpenseCreated={resolvedSearchParams.travelExpenseCreated === "1"}
+            exportDataSaved={resolvedSearchParams.exportDataSaved === "1"}
+            exportDataError={resolvedSearchParams.exportDataError === "1"}
         />
     );
 }

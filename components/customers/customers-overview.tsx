@@ -24,6 +24,7 @@ import {
 } from "@/lib/customers/customer-helpers";
 import { formatDate } from "@/lib/format/date";
 import { PageHeader } from "@/components/shared/page-header";
+import { FlashMessage } from "@/components/shared/flash-message";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
@@ -32,9 +33,13 @@ import { Input } from "@/components/ui/input";
 
 type CustomersOverviewProps = {
     customers: CustomerRow[];
+    customerSaved?: boolean;
 };
 
-export function CustomersOverview({ customers }: CustomersOverviewProps) {
+export function CustomersOverview({
+                                      customers,
+                                      customerSaved = false,
+                                  }: CustomersOverviewProps) {
     const [query, setQuery] = useState("");
 
     const filteredCustomers = useMemo(() => {
@@ -102,6 +107,10 @@ export function CustomersOverview({ customers }: CustomersOverviewProps) {
                     </Button>
                 }
             />
+
+            {customerSaved ? (
+                <FlashMessage message="Kundendaten wurden gespeichert." />
+            ) : null}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <CustomerStatCard

@@ -31,12 +31,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { updateCustomerMasterDataAction } from "@/app/dashboard/customers/[customerId]/actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FlashMessage } from "@/components/shared/flash-message";
+import { phoneInputPattern } from "@/lib/validation/phone";
 
 type CustomerDetailProps = {
     customer: CustomerDetailType;
+    customerSaved?: boolean;
 };
 
-export function CustomerDetail({ customer }: CustomerDetailProps) {
+export function CustomerDetail({
+                                   customer,
+                                   customerSaved = false,
+                               }: CustomerDetailProps) {
     const sellerVehicles = customer.vehicles.filter(
         (vehicle) => vehicle.role === "seller",
     );
@@ -64,6 +70,10 @@ export function CustomerDetail({ customer }: CustomerDetailProps) {
                     </Button>
                 }
             />
+
+            {customerSaved ? (
+                <FlashMessage message="Kundendaten wurden gespeichert." />
+            ) : null}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <CustomerStatCard
@@ -182,8 +192,11 @@ export function CustomerDetail({ customer }: CustomerDetailProps) {
                                         <CustomerFormField
                                             label="Telefon"
                                             name="phone"
+                                            type="tel"
                                             defaultValue={customer.phone ?? ""}
                                             placeholder="+49 ..."
+                                            pattern={phoneInputPattern}
+                                            title="Bitte gib eine gültige Telefonnummer ein."
                                         />
 
                                         <CustomerFormField
@@ -584,12 +597,16 @@ function CustomerFormField({
                                type = "text",
                                defaultValue,
                                placeholder,
+                               pattern,
+                               title,
                            }: {
     label: string;
     name: string;
     type?: string;
     defaultValue: string;
     placeholder?: string;
+    pattern?: string;
+    title?: string;
 }) {
     return (
         <div className="space-y-2">
@@ -602,6 +619,8 @@ function CustomerFormField({
                 type={type}
                 defaultValue={defaultValue}
                 placeholder={placeholder}
+                pattern={pattern}
+                title={title}
                 className="h-11 rounded-2xl border-slate-200 bg-white font-semibold"
             />
         </div>

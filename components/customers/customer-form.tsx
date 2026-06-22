@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState, type FormEventHandler } from "react";
 import { Building2, Save, UserRound } from "lucide-react";
 
 import { createCustomerAction } from "@/app/dashboard/customers/new/actions";
+import { phoneInputPattern, sanitizePhoneInput } from "@/lib/validation/phone";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +22,9 @@ export function CustomerForm() {
     const [state, formAction, isPending] = useActionState(
         createCustomerAction,
         initialState,
+    );
+    const [customerType, setCustomerType] = useState<"company" | "private">(
+        "company",
     );
 
     return (
@@ -59,12 +63,19 @@ export function CustomerForm() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                            <label className="group cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60">
+                            <label
+                                className={
+                                    customerType === "company"
+                                        ? "group cursor-pointer rounded-3xl border border-cyan-300 bg-cyan-50 p-4 ring-4 ring-cyan-100 transition-all hover:border-cyan-300"
+                                        : "group cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60"
+                                }
+                            >
                                 <input
                                     type="radio"
                                     name="type"
                                     value="company"
-                                    defaultChecked
+                                    checked={customerType === "company"}
+                                    onChange={() => setCustomerType("company")}
                                     className="peer sr-only"
                                 />
                                 <div className="flex items-center gap-3">
@@ -80,11 +91,19 @@ export function CustomerForm() {
                                 </div>
                             </label>
 
-                            <label className="group cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60">
+                            <label
+                                className={
+                                    customerType === "private"
+                                        ? "group cursor-pointer rounded-3xl border border-cyan-300 bg-cyan-50 p-4 ring-4 ring-cyan-100 transition-all hover:border-cyan-300"
+                                        : "group cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60"
+                                }
+                            >
                                 <input
                                     type="radio"
                                     name="type"
                                     value="private"
+                                    checked={customerType === "private"}
+                                    onChange={() => setCustomerType("private")}
                                     className="peer sr-only"
                                 />
                                 <div className="flex items-center gap-3">
@@ -120,7 +139,18 @@ export function CustomerForm() {
                             <FormField label="Vorname" name="first_name" />
                             <FormField label="Nachname" name="last_name" />
                             <FormField label="E-Mail" name="email" type="email" />
-                            <FormField label="Telefon" name="phone" />
+                            <FormField
+                                label="Telefon"
+                                name="phone"
+                                type="tel"
+                                pattern={phoneInputPattern}
+                                title="Bitte gib eine gültige Telefonnummer ein."
+                                onInput={(event) => {
+                                    event.currentTarget.value = sanitizePhoneInput(
+                                        event.currentTarget.value,
+                                    );
+                                }}
+                            />
                         </div>
                     </CardContent>
                 </Card>
@@ -211,12 +241,18 @@ function FormField({
                        type = "text",
                        required = false,
                        defaultValue,
+                       pattern,
+                       title,
+                       onInput,
                    }: {
     label: string;
     name: string;
     type?: string;
     required?: boolean;
     defaultValue?: string;
+    pattern?: string;
+    title?: string;
+    onInput?: FormEventHandler<HTMLInputElement>;
 }) {
     return (
         <div className="space-y-2">
@@ -229,6 +265,9 @@ function FormField({
                 type={type}
                 required={required}
                 defaultValue={defaultValue}
+                pattern={pattern}
+                title={title}
+                onInput={onInput}
                 className="h-11 rounded-2xl border-slate-200 bg-slate-50 font-medium"
             />
         </div>

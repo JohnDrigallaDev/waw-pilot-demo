@@ -27,12 +27,17 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FlashMessage } from "@/components/shared/flash-message";
 
 type VehicleDetailProps = {
     vehicle: VehicleDetailType;
+    vehicleSaved?: boolean;
 };
 
-export function VehicleDetail({ vehicle }: VehicleDetailProps) {
+export function VehicleDetail({
+                                  vehicle,
+                                  vehicleSaved = false,
+                              }: VehicleDetailProps) {
     const estimatedProfit =
         vehicle.sale_price_net === null
             ? null
@@ -71,6 +76,10 @@ export function VehicleDetail({ vehicle }: VehicleDetailProps) {
                     </div>
                 }
             />
+
+            {vehicleSaved ? (
+                <FlashMessage message="Fahrzeugdaten wurden gespeichert." />
+            ) : null}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <VehicleStatCard
