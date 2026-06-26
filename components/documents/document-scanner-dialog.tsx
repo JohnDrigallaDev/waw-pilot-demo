@@ -68,7 +68,8 @@ type CvRuntime = {
 declare global {
     interface Window {
         cv?: CvRuntime;
-        jscanify?: JscanifyConstructor;
+        jscanify?: unknown;
+        Scanner?: unknown;
     }
 }
 
@@ -83,8 +84,45 @@ const MIN_DOCUMENT_AREA_RATIO = 0.08;
 const MIN_DOCUMENT_SIDE_RATIO = 0.25;
 const OPENCV_SCRIPT_SRC = "/vendor/jscanify-opencv.js";
 const JSCANIFY_SCRIPT_SRC = "/vendor/jscanify.js";
+const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
-let jscanifyPromise: Promise<JscanifyConstructor> | null = null;
+type JscanifyConstructorResult = {
+    Constructor: JscanifyConstructor;
+    label: string;
+    name: string;
+};
+
+type ScannerDebugState = {
+    camera: string;
+    videoSize: string;
+    openCvScript: string;
+    openCvRuntime: string;
+    jscanifyScript: string;
+    jscanifyConstructor: string;
+    scannerInstance: string;
+    lastDetection: string;
+    analysisSize: string;
+    analysisAttempts: number;
+    lastAnalysisAt: string;
+    lastError: string;
+};
+
+function getInitialDebugState(): ScannerDebugState {
+    return {
+        camera: "wartet",
+        videoSize: "-",
+        openCvScript: "wartet",
+        openCvRuntime: "nicht bereit",
+        jscanifyScript: "wartet",
+        jscanifyConstructor: "nicht gefunden",
+        scannerInstance: "wartet",
+        lastDetection: "-",
+        analysisSize: "-",
+        analysisAttempts: 0,
+        lastAnalysisAt: "-",
+        lastError: "-",
+    };
+}
 
 function createTimeoutError(message: string): Error {
     return new Error(message);
@@ -472,10 +510,39 @@ function isCvReady(value: unknown): boolean {
     );
 }
 
+function getJscanifyConstructor(): JscanifyConstructorResult | null {
+    const jscanifyExport = window.jscanify as
+        | {
+        default?: unknown;
+        Scanner?: unknown;
+    }
+        | undefined;
+    const candidates: Array<{ label: string; value: unknown }> = [
+        { label: "window.jscanify.default", value: jscanifyExport?.default },
+        { label: "window.jscanify.Scanner", value: jscanifyExport?.Scanner },
+        { label: "window.jscanify", value: window.jscanify },
+        { label: "window.Scanner", value: window.Scanner },
+    ];
+
+    for (const candidate of candidates) {
+        if (typeof candidate.value === "function") {
+            const Constructor = candidate.value as JscanifyConstructor;
+
+            return {
+                Constructor,
+                label: candidate.label,
+                name: Constructor.name || "anonymous",
+            };
+        }
+    }
+
+    return null;
+}
+
 function detectDocument(
     scanner: JscanifyScanner,
     canvas: HTMLCanvasElement,
-): { corners: DocumentCorners; areaRatio: number } | null {
+): { corners: DocumentCorners; areaRatio: number; reason?: string } | null {
     const cv = window.cv;
     if (!cv?.imread || !cv.contourArea) return null;
 
@@ -489,23 +556,29 @@ function detectDocument(
         const areaRatio = area / (canvas.width * canvas.height);
         const corners = getCompleteCorners(scanner.getCornerPoints(contour));
 
-        if (!corners || areaRatio < MIN_DOCUMENT_AREA_RATIO) return null;
+        if (!corners) return null;
+
+        if (areaRatio < MIN_DOCUMENT_AREA_RATIO) {
+            console.info("[scanner] contour rejected: small area", {
+                areaRatio,
+                minAreaRatio: MIN_DOCUMENT_AREA_RATIO,
+            });
+            return null;
+        }
 
         const dimensions = getDocumentDimensions(corners);
         const widthRatio = dimensions.width / canvas.width;
         const heightRatio = dimensions.height / canvas.height;
-        const aspectRatio =
-            Math.max(dimensions.width, dimensions.height) /
-            Math.max(1, Math.min(dimensions.width, dimensions.height));
 
         if (
             widthRatio < MIN_DOCUMENT_SIDE_RATIO &&
             heightRatio < MIN_DOCUMENT_SIDE_RATIO
         ) {
-            return null;
-        }
-
-        if (aspectRatio < 1.05 || aspectRatio > 2.7) {
+            console.info("[scanner] contour rejected: too small in frame", {
+                widthRatio,
+                heightRatio,
+                minSideRatio: MIN_DOCUMENT_SIDE_RATIO,
+            });
             return null;
         }
 
@@ -518,6 +591,7 @@ function detectDocument(
 
 function loadOpenCvScript(): Promise<void> {
     if (isCvReady(window.cv)) {
+        console.info("[scanner] cv runtime ready");
         return Promise.resolve();
     }
 
@@ -536,6 +610,7 @@ function loadOpenCvScript(): Promise<void> {
 
             settled = true;
             cleanup();
+            console.info("[scanner] cv runtime ready");
             resolve();
         };
 
@@ -548,7 +623,10 @@ function loadOpenCvScript(): Promise<void> {
             script.src = OPENCV_SCRIPT_SRC;
             script.async = true;
             script.dataset.documentScannerOpencv = "jscanify";
-            script.addEventListener("load", tryResolve);
+            script.addEventListener("load", () => {
+                console.info("[scanner] opencv script loaded");
+                tryResolve();
+            });
             script.addEventListener(
                 "error",
                 () => {
@@ -611,7 +689,12 @@ function loadScriptOnce(
             script.src = src;
             script.async = true;
             script.dataset.documentScannerScript = markerName;
-            script.addEventListener("load", tryResolve);
+            script.addEventListener("load", () => {
+                if (markerName === "jscanify") {
+                    console.info("[scanner] jscanify script loaded");
+                }
+                tryResolve();
+            });
             script.addEventListener(
                 "error",
                 () => {
@@ -635,33 +718,6 @@ function loadScriptOnce(
 
         tryResolve();
     });
-}
-
-function loadJscanify(): Promise<JscanifyConstructor> {
-    if (jscanifyPromise) return jscanifyPromise;
-
-    jscanifyPromise = loadOpenCvScript()
-        .then(() =>
-            loadScriptOnce(
-                JSCANIFY_SCRIPT_SRC,
-                "jscanify",
-                () => typeof window.jscanify === "function",
-                "jscanify konnte nicht geladen werden.",
-            ),
-        )
-        .then(() => {
-            if (typeof window.jscanify !== "function") {
-                throw new Error("jscanify ist nicht verfügbar.");
-            }
-
-            return window.jscanify;
-        })
-        .catch((error) => {
-            jscanifyPromise = null;
-            throw error;
-        });
-
-    return jscanifyPromise;
 }
 
 export function DocumentScannerDialog({
@@ -692,6 +748,17 @@ export function DocumentScannerDialog({
         "Dokument vollständig ins Bild halten oder Foto übernehmen",
     );
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [debugState, setDebugState] =
+        useState<ScannerDebugState>(getInitialDebugState);
+
+    const updateDebug = useCallback((partialState: Partial<ScannerDebugState>) => {
+        if (!IS_DEVELOPMENT) return;
+
+        setDebugState((currentState) => ({
+            ...currentState,
+            ...partialState,
+        }));
+    }, []);
 
     const stopScanner = useCallback(() => {
         if (detectionIntervalRef.current !== null) {
@@ -716,13 +783,18 @@ export function DocumentScannerDialog({
         detectedCanvasSizeRef.current = null;
         setDocumentDetected(false);
         setScanHint("Dokument vollständig ins Bild halten oder Foto übernehmen");
+        updateDebug({
+            scannerInstance: "wartet",
+            lastDetection: "-",
+            analysisSize: "-",
+        });
 
         const overlayCanvas = overlayCanvasRef.current;
         const overlayContext = overlayCanvas?.getContext("2d");
         if (overlayCanvas && overlayContext) {
             overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         }
-    }, []);
+    }, [updateDebug]);
 
     const resetScannerState = useCallback(() => {
         setIsLoadingScanner(false);
@@ -737,6 +809,7 @@ export function DocumentScannerDialog({
         detectedCanvasSizeRef.current = null;
         setScanHint("Dokument vollständig ins Bild halten oder Foto übernehmen");
         setErrorMessage(null);
+        setDebugState(getInitialDebugState());
     }, []);
 
     const handleCancel = useCallback(() => {
@@ -770,11 +843,22 @@ export function DocumentScannerDialog({
             const analysisHeight = Math.round(
                 video.videoHeight * (analysisWidth / video.videoWidth),
             );
+            const analysisSize = `${analysisWidth} x ${analysisHeight}`;
 
             frameCanvas.width = analysisWidth;
             frameCanvas.height = analysisHeight;
             overlayCanvas.width = analysisWidth;
             overlayCanvas.height = analysisHeight;
+
+            if (IS_DEVELOPMENT) {
+                setDebugState((currentState) => ({
+                    ...currentState,
+                    analysisAttempts: currentState.analysisAttempts + 1,
+                    analysisSize,
+                    videoSize: `${video.videoWidth} x ${video.videoHeight}`,
+                    lastAnalysisAt: new Date().toLocaleTimeString("de-DE"),
+                }));
+            }
 
             const frameContext = frameCanvas.getContext("2d", {
                 willReadFrequently: true,
@@ -786,16 +870,22 @@ export function DocumentScannerDialog({
             const detectedDocument = detectDocument(scanner, frameCanvas);
 
             if (!detectedDocument) {
+                console.info("[scanner] no contour found");
                 detectedCornersRef.current = null;
                 detectedCanvasSizeRef.current = null;
                 drawDocumentOutline(overlayCanvas, null);
                 setDocumentDetected(false);
+                updateDebug({
+                    lastDetection: "keine Kontur",
+                    lastError: "-",
+                });
                 setScanHint(
                     "Dokument vollständig ins Bild halten. Achte auf guten Kontrast zum Hintergrund.",
                 );
                 return;
             }
 
+            console.info("[scanner] contour found", detectedDocument.corners);
             detectedCornersRef.current = detectedDocument.corners;
             detectedCanvasSizeRef.current = {
                 width: frameCanvas.width,
@@ -803,17 +893,31 @@ export function DocumentScannerDialog({
             };
             drawDocumentOutline(overlayCanvas, detectedDocument.corners);
             setDocumentDetected(true);
+            updateDebug({
+                lastDetection: `Kontur gefunden (${Math.round(
+                    detectedDocument.areaRatio * 100,
+                )}%)`,
+                lastError: "-",
+            });
             setScanHint("Dokument erkannt - ruhig halten und Scan übernehmen");
-        } catch {
+        } catch (error) {
+            console.warn("[scanner] contour detection failed", error);
             detectedCornersRef.current = null;
             detectedCanvasSizeRef.current = null;
             drawDocumentOutline(overlayCanvas, null);
             setDocumentDetected(false);
+            updateDebug({
+                lastDetection: "Fehler",
+                lastError:
+                    error instanceof Error
+                        ? error.message
+                        : "Dokumenterkennung fehlgeschlagen",
+            });
             setScanHint("Achte auf gute Beleuchtung und halte das Dokument näher an die Kamera.");
         } finally {
             detectionRunningRef.current = false;
         }
-    }, []);
+    }, [updateDebug]);
 
     const startDetection = useCallback(() => {
         const video = videoRef.current;
@@ -846,20 +950,74 @@ export function DocumentScannerDialog({
         async function startScannerLibrary() {
             setIsLoadingScanner(true);
             setIsScannerUnavailable(false);
+            updateDebug({
+                openCvScript: "wartet",
+                openCvRuntime: "nicht bereit",
+                jscanifyScript: "wartet",
+                jscanifyConstructor: "nicht gefunden",
+                scannerInstance: "wartet",
+                lastError: "-",
+            });
 
             try {
-                const Jscanify = await loadJscanify();
+                await loadOpenCvScript();
                 if (cancelled) return;
 
-                scannerRef.current = new Jscanify();
+                updateDebug({
+                    openCvScript: "geladen",
+                    openCvRuntime: isCvReady(window.cv) ? "bereit" : "nicht bereit",
+                });
+
+                await loadScriptOnce(
+                    JSCANIFY_SCRIPT_SRC,
+                    "jscanify",
+                    () => getJscanifyConstructor() !== null,
+                    "jscanify konnte nicht geladen werden.",
+                );
+                if (cancelled) return;
+
+                updateDebug({
+                    jscanifyScript: "geladen",
+                });
+
+                const scannerConstructor = getJscanifyConstructor();
+
+                if (!scannerConstructor) {
+                    throw new Error("jscanify Constructor wurde nicht gefunden.");
+                }
+
+                updateDebug({
+                    jscanifyConstructor: `${scannerConstructor.label} (${scannerConstructor.name})`,
+                });
+                console.info("[scanner] jscanify constructor", {
+                    export: scannerConstructor.label,
+                    name: scannerConstructor.name,
+                });
+
+                scannerRef.current = new scannerConstructor.Constructor();
+                console.info("[scanner] scanner instance created");
+                updateDebug({
+                    scannerInstance: "erstellt",
+                });
                 setIsScannerUnavailable(false);
                 startDetection();
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
 
                 scannerRef.current = null;
                 setIsScannerUnavailable(true);
                 setDocumentDetected(false);
+                updateDebug({
+                    openCvRuntime: isCvReady(window.cv) ? "bereit" : "nicht bereit",
+                    jscanifyConstructor: getJscanifyConstructor()
+                        ? "gefunden"
+                        : "nicht gefunden",
+                    scannerInstance: "Fehler",
+                    lastError:
+                        error instanceof Error
+                            ? error.message
+                            : "Scanner konnte nicht initialisiert werden.",
+                });
             } finally {
                 if (!cancelled) setIsLoadingScanner(false);
             }
@@ -875,10 +1033,17 @@ export function DocumentScannerDialog({
                 }
 
                 setIsOpeningCamera(true);
+                updateDebug({
+                    camera: "wartet",
+                    lastError: "-",
+                });
                 const stream = await getCameraStreamWithFallback((lateStream) => {
                     stopMediaStream(lateStream);
                 });
                 console.info("[scanner] getUserMedia resolved");
+                updateDebug({
+                    camera: "bereit",
+                });
 
                 if (cancelled) {
                     stopMediaStream(stream);
@@ -908,8 +1073,11 @@ export function DocumentScannerDialog({
 
                 setIsVideoReady(true);
                 setCanCapturePhoto(true);
+                updateDebug({
+                    videoSize: `${video.videoWidth} x ${video.videoHeight}`,
+                });
                 startDetection();
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
 
                 const hadStream = Boolean(streamRef.current);
@@ -919,6 +1087,13 @@ export function DocumentScannerDialog({
                 setIsVideoReady(false);
                 setCanCapturePhoto(false);
                 setErrorMessage(getCameraErrorMessage(hadStream));
+                updateDebug({
+                    camera: "Fehler",
+                    lastError:
+                        error instanceof Error
+                            ? error.message
+                            : getCameraErrorMessage(hadStream),
+                });
                 return;
             } finally {
                 if (!cancelled) {
@@ -935,7 +1110,7 @@ export function DocumentScannerDialog({
             cancelled = true;
             stopScanner();
         };
-    }, [open, resetScannerState, startDetection, stopScanner]);
+    }, [open, resetScannerState, startDetection, stopScanner, updateDebug]);
 
     useEffect(() => {
         if (!open) return;
@@ -948,11 +1123,15 @@ export function DocumentScannerDialog({
             setCanCapturePhoto(true);
             setIsVideoReady(true);
             setIsPreparingVideo(false);
+            updateDebug({
+                camera: "bereit",
+                videoSize: `${video.videoWidth} x ${video.videoHeight}`,
+            });
             startDetection();
         }, 150);
 
         return () => window.clearInterval(intervalId);
-    }, [open, startDetection]);
+    }, [open, startDetection, updateDebug]);
 
     async function handlePhotoCapture() {
         const video = videoRef.current;
@@ -1072,6 +1251,18 @@ export function DocumentScannerDialog({
         await handlePhotoCapture();
     }
 
+    function handleScannerTest() {
+        if (!scannerRef.current) {
+            updateDebug({
+                lastDetection: "Fehler",
+                lastError: "Scanner Instanz ist nicht verfügbar.",
+            });
+            return;
+        }
+
+        analyzeFrame();
+    }
+
     const hasCameraError = Boolean(errorMessage && !isVideoReady);
     const showCameraLoading = open && isOpeningCamera && !isVideoReady && !hasCameraError;
     const showVideoPreparing =
@@ -1187,6 +1378,38 @@ export function DocumentScannerDialog({
                 {errorMessage && isVideoReady ? (
                     <div className="rounded-2xl border border-red-700 bg-red-950/70 px-4 py-3 text-sm font-bold text-red-200">
                         {errorMessage}
+                    </div>
+                ) : null}
+
+                {IS_DEVELOPMENT ? (
+                    <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 text-xs text-slate-200">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-extrabold uppercase tracking-wide text-cyan-300">
+                                Scanner Debug
+                            </p>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 border-slate-600 bg-slate-950 px-3 text-xs text-white hover:bg-slate-800"
+                                onClick={handleScannerTest}
+                            >
+                                Scanner-Test aus aktuellem Frame
+                            </Button>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            <p>Kamera: {debugState.camera}</p>
+                            <p>Video: {debugState.videoSize}</p>
+                            <p>OpenCV Script: {debugState.openCvScript}</p>
+                            <p>OpenCV Runtime: {debugState.openCvRuntime}</p>
+                            <p>jscanify Script: {debugState.jscanifyScript}</p>
+                            <p>jscanify Constructor: {debugState.jscanifyConstructor}</p>
+                            <p>Scanner Instanz: {debugState.scannerInstance}</p>
+                            <p>Letzte Erkennung: {debugState.lastDetection}</p>
+                            <p>Analyse-Canvas: {debugState.analysisSize}</p>
+                            <p>Analyse-Versuche: {debugState.analysisAttempts}</p>
+                            <p>Letzte Analyse: {debugState.lastAnalysisAt}</p>
+                            <p>Letzter Fehler: {debugState.lastError}</p>
+                        </div>
                     </div>
                 ) : null}
 
