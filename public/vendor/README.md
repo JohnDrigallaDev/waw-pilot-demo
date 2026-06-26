@@ -1,9 +1,8 @@
-# OpenCV.js
+# jscanify OpenCV runtime
 
-`opencv.js` is the official browser build downloaded from:
+`jscanify-opencv.js` is copied from the installed `jscanify` package:
 
-https://docs.opencv.org/4.x/opencv.js
+`node_modules/jscanify/src/opencv.js`
 
-It is loaded dynamically only when the document scanner is opened. Keep the
-file at `public/vendor/opencv.js`; the scanner falls back to the regular upload
-flow when the script or camera cannot be loaded.
+The document scanner loads this file dynamically in the browser. If the runtime
+cannot be loaded, the scanner still allows a regular camera photo upload.
