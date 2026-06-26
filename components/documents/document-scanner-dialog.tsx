@@ -105,8 +105,7 @@ declare global {
 let openCvPromise: Promise<CvRuntime> | null = null;
 
 const OPEN_CV_TIMEOUT_MS = 12000;
-const CAMERA_TIMEOUT_MS = 9000;
-const VIDEO_READY_TIMEOUT_MS = 6000;
+const VIDEO_READY_TIMEOUT_MS = 20000;
 const OPEN_CV_POLL_INTERVAL_MS = 100;
 
 function createTimeoutError(message: string): Error {
@@ -140,8 +139,12 @@ function stopMediaStream(stream: MediaStream | null) {
     stream?.getTracks().forEach((track) => track.stop());
 }
 
+function isVideoDimensionReady(video: HTMLVideoElement): boolean {
+    return video.videoWidth > 0 && video.videoHeight > 0;
+}
+
 function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
-    if (video.videoWidth > 0 && video.videoHeight > 0) {
+    if (isVideoDimensionReady(video)) {
         return Promise.resolve();
     }
 
@@ -151,8 +154,10 @@ function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
 
         const cleanup = () => {
             video.removeEventListener("loadedmetadata", handleReady);
+            video.removeEventListener("loadeddata", handleReady);
             video.removeEventListener("canplay", handleReady);
             video.removeEventListener("playing", handleReady);
+            video.removeEventListener("resize", handleReady);
 
             if (intervalId !== null) {
                 window.clearInterval(intervalId);
@@ -164,24 +169,70 @@ function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
         };
 
         const handleReady = () => {
-            if (video.videoWidth === 0 || video.videoHeight === 0) return;
+            if (!isVideoDimensionReady(video)) return;
+
+            console.info("[scanner] video ready width/height", {
+                width: video.videoWidth,
+                height: video.videoHeight,
+                readyState: video.readyState,
+            });
 
             cleanup();
             resolve();
         };
 
         video.addEventListener("loadedmetadata", handleReady);
+        video.addEventListener("loadeddata", handleReady);
         video.addEventListener("canplay", handleReady);
         video.addEventListener("playing", handleReady);
+        video.addEventListener("resize", handleReady);
 
         intervalId = window.setInterval(handleReady, 150);
         timeoutId = window.setTimeout(() => {
             cleanup();
-            reject(createTimeoutError("Video konnte nicht gestartet werden."));
+            console.warn("[scanner] waitForVideoReady timeout", {
+                width: video.videoWidth,
+                height: video.videoHeight,
+                readyState: video.readyState,
+            });
+            reject(
+                createTimeoutError(
+                    "Kameravorschau konnte nicht gestartet werden.",
+                ),
+            );
         }, VIDEO_READY_TIMEOUT_MS);
 
         handleReady();
     });
+}
+
+function startVideoPlayback(video: HTMLVideoElement) {
+    console.info("[scanner] video.play started");
+    let playSettled = false;
+
+    void video.play().then(
+        () => {
+            playSettled = true;
+        },
+        () => {
+            playSettled = true;
+            console.warn("[scanner] video.play rejected/ignored");
+        },
+    );
+
+    window.setTimeout(() => {
+        if (!playSettled) {
+            console.warn("[scanner] video.play timeout/ignored");
+        }
+    }, 1000);
+}
+
+function getCameraErrorMessage(hasStream: boolean): string {
+    if (hasStream) {
+        return "Kameravorschau konnte nicht gestartet werden. Bitte Seite neu laden oder Datei manuell hochladen.";
+    }
+
+    return "Kamera konnte nicht geöffnet werden. Bitte Berechtigung prüfen oder Datei manuell hochladen.";
 }
 
 function isCvRuntime(value: unknown): value is CvRuntime {
@@ -430,22 +481,9 @@ async function getCameraStreamWithFallback(
     let lastError: unknown = null;
 
     for (const constraint of constraints) {
-        let timedOut = false;
-        const cameraPromise = navigator.mediaDevices
-            .getUserMedia(constraint)
-            .then((stream) => {
-                if (timedOut) onLateStream(stream);
-                return stream;
-            });
-
         try {
-            return await withTimeout(
-                cameraPromise,
-                CAMERA_TIMEOUT_MS,
-                "Kamera konnte nicht geöffnet werden.",
-            );
+            return await navigator.mediaDevices.getUserMedia(constraint);
         } catch (error) {
-            timedOut = true;
             lastError = error;
         }
     }
@@ -472,7 +510,9 @@ export function DocumentScannerDialog({
 
     const [isLoadingOpenCv, setIsLoadingOpenCv] = useState(false);
     const [isOpeningCamera, setIsOpeningCamera] = useState(false);
+    const [isPreparingVideo, setIsPreparingVideo] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
+    const [canCapturePhoto, setCanCapturePhoto] = useState(false);
     const [isProcessingScan, setIsProcessingScan] = useState(false);
     const [isOpenCvUnavailable, setIsOpenCvUnavailable] = useState(false);
     const [documentDetected, setDocumentDetected] = useState(false);
@@ -509,7 +549,9 @@ export function DocumentScannerDialog({
     const resetScannerState = useCallback(() => {
         setIsLoadingOpenCv(false);
         setIsOpeningCamera(false);
+        setIsPreparingVideo(false);
         setIsVideoReady(false);
+        setCanCapturePhoto(false);
         setIsProcessingScan(false);
         setIsOpenCvUnavailable(false);
         setDocumentDetected(false);
@@ -725,12 +767,15 @@ export function DocumentScannerDialog({
                         stopMediaStream(stream);
                     }
                 });
+                console.info("[scanner] getUserMedia resolved");
 
                 if (cancelled) {
                     stopMediaStream(stream);
                     return;
                 }
 
+                setIsOpeningCamera(false);
+                setIsPreparingVideo(true);
                 streamRef.current = stream;
 
                 const video = videoRef.current;
@@ -738,15 +783,18 @@ export function DocumentScannerDialog({
                     throw new Error("Kameravorschau konnte nicht initialisiert werden.");
                 }
 
-                video.srcObject = stream;
                 video.muted = true;
                 video.playsInline = true;
+                video.autoplay = true;
+                video.srcObject = stream;
+
+                console.info("[scanner] video srcObject set");
 
                 try {
                     await video.play();
-                } catch {
-                    // Safari can resolve video readiness via media events even when play()
-                    // is slow to settle. The readiness timeout below keeps this bounded.
+                    console.info("[scanner] video.play resolved");
+                } catch (error) {
+                    console.warn("[scanner] video.play failed", error);
                 }
 
                 await waitForVideoReady(video);
@@ -754,20 +802,23 @@ export function DocumentScannerDialog({
                 if (cancelled) return;
 
                 setIsVideoReady(true);
+                setCanCapturePhoto(true);
                 startAnalysis();
             } catch {
                 if (cancelled) return;
 
+                const hadStream = Boolean(streamRef.current);
                 stopScanner();
                 setIsOpeningCamera(false);
+                setIsPreparingVideo(false);
                 setIsVideoReady(false);
-                setErrorMessage(
-                    "Kamera konnte nicht geöffnet werden. Bitte Berechtigung prüfen oder Datei manuell hochladen.",
-                );
+                setCanCapturePhoto(false);
+                setErrorMessage(getCameraErrorMessage(hadStream));
                 return;
             } finally {
                 if (!cancelled) {
                     setIsOpeningCamera(false);
+                    setIsPreparingVideo(false);
                 }
             }
         }
@@ -780,6 +831,23 @@ export function DocumentScannerDialog({
             stopScanner();
         };
     }, [open, resetScannerState, startAnalysis, stopScanner]);
+
+    useEffect(() => {
+        if (!open) return;
+
+        const intervalId = window.setInterval(() => {
+            const video = videoRef.current;
+
+            if (!video || !isVideoDimensionReady(video)) return;
+
+            setCanCapturePhoto(true);
+            setIsVideoReady(true);
+            setIsPreparingVideo(false);
+            startAnalysis();
+        }, 150);
+
+        return () => window.clearInterval(intervalId);
+    }, [open, startAnalysis]);
 
     async function handlePhotoCapture() {
         const video = videoRef.current;
@@ -948,7 +1016,11 @@ export function DocumentScannerDialog({
     const hasCameraError = Boolean(errorMessage && !isVideoReady);
     const showCameraLoading = open && isOpeningCamera && !isVideoReady && !hasCameraError;
     const showVideoPreparing =
-        open && !isOpeningCamera && !isVideoReady && !hasCameraError;
+        open &&
+        isPreparingVideo &&
+        !isOpeningCamera &&
+        !isVideoReady &&
+        !hasCameraError;
     const primaryButtonLabel = isProcessingScan
         ? "Wird verarbeitet…"
         : cvRef.current && documentDetected
@@ -1003,7 +1075,7 @@ export function DocumentScannerDialog({
                                     <>
                                         <p className="mt-3 font-bold">Kamera wird geöffnet…</p>
                                         <p className="mt-1 text-sm text-slate-300">
-                                            Bitte Berechtigung prüfen.
+                                            Bitte Kamerazugriff erlauben.
                                         </p>
                                     </>
                                 ) : null}
@@ -1070,7 +1142,7 @@ export function DocumentScannerDialog({
                     </Button>
                     <Button
                         type="button"
-                        disabled={!isVideoReady || isProcessingScan}
+                        disabled={!canCapturePhoto || isProcessingScan}
                         className="h-11 bg-cyan-600 text-white hover:bg-cyan-500"
                         onClick={() => void handlePrimaryAction()}
                     >
