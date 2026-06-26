@@ -1,9 +1,11 @@
 "use client";
 
-import { useId, useRef, useState, useTransition } from "react";
-import { CheckCircle2, FileUp, Loader2 } from "lucide-react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { CheckCircle2, FileUp, Loader2, ScanLine } from "lucide-react";
 
 import { uploadSaleDocumentAction } from "@/app/dashboard/sales/[saleId]/actions";
+import { DocumentScannerDialog } from "@/components/documents/document-scanner-dialog";
+import { Button } from "@/components/ui/button";
 
 type SaleDocumentUploadFormProps = {
     saleId: string;
@@ -39,20 +41,24 @@ export function SaleDocumentUploadForm({
     const formRef = useRef<HTMLFormElement>(null);
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [scannerOpen, setScannerOpen] = useState(false);
+    const [cameraAvailable, setCameraAvailable] = useState(false);
     const [isPending, startTransition] = useTransition();
 
     const hasExistingDocument = Boolean(existingDocumentId);
     const displayFileName = selectedFileName ?? existingFileName;
 
-    function handleFileChange() {
+    useEffect(() => {
+        setCameraAvailable(Boolean(navigator.mediaDevices?.getUserMedia));
+    }, []);
+
+    function uploadFile(file: File) {
         const formElement = formRef.current;
 
         if (!formElement) return;
 
         const formData = new FormData(formElement);
-        const file = formData.get("file");
-
-        if (!(file instanceof File) || file.size === 0) return;
+        formData.set("file", file);
 
         setErrorMessage(null);
         setSelectedFileName(file.name);
@@ -73,6 +79,19 @@ export function SaleDocumentUploadForm({
                 setSelectedFileName(null);
             }
         });
+    }
+
+    function handleFileChange() {
+        const formElement = formRef.current;
+
+        if (!formElement) return;
+
+        const formData = new FormData(formElement);
+        const file = formData.get("file");
+
+        if (!(file instanceof File) || file.size === 0) return;
+
+        uploadFile(file);
     }
 
     return (
@@ -168,11 +187,32 @@ export function SaleDocumentUploadForm({
                 />
             </label>
 
+            <div className="mt-3 flex flex-wrap gap-2">
+                {cameraAvailable ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isPending}
+                        className="h-10 rounded-xl border-cyan-200 bg-cyan-50 font-bold text-cyan-800 hover:bg-cyan-100"
+                        onClick={() => setScannerOpen(true)}
+                    >
+                        <ScanLine className="size-4" />
+                        Dokument scannen
+                    </Button>
+                ) : null}
+            </div>
+
             {errorMessage ? (
                 <p className="mt-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
                     {errorMessage}
                 </p>
             ) : null}
+
+            <DocumentScannerDialog
+                open={scannerOpen}
+                onOpenChange={setScannerOpen}
+                onScanComplete={uploadFile}
+            />
         </form>
     );
 }
