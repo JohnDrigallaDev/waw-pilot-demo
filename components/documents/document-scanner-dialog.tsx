@@ -68,6 +68,7 @@ type CvRuntime = {
 declare global {
     interface Window {
         cv?: CvRuntime;
+        jscanify?: JscanifyConstructor;
     }
 }
 
@@ -78,9 +79,10 @@ const DETECTION_INTERVAL_MS = 700;
 const ANALYSIS_MAX_WIDTH = 1280;
 const OUTPUT_MAX_EDGE = 3000;
 const JPEG_QUALITY = 0.95;
-const MIN_DOCUMENT_AREA_RATIO = 0.16;
-const MIN_DOCUMENT_SIDE_RATIO = 0.34;
+const MIN_DOCUMENT_AREA_RATIO = 0.08;
+const MIN_DOCUMENT_SIDE_RATIO = 0.25;
 const OPENCV_SCRIPT_SRC = "/vendor/jscanify-opencv.js";
+const JSCANIFY_SCRIPT_SRC = "/vendor/jscanify.js";
 
 let jscanifyPromise: Promise<JscanifyConstructor> | null = null;
 
@@ -377,6 +379,26 @@ function drawDocumentOutline(
     });
 }
 
+function scaleCorners(
+    corners: DocumentCorners,
+    fromSize: { width: number; height: number },
+    toSize: { width: number; height: number },
+): DocumentCorners {
+    const scaleX = toSize.width / fromSize.width;
+    const scaleY = toSize.height / fromSize.height;
+    const scalePoint = (point: DocumentPoint) => ({
+        x: point.x * scaleX,
+        y: point.y * scaleY,
+    });
+
+    return {
+        topLeftCorner: scalePoint(corners.topLeftCorner),
+        topRightCorner: scalePoint(corners.topRightCorner),
+        bottomLeftCorner: scalePoint(corners.bottomLeftCorner),
+        bottomRightCorner: scalePoint(corners.bottomRightCorner),
+    };
+}
+
 async function getCameraStreamWithFallback(
     onLateStream: (stream: MediaStream) => void,
 ): Promise<MediaStream> {
@@ -552,16 +574,88 @@ function loadOpenCvScript(): Promise<void> {
     });
 }
 
+function loadScriptOnce(
+    src: string,
+    markerName: string,
+    isReady: () => boolean,
+    timeoutMessage: string,
+): Promise<void> {
+    if (isReady()) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        let intervalId: number | null = null;
+        let timeoutId: number | null = null;
+
+        const cleanup = () => {
+            if (intervalId !== null) window.clearInterval(intervalId);
+            if (timeoutId !== null) window.clearTimeout(timeoutId);
+        };
+
+        const tryResolve = () => {
+            if (!isReady() || settled) return;
+
+            settled = true;
+            cleanup();
+            resolve();
+        };
+
+        const existingScript = document.querySelector<HTMLScriptElement>(
+            `script[data-document-scanner-script="${markerName}"]`,
+        );
+
+        if (!existingScript) {
+            const script = document.createElement("script");
+            script.src = src;
+            script.async = true;
+            script.dataset.documentScannerScript = markerName;
+            script.addEventListener("load", tryResolve);
+            script.addEventListener(
+                "error",
+                () => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    reject(new Error(timeoutMessage));
+                },
+                { once: true },
+            );
+            document.head.appendChild(script);
+        }
+
+        intervalId = window.setInterval(tryResolve, 100);
+        timeoutId = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error(timeoutMessage));
+        }, SCANNER_LOAD_TIMEOUT_MS);
+
+        tryResolve();
+    });
+}
+
 function loadJscanify(): Promise<JscanifyConstructor> {
     if (jscanifyPromise) return jscanifyPromise;
 
-    jscanifyPromise = Promise.all([
-        loadOpenCvScript(),
-        import("jscanify/client") as Promise<{
-            default: JscanifyConstructor;
-        }>,
-    ])
-        .then(([, module]) => module.default)
+    jscanifyPromise = loadOpenCvScript()
+        .then(() =>
+            loadScriptOnce(
+                JSCANIFY_SCRIPT_SRC,
+                "jscanify",
+                () => typeof window.jscanify === "function",
+                "jscanify konnte nicht geladen werden.",
+            ),
+        )
+        .then(() => {
+            if (typeof window.jscanify !== "function") {
+                throw new Error("jscanify ist nicht verfügbar.");
+            }
+
+            return window.jscanify;
+        })
         .catch((error) => {
             jscanifyPromise = null;
             throw error;
@@ -582,6 +676,8 @@ export function DocumentScannerDialog({
     const streamRef = useRef<MediaStream | null>(null);
     const detectionIntervalRef = useRef<number | null>(null);
     const scannerRef = useRef<JscanifyScanner | null>(null);
+    const detectedCornersRef = useRef<DocumentCorners | null>(null);
+    const detectedCanvasSizeRef = useRef<{ width: number; height: number } | null>(null);
     const detectionRunningRef = useRef(false);
 
     const [isLoadingScanner, setIsLoadingScanner] = useState(false);
@@ -616,6 +712,8 @@ export function DocumentScannerDialog({
 
         detectionRunningRef.current = false;
         scannerRef.current = null;
+        detectedCornersRef.current = null;
+        detectedCanvasSizeRef.current = null;
         setDocumentDetected(false);
         setScanHint("Dokument vollständig ins Bild halten oder Foto übernehmen");
 
@@ -635,6 +733,8 @@ export function DocumentScannerDialog({
         setIsProcessingScan(false);
         setIsScannerUnavailable(false);
         setDocumentDetected(false);
+        detectedCornersRef.current = null;
+        detectedCanvasSizeRef.current = null;
         setScanHint("Dokument vollständig ins Bild halten oder Foto übernehmen");
         setErrorMessage(null);
     }, []);
@@ -686,6 +786,8 @@ export function DocumentScannerDialog({
             const detectedDocument = detectDocument(scanner, frameCanvas);
 
             if (!detectedDocument) {
+                detectedCornersRef.current = null;
+                detectedCanvasSizeRef.current = null;
                 drawDocumentOutline(overlayCanvas, null);
                 setDocumentDetected(false);
                 setScanHint(
@@ -694,10 +796,17 @@ export function DocumentScannerDialog({
                 return;
             }
 
+            detectedCornersRef.current = detectedDocument.corners;
+            detectedCanvasSizeRef.current = {
+                width: frameCanvas.width,
+                height: frameCanvas.height,
+            };
             drawDocumentOutline(overlayCanvas, detectedDocument.corners);
             setDocumentDetected(true);
             setScanHint("Dokument erkannt - ruhig halten und Scan übernehmen");
         } catch {
+            detectedCornersRef.current = null;
+            detectedCanvasSizeRef.current = null;
             drawDocumentOutline(overlayCanvas, null);
             setDocumentDetected(false);
             setScanHint("Achte auf gute Beleuchtung und halte das Dokument näher an die Kamera.");
@@ -891,14 +1000,27 @@ export function DocumentScannerDialog({
         try {
             drawVideoFrame(video, frameCanvas);
             const detectedDocument = detectDocument(scanner, frameCanvas);
+            const fallbackCorners =
+                detectedCornersRef.current && detectedCanvasSizeRef.current
+                    ? scaleCorners(detectedCornersRef.current, detectedCanvasSizeRef.current, {
+                        width: frameCanvas.width,
+                        height: frameCanvas.height,
+                    })
+                    : null;
+            const corners = detectedDocument?.corners ?? fallbackCorners;
 
-            if (!detectedDocument) {
+            if (!corners) {
                 setIsProcessingScan(false);
                 await handlePhotoCapture();
                 return;
             }
 
-            const documentDimensions = getDocumentDimensions(detectedDocument.corners);
+            detectedCornersRef.current = corners;
+            detectedCanvasSizeRef.current = {
+                width: frameCanvas.width,
+                height: frameCanvas.height,
+            };
+            const documentDimensions = getDocumentDimensions(corners);
             const scaledDimensions = getScaledDimensions(
                 documentDimensions.width,
                 documentDimensions.height,
@@ -908,7 +1030,7 @@ export function DocumentScannerDialog({
                 frameCanvas,
                 scaledDimensions.width,
                 scaledDimensions.height,
-                detectedDocument.corners,
+                corners,
             );
 
             if (!scannedCanvas) {
