@@ -19,13 +19,6 @@ type DocumentScannerDialogProps = {
     onScanComplete: (file: File) => void;
 };
 
-type ScannerStatus =
-    | "idle"
-    | "loading"
-    | "ready"
-    | "processing"
-    | "error";
-
 type DocumentPoint = {
     x: number;
     y: number;
@@ -110,6 +103,85 @@ declare global {
 }
 
 let openCvPromise: Promise<CvRuntime> | null = null;
+
+const OPEN_CV_TIMEOUT_MS = 12000;
+const CAMERA_TIMEOUT_MS = 9000;
+const VIDEO_READY_TIMEOUT_MS = 6000;
+
+function createTimeoutError(message: string): Error {
+    return new Error(message);
+}
+
+function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string,
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => {
+            reject(createTimeoutError(message));
+        }, timeoutMs);
+
+        promise.then(
+            (value) => {
+                window.clearTimeout(timeoutId);
+                resolve(value);
+            },
+            (error) => {
+                window.clearTimeout(timeoutId);
+                reject(error);
+            },
+        );
+    });
+}
+
+function stopMediaStream(stream: MediaStream | null) {
+    stream?.getTracks().forEach((track) => track.stop());
+}
+
+function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        let intervalId: number | null = null;
+        let timeoutId: number | null = null;
+
+        const cleanup = () => {
+            video.removeEventListener("loadedmetadata", handleReady);
+            video.removeEventListener("canplay", handleReady);
+            video.removeEventListener("playing", handleReady);
+
+            if (intervalId !== null) {
+                window.clearInterval(intervalId);
+            }
+
+            if (timeoutId !== null) {
+                window.clearTimeout(timeoutId);
+            }
+        };
+
+        const handleReady = () => {
+            if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
+            cleanup();
+            resolve();
+        };
+
+        video.addEventListener("loadedmetadata", handleReady);
+        video.addEventListener("canplay", handleReady);
+        video.addEventListener("playing", handleReady);
+
+        intervalId = window.setInterval(handleReady, 150);
+        timeoutId = window.setTimeout(() => {
+            cleanup();
+            reject(createTimeoutError("Video konnte nicht gestartet werden."));
+        }, VIDEO_READY_TIMEOUT_MS);
+
+        handleReady();
+    });
+}
 
 function isCvRuntime(value: unknown): value is CvRuntime {
     return Boolean(
@@ -271,9 +343,16 @@ export function DocumentScannerDialog({
     const cvRef = useRef<CvRuntime | null>(null);
     const analysisRunningRef = useRef(false);
 
-    const [status, setStatus] = useState<ScannerStatus>("idle");
+    const [isLoadingOpenCv, setIsLoadingOpenCv] = useState(false);
+    const [isOpeningCamera, setIsOpeningCamera] = useState(false);
+    const [isVideoReady, setIsVideoReady] = useState(false);
+    const [isProcessingScan, setIsProcessingScan] = useState(false);
     const [documentDetected, setDocumentDetected] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const isLoading =
+        open &&
+        (isLoadingOpenCv || isOpeningCamera || (!isVideoReady && !errorMessage));
 
     const stopScanner = useCallback(() => {
         if (intervalRef.current !== null) {
@@ -281,9 +360,19 @@ export function DocumentScannerDialog({
             intervalRef.current = null;
         }
 
-        streamRef.current?.getTracks().forEach((track) => track.stop());
+        stopMediaStream(streamRef.current);
         streamRef.current = null;
+
+        const video = videoRef.current;
+        if (video) {
+            video.pause();
+            video.srcObject = null;
+            video.removeAttribute("src");
+            video.load();
+        }
+
         detectedPointsRef.current = null;
+        cvRef.current = null;
         analysisRunningRef.current = false;
         setDocumentDetected(false);
 
@@ -292,6 +381,21 @@ export function DocumentScannerDialog({
             drawDetectedDocument(overlayCanvas, null);
         }
     }, []);
+
+    const resetScannerState = useCallback(() => {
+        setIsLoadingOpenCv(false);
+        setIsOpeningCamera(false);
+        setIsVideoReady(false);
+        setIsProcessingScan(false);
+        setDocumentDetected(false);
+        setErrorMessage(null);
+    }, []);
+
+    const handleCancel = useCallback(() => {
+        stopScanner();
+        resetScannerState();
+        onOpenChange(false);
+    }, [onOpenChange, resetScannerState, stopScanner]);
 
     const analyzeFrame = useCallback(() => {
         if (analysisRunningRef.current) return;
@@ -306,7 +410,9 @@ export function DocumentScannerDialog({
             !analysisCanvas ||
             !overlayCanvas ||
             !cv ||
-            video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+            video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+            video.videoWidth === 0 ||
+            video.videoHeight === 0
         ) {
             return;
         }
@@ -424,30 +530,39 @@ export function DocumentScannerDialog({
     useEffect(() => {
         if (!open) {
             stopScanner();
-            setStatus("idle");
-            setErrorMessage(null);
+            resetScannerState();
             return;
         }
 
         let cancelled = false;
 
         async function startScanner() {
-            setStatus("loading");
-            setErrorMessage(null);
+            stopScanner();
+            resetScannerState();
 
             let cv: CvRuntime;
 
             try {
-                cv = await loadOpenCv();
+                setIsLoadingOpenCv(true);
+                cv = await withTimeout(
+                    loadOpenCv(),
+                    OPEN_CV_TIMEOUT_MS,
+                    "OpenCV konnte nicht geladen werden.",
+                );
             } catch {
                 if (cancelled) return;
 
+                openCvPromise = null;
                 stopScanner();
-                setStatus("error");
+                setIsLoadingOpenCv(false);
                 setErrorMessage(
                     "Dokumentenscanner konnte nicht geladen werden. Bitte Foto aufnehmen oder Datei auswählen.",
                 );
                 return;
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingOpenCv(false);
+                }
             }
 
             try {
@@ -455,17 +570,34 @@ export function DocumentScannerDialog({
                     throw new Error("Kamera-API ist in diesem Browser nicht verfügbar.");
                 }
 
-                const stream = await navigator.mediaDevices.getUserMedia({
+                setIsOpeningCamera(true);
+                let cameraTimedOut = false;
+                const cameraPromise = navigator.mediaDevices.getUserMedia({
                     audio: false,
                     video: {
                         facingMode: { ideal: "environment" },
                         width: { ideal: 1920 },
                         height: { ideal: 1080 },
                     },
+                }).then((stream) => {
+                    if (cancelled || cameraTimedOut) {
+                        stopMediaStream(stream);
+                    }
+
+                    return stream;
+                });
+
+                const stream = await withTimeout(
+                    cameraPromise,
+                    CAMERA_TIMEOUT_MS,
+                    "Kamera konnte nicht geöffnet werden.",
+                ).catch((error) => {
+                    cameraTimedOut = true;
+                    throw error;
                 });
 
                 if (cancelled) {
-                    stream.getTracks().forEach((track) => track.stop());
+                    stopMediaStream(stream);
                     return;
                 }
 
@@ -478,8 +610,21 @@ export function DocumentScannerDialog({
                 }
 
                 video.srcObject = stream;
-                await video.play();
-                setStatus("ready");
+                video.muted = true;
+                video.playsInline = true;
+
+                try {
+                    await video.play();
+                } catch {
+                    // Safari can resolve video readiness via media events even when play()
+                    // is slow to settle. The readiness timeout below keeps this bounded.
+                }
+
+                await waitForVideoReady(video);
+
+                if (cancelled) return;
+
+                setIsVideoReady(true);
 
                 intervalRef.current = window.setInterval(analyzeFrame, 450);
                 analyzeFrame();
@@ -487,10 +632,16 @@ export function DocumentScannerDialog({
                 if (cancelled) return;
 
                 stopScanner();
-                setStatus("error");
+                setIsOpeningCamera(false);
+                setIsVideoReady(false);
                 setErrorMessage(
                     "Kamera konnte nicht geöffnet werden. Bitte Berechtigung prüfen oder Datei manuell hochladen.",
                 );
+                return;
+            } finally {
+                if (!cancelled) {
+                    setIsOpeningCamera(false);
+                }
             }
         }
 
@@ -500,7 +651,7 @@ export function DocumentScannerDialog({
             cancelled = true;
             stopScanner();
         };
-    }, [analyzeFrame, open, stopScanner]);
+    }, [analyzeFrame, open, resetScannerState, stopScanner]);
 
     async function handleScan() {
         const video = videoRef.current;
@@ -510,7 +661,7 @@ export function DocumentScannerDialog({
 
         if (!video || !detectedPoints || !cv || !outputCanvas) return;
 
-        setStatus("processing");
+        setIsProcessingScan(true);
         setErrorMessage(null);
 
         const frameCanvas = document.createElement("canvas");
@@ -522,7 +673,7 @@ export function DocumentScannerDialog({
         });
 
         if (!context) {
-            setStatus("ready");
+            setIsProcessingScan(false);
             setErrorMessage("Scan konnte nicht verarbeitet werden.");
             return;
         }
@@ -530,7 +681,11 @@ export function DocumentScannerDialog({
         context.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
 
         const analysisCanvas = analysisCanvasRef.current;
-        if (!analysisCanvas) return;
+        if (!analysisCanvas) {
+            setIsProcessingScan(false);
+            setErrorMessage("Scan konnte nicht verarbeitet werden.");
+            return;
+        }
 
         const scaleX = frameCanvas.width / analysisCanvas.width;
         const scaleY = frameCanvas.height / analysisCanvas.height;
@@ -598,7 +753,6 @@ export function DocumentScannerDialog({
             onScanComplete(file);
             onOpenChange(false);
         } catch {
-            setStatus("ready");
             setErrorMessage(
                 "Scan konnte nicht verarbeitet werden. Bitte Dokument erneut ausrichten oder Datei manuell hochladen.",
             );
@@ -608,6 +762,7 @@ export function DocumentScannerDialog({
             targetPoints?.delete();
             transform?.delete();
             output?.delete();
+            setIsProcessingScan(false);
         }
     }
 
@@ -631,6 +786,7 @@ export function DocumentScannerDialog({
                 <div className="relative overflow-hidden rounded-2xl bg-black">
                     <video
                         ref={videoRef}
+                        autoPlay
                         playsInline
                         muted
                         className="block max-h-[62dvh] w-full object-contain"
@@ -640,19 +796,39 @@ export function DocumentScannerDialog({
                         className="pointer-events-none absolute inset-0 size-full"
                     />
 
-                    {status === "loading" ? (
+                    {isLoading ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/85">
                             <div className="text-center">
                                 <Loader2 className="mx-auto size-8 animate-spin text-cyan-400" />
-                                <p className="mt-3 font-bold">Scanner wird geladen…</p>
-                                <p className="mt-1 text-sm text-slate-300">
-                                    Kamera wird geöffnet…
-                                </p>
+                                {isLoadingOpenCv ? (
+                                    <>
+                                        <p className="mt-3 font-bold">Scanner wird geladen…</p>
+                                        <p className="mt-1 text-sm text-slate-300">
+                                            OpenCV wird vorbereitet…
+                                        </p>
+                                    </>
+                                ) : null}
+                                {isOpeningCamera ? (
+                                    <>
+                                        <p className="mt-3 font-bold">Kamera wird geöffnet…</p>
+                                        <p className="mt-1 text-sm text-slate-300">
+                                            Bitte Berechtigung prüfen.
+                                        </p>
+                                    </>
+                                ) : null}
+                                {!isLoadingOpenCv && !isOpeningCamera && !isVideoReady ? (
+                                    <>
+                                        <p className="mt-3 font-bold">Kamera wird vorbereitet…</p>
+                                        <p className="mt-1 text-sm text-slate-300">
+                                            Videovorschau wird gestartet.
+                                        </p>
+                                    </>
+                                ) : null}
                             </div>
                         </div>
                     ) : null}
 
-                    {status === "error" ? (
+                    {errorMessage && !isLoading ? (
                         <div className="flex min-h-72 items-center justify-center p-6">
                             <div className="max-w-md text-center">
                                 <TriangleAlert className="mx-auto size-9 text-amber-400" />
@@ -668,7 +844,7 @@ export function DocumentScannerDialog({
                 <canvas ref={analysisCanvasRef} className="hidden" />
                 <canvas ref={outputCanvasRef} className="hidden" />
 
-                {status === "ready" ? (
+                {isVideoReady && !errorMessage ? (
                     <div
                         className={
                             documentDetected
@@ -682,33 +858,33 @@ export function DocumentScannerDialog({
                     </div>
                 ) : null}
 
-                {errorMessage && status !== "error" ? (
+                {errorMessage && isVideoReady ? (
                     <div className="rounded-2xl border border-red-700 bg-red-950/70 px-4 py-3 text-sm font-bold text-red-200">
                         {errorMessage}
                     </div>
                 ) : null}
 
-                <DialogFooter className="border-slate-700 bg-slate-900">
+                <DialogFooter className="sticky bottom-0 z-10 border-slate-700 bg-slate-900">
                     <Button
                         type="button"
                         variant="outline"
                         className="h-11 border-slate-600 bg-slate-900 text-white hover:bg-slate-800"
-                        onClick={() => onOpenChange(false)}
+                        onClick={handleCancel}
                     >
                         Abbrechen
                     </Button>
                     <Button
                         type="button"
-                        disabled={!documentDetected || status !== "ready"}
+                        disabled={!documentDetected || !isVideoReady || isProcessingScan}
                         className="h-11 bg-cyan-600 text-white hover:bg-cyan-500"
                         onClick={() => void handleScan()}
                     >
-                        {status === "processing" ? (
+                        {isProcessingScan ? (
                             <Loader2 className="size-4 animate-spin" />
                         ) : (
                             <Camera className="size-4" />
                         )}
-                        {status === "processing"
+                        {isProcessingScan
                             ? "Scan wird verarbeitet…"
                             : "Scan übernehmen"}
                     </Button>
