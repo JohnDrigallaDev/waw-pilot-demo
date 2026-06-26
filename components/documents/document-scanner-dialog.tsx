@@ -107,6 +107,7 @@ let openCvPromise: Promise<CvRuntime> | null = null;
 const OPEN_CV_TIMEOUT_MS = 12000;
 const CAMERA_TIMEOUT_MS = 9000;
 const VIDEO_READY_TIMEOUT_MS = 6000;
+const OPEN_CV_POLL_INTERVAL_MS = 100;
 
 function createTimeoutError(message: string): Error {
     return new Error(message);
@@ -184,11 +185,22 @@ function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
 }
 
 function isCvRuntime(value: unknown): value is CvRuntime {
+    if (!value || typeof value !== "object") return false;
+
+    const runtime = value as {
+        Mat?: unknown;
+        imread?: unknown;
+        Canny?: unknown;
+        findContours?: unknown;
+        warpPerspective?: unknown;
+    };
+
     return Boolean(
-        value &&
-            typeof value === "object" &&
-            "Mat" in value &&
-            typeof (value as { Mat?: unknown }).Mat === "function",
+        typeof runtime.Mat === "function" &&
+            typeof runtime.imread === "function" &&
+            typeof runtime.Canny === "function" &&
+            typeof runtime.findContours === "function" &&
+            typeof runtime.warpPerspective === "function",
     );
 }
 
@@ -196,23 +208,86 @@ function loadOpenCv(): Promise<CvRuntime> {
     if (openCvPromise) return openCvPromise;
 
     openCvPromise = new Promise<CvRuntime>((resolve, reject) => {
-        const resolveRuntime = async () => {
+        let settled = false;
+        let pollingStarted = false;
+        let pollIntervalId: number | null = null;
+        let timeoutId: number | null = null;
+
+        const cleanup = () => {
+            if (pollIntervalId !== null) {
+                window.clearInterval(pollIntervalId);
+                pollIntervalId = null;
+            }
+
+            if (timeoutId !== null) {
+                window.clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+        };
+
+        const resolveRuntime = (runtime: CvRuntime) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(runtime);
+        };
+
+        const rejectRuntime = (error: Error) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(error);
+        };
+
+        const checkRuntime = async () => {
             try {
                 const candidate = await Promise.resolve(window.cv);
 
                 if (isCvRuntime(candidate)) {
-                    resolve(candidate);
-                    return;
+                    resolveRuntime(candidate);
                 }
-
-                reject(new Error("OpenCV-Laufzeit ist nicht verfügbar."));
-            } catch (error) {
-                reject(error);
+            } catch {
+                // Keep polling until timeout. Some OpenCV builds expose a thenable
+                // before the runtime APIs are fully attached.
             }
         };
 
+        const wireRuntimeInitialized = () => {
+            const candidate = window.cv;
+            if (!candidate || typeof candidate !== "object") return;
+
+            const runtimeCandidate = candidate as {
+                onRuntimeInitialized?: () => void;
+            };
+
+            const previousCallback =
+                typeof runtimeCandidate.onRuntimeInitialized === "function"
+                    ? runtimeCandidate.onRuntimeInitialized
+                    : null;
+
+            runtimeCandidate.onRuntimeInitialized = () => {
+                previousCallback?.();
+                void checkRuntime();
+            };
+        };
+
+        const startPolling = () => {
+            if (pollingStarted || settled) return;
+
+            pollingStarted = true;
+            wireRuntimeInitialized();
+            void checkRuntime();
+            pollIntervalId = window.setInterval(
+                () => void checkRuntime(),
+                OPEN_CV_POLL_INTERVAL_MS,
+            );
+            timeoutId = window.setTimeout(() => {
+                rejectRuntime(new Error("OpenCV-Laufzeit ist nicht verfügbar."));
+            }, OPEN_CV_TIMEOUT_MS);
+        };
+
         if (window.cv) {
-            void resolveRuntime();
+            startPolling();
             return;
         }
 
@@ -221,14 +296,16 @@ function loadOpenCv(): Promise<CvRuntime> {
         );
 
         if (existingScript) {
-            existingScript.addEventListener("load", () => void resolveRuntime(), {
+            existingScript.addEventListener("load", startPolling, {
                 once: true,
             });
             existingScript.addEventListener(
                 "error",
-                () => reject(new Error("OpenCV.js konnte nicht geladen werden.")),
+                () =>
+                    rejectRuntime(new Error("OpenCV.js konnte nicht geladen werden.")),
                 { once: true },
             );
+            startPolling();
             return;
         }
 
@@ -236,12 +313,12 @@ function loadOpenCv(): Promise<CvRuntime> {
         script.src = "/vendor/opencv.js";
         script.async = true;
         script.dataset.documentScannerOpencv = "true";
-        script.addEventListener("load", () => void resolveRuntime(), {
+        script.addEventListener("load", startPolling, {
             once: true,
         });
         script.addEventListener(
             "error",
-            () => reject(new Error("OpenCV.js konnte nicht geladen werden.")),
+            () => rejectRuntime(new Error("OpenCV.js konnte nicht geladen werden.")),
             { once: true },
         );
         document.head.appendChild(script);
@@ -328,6 +405,56 @@ function canvasToFile(canvas: HTMLCanvasElement): Promise<File> {
     });
 }
 
+async function getCameraStreamWithFallback(
+    onLateStream: (stream: MediaStream) => void,
+): Promise<MediaStream> {
+    const constraints: MediaStreamConstraints[] = [
+        {
+            audio: false,
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+            },
+        },
+        {
+            audio: false,
+            video: { facingMode: "environment" },
+        },
+        {
+            audio: false,
+            video: true,
+        },
+    ];
+
+    let lastError: unknown = null;
+
+    for (const constraint of constraints) {
+        let timedOut = false;
+        const cameraPromise = navigator.mediaDevices
+            .getUserMedia(constraint)
+            .then((stream) => {
+                if (timedOut) onLateStream(stream);
+                return stream;
+            });
+
+        try {
+            return await withTimeout(
+                cameraPromise,
+                CAMERA_TIMEOUT_MS,
+                "Kamera konnte nicht geöffnet werden.",
+            );
+        } catch (error) {
+            timedOut = true;
+            lastError = error;
+        }
+    }
+
+    throw lastError instanceof Error
+        ? lastError
+        : new Error("Kamera konnte nicht geöffnet werden.");
+}
+
 export function DocumentScannerDialog({
                                           open,
                                           onOpenChange,
@@ -347,12 +474,9 @@ export function DocumentScannerDialog({
     const [isOpeningCamera, setIsOpeningCamera] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
     const [isProcessingScan, setIsProcessingScan] = useState(false);
+    const [isOpenCvUnavailable, setIsOpenCvUnavailable] = useState(false);
     const [documentDetected, setDocumentDetected] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-    const isLoading =
-        open &&
-        (isLoadingOpenCv || isOpeningCamera || (!isVideoReady && !errorMessage));
 
     const stopScanner = useCallback(() => {
         if (intervalRef.current !== null) {
@@ -387,6 +511,7 @@ export function DocumentScannerDialog({
         setIsOpeningCamera(false);
         setIsVideoReady(false);
         setIsProcessingScan(false);
+        setIsOpenCvUnavailable(false);
         setDocumentDetected(false);
         setErrorMessage(null);
     }, []);
@@ -527,6 +652,23 @@ export function DocumentScannerDialog({
         }
     }, []);
 
+    const startAnalysis = useCallback(() => {
+        const video = videoRef.current;
+
+        if (
+            intervalRef.current !== null ||
+            !cvRef.current ||
+            !video ||
+            video.videoWidth === 0 ||
+            video.videoHeight === 0
+        ) {
+            return;
+        }
+
+        intervalRef.current = window.setInterval(analyzeFrame, 450);
+        analyzeFrame();
+    }, [analyzeFrame]);
+
     useEffect(() => {
         if (!open) {
             stopScanner();
@@ -536,34 +678,41 @@ export function DocumentScannerDialog({
 
         let cancelled = false;
 
-        async function startScanner() {
-            stopScanner();
-            resetScannerState();
-
-            let cv: CvRuntime;
+        async function startOpenCvLoading() {
+            setIsLoadingOpenCv(true);
+            setIsOpenCvUnavailable(false);
 
             try {
-                setIsLoadingOpenCv(true);
-                cv = await withTimeout(
-                    loadOpenCv(),
-                    OPEN_CV_TIMEOUT_MS,
-                    "OpenCV konnte nicht geladen werden.",
-                );
+                const cv = await loadOpenCv();
+
+                if (cancelled) return;
+
+                cvRef.current = cv;
+                setIsOpenCvUnavailable(false);
+                startAnalysis();
             } catch {
                 if (cancelled) return;
 
                 openCvPromise = null;
-                stopScanner();
-                setIsLoadingOpenCv(false);
-                setErrorMessage(
-                    "Dokumentenscanner konnte nicht geladen werden. Bitte Foto aufnehmen oder Datei auswählen.",
-                );
-                return;
+                cvRef.current = null;
+                setIsOpenCvUnavailable(true);
+                detectedPointsRef.current = null;
+                setDocumentDetected(false);
+
+                const overlayCanvas = overlayCanvasRef.current;
+                if (overlayCanvas) {
+                    drawDetectedDocument(overlayCanvas, null);
+                }
             } finally {
                 if (!cancelled) {
                     setIsLoadingOpenCv(false);
                 }
             }
+        }
+
+        async function startCamera() {
+            stopScanner();
+            resetScannerState();
 
             try {
                 if (!navigator.mediaDevices?.getUserMedia) {
@@ -571,29 +720,10 @@ export function DocumentScannerDialog({
                 }
 
                 setIsOpeningCamera(true);
-                let cameraTimedOut = false;
-                const cameraPromise = navigator.mediaDevices.getUserMedia({
-                    audio: false,
-                    video: {
-                        facingMode: { ideal: "environment" },
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                    },
-                }).then((stream) => {
-                    if (cancelled || cameraTimedOut) {
+                const stream = await getCameraStreamWithFallback((stream) => {
+                    if (cancelled) {
                         stopMediaStream(stream);
                     }
-
-                    return stream;
-                });
-
-                const stream = await withTimeout(
-                    cameraPromise,
-                    CAMERA_TIMEOUT_MS,
-                    "Kamera konnte nicht geöffnet werden.",
-                ).catch((error) => {
-                    cameraTimedOut = true;
-                    throw error;
                 });
 
                 if (cancelled) {
@@ -601,7 +731,6 @@ export function DocumentScannerDialog({
                     return;
                 }
 
-                cvRef.current = cv;
                 streamRef.current = stream;
 
                 const video = videoRef.current;
@@ -625,9 +754,7 @@ export function DocumentScannerDialog({
                 if (cancelled) return;
 
                 setIsVideoReady(true);
-
-                intervalRef.current = window.setInterval(analyzeFrame, 450);
-                analyzeFrame();
+                startAnalysis();
             } catch {
                 if (cancelled) return;
 
@@ -645,21 +772,64 @@ export function DocumentScannerDialog({
             }
         }
 
-        void startScanner();
+        void startCamera();
+        void startOpenCvLoading();
 
         return () => {
             cancelled = true;
             stopScanner();
         };
-    }, [analyzeFrame, open, resetScannerState, stopScanner]);
+    }, [open, resetScannerState, startAnalysis, stopScanner]);
 
-    async function handleScan() {
+    async function handlePhotoCapture() {
+        const video = videoRef.current;
+        const outputCanvas = outputCanvasRef.current;
+
+        if (!video || !outputCanvas || video.videoWidth === 0 || video.videoHeight === 0) {
+            setErrorMessage("Foto konnte nicht verarbeitet werden.");
+            return;
+        }
+
+        setIsProcessingScan(true);
+        setErrorMessage(null);
+
+        try {
+            outputCanvas.width = video.videoWidth;
+            outputCanvas.height = video.videoHeight;
+
+            const context = outputCanvas.getContext("2d", {
+                willReadFrequently: true,
+            });
+
+            if (!context) {
+                throw new Error("Foto konnte nicht verarbeitet werden.");
+            }
+
+            context.drawImage(video, 0, 0, outputCanvas.width, outputCanvas.height);
+
+            const file = await canvasToFile(outputCanvas);
+            stopScanner();
+            onScanComplete(file);
+            onOpenChange(false);
+        } catch {
+            setErrorMessage(
+                "Foto konnte nicht verarbeitet werden. Bitte erneut versuchen oder Datei manuell hochladen.",
+            );
+        } finally {
+            setIsProcessingScan(false);
+        }
+    }
+
+    async function handlePerspectiveScan() {
         const video = videoRef.current;
         const detectedPoints = detectedPointsRef.current;
         const cv = cvRef.current;
         const outputCanvas = outputCanvasRef.current;
 
-        if (!video || !detectedPoints || !cv || !outputCanvas) return;
+        if (!video || !detectedPoints || !cv || !outputCanvas) {
+            await handlePhotoCapture();
+            return;
+        }
 
         setIsProcessingScan(true);
         setErrorMessage(null);
@@ -754,7 +924,7 @@ export function DocumentScannerDialog({
             onOpenChange(false);
         } catch {
             setErrorMessage(
-                "Scan konnte nicht verarbeitet werden. Bitte Dokument erneut ausrichten oder Datei manuell hochladen.",
+                "Scan konnte nicht verarbeitet werden. Du kannst stattdessen ein Foto übernehmen oder Datei manuell hochladen.",
             );
         } finally {
             source?.delete();
@@ -766,8 +936,37 @@ export function DocumentScannerDialog({
         }
     }
 
+    async function handlePrimaryAction() {
+        if (cvRef.current && detectedPointsRef.current) {
+            await handlePerspectiveScan();
+            return;
+        }
+
+        await handlePhotoCapture();
+    }
+
+    const hasCameraError = Boolean(errorMessage && !isVideoReady);
+    const showCameraLoading = open && isOpeningCamera && !isVideoReady && !hasCameraError;
+    const showVideoPreparing =
+        open && !isOpeningCamera && !isVideoReady && !hasCameraError;
+    const primaryButtonLabel = isProcessingScan
+        ? "Wird verarbeitet…"
+        : cvRef.current && documentDetected
+            ? "Scan übernehmen"
+            : "Foto übernehmen";
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(nextOpen) => {
+                if (!nextOpen) {
+                    handleCancel();
+                    return;
+                }
+
+                onOpenChange(true);
+            }}
+        >
             <DialogContent
                 showCloseButton={false}
                 className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-4xl overflow-y-auto rounded-2xl bg-slate-950 p-3 text-white sm:p-5"
@@ -796,19 +995,11 @@ export function DocumentScannerDialog({
                         className="pointer-events-none absolute inset-0 size-full"
                     />
 
-                    {isLoading ? (
+                    {showCameraLoading || showVideoPreparing ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/85">
                             <div className="text-center">
                                 <Loader2 className="mx-auto size-8 animate-spin text-cyan-400" />
-                                {isLoadingOpenCv ? (
-                                    <>
-                                        <p className="mt-3 font-bold">Scanner wird geladen…</p>
-                                        <p className="mt-1 text-sm text-slate-300">
-                                            OpenCV wird vorbereitet…
-                                        </p>
-                                    </>
-                                ) : null}
-                                {isOpeningCamera ? (
+                                {showCameraLoading ? (
                                     <>
                                         <p className="mt-3 font-bold">Kamera wird geöffnet…</p>
                                         <p className="mt-1 text-sm text-slate-300">
@@ -816,7 +1007,7 @@ export function DocumentScannerDialog({
                                         </p>
                                     </>
                                 ) : null}
-                                {!isLoadingOpenCv && !isOpeningCamera && !isVideoReady ? (
+                                {showVideoPreparing ? (
                                     <>
                                         <p className="mt-3 font-bold">Kamera wird vorbereitet…</p>
                                         <p className="mt-1 text-sm text-slate-300">
@@ -828,8 +1019,8 @@ export function DocumentScannerDialog({
                         </div>
                     ) : null}
 
-                    {errorMessage && !isLoading ? (
-                        <div className="flex min-h-72 items-center justify-center p-6">
+                    {hasCameraError ? (
+                        <div className="absolute inset-0 flex min-h-72 items-center justify-center bg-slate-950 p-6">
                             <div className="max-w-md text-center">
                                 <TriangleAlert className="mx-auto size-9 text-amber-400" />
                                 <p className="mt-4 font-extrabold">Scanner nicht verfügbar</p>
@@ -844,7 +1035,7 @@ export function DocumentScannerDialog({
                 <canvas ref={analysisCanvasRef} className="hidden" />
                 <canvas ref={outputCanvasRef} className="hidden" />
 
-                {isVideoReady && !errorMessage ? (
+                {isVideoReady ? (
                     <div
                         className={
                             documentDetected
@@ -852,9 +1043,13 @@ export function DocumentScannerDialog({
                                 : "rounded-2xl border border-amber-700 bg-amber-950/70 px-4 py-3 text-sm font-bold text-amber-200"
                         }
                     >
-                        {documentDetected
+                        {documentDetected && cvRef.current
                             ? "Dokument erkannt – Scan übernehmen"
-                            : "Dokument vollständig ins Bild halten"}
+                            : isOpenCvUnavailable
+                                ? "Automatische Erkennung nicht verfügbar – Foto kann trotzdem übernommen werden."
+                                : isLoadingOpenCv
+                                    ? "Dokumenterkennung wird geladen… Foto kann trotzdem übernommen werden."
+                                    : "Dokument vollständig ins Bild halten oder Foto übernehmen"}
                     </div>
                 ) : null}
 
@@ -875,18 +1070,16 @@ export function DocumentScannerDialog({
                     </Button>
                     <Button
                         type="button"
-                        disabled={!documentDetected || !isVideoReady || isProcessingScan}
+                        disabled={!isVideoReady || isProcessingScan}
                         className="h-11 bg-cyan-600 text-white hover:bg-cyan-500"
-                        onClick={() => void handleScan()}
+                        onClick={() => void handlePrimaryAction()}
                     >
                         {isProcessingScan ? (
                             <Loader2 className="size-4 animate-spin" />
                         ) : (
                             <Camera className="size-4" />
                         )}
-                        {isProcessingScan
-                            ? "Scan wird verarbeitet…"
-                            : "Scan übernehmen"}
+                        {primaryButtonLabel}
                     </Button>
                 </DialogFooter>
             </DialogContent>
