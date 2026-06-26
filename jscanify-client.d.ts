@@ -5,6 +5,8 @@ declare module "jscanify/client" {
     };
 
     export default class Jscanify {
+        findPaperContour(image: unknown): unknown | null;
+
         highlightPaper(
             image: HTMLCanvasElement,
             options?: JscanifyOptions,
@@ -14,6 +16,14 @@ declare module "jscanify/client" {
             image: HTMLCanvasElement,
             resultWidth: number,
             resultHeight: number,
+            cornerPoints?: unknown,
         ): HTMLCanvasElement | null;
+
+        getCornerPoints(contour: unknown): {
+            topLeftCorner?: { x: number; y: number };
+            topRightCorner?: { x: number; y: number };
+            bottomLeftCorner?: { x: number; y: number };
+            bottomRightCorner?: { x: number; y: number };
+        };
     }
 }

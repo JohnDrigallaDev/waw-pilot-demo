@@ -22,6 +22,7 @@ type DocumentScannerDialogProps = {
 type JscanifyConstructor = new () => JscanifyScanner;
 
 type JscanifyScanner = {
+    findPaperContour: (image: unknown) => CvContour | null;
     highlightPaper: (
         image: HTMLCanvasElement,
         options?: { color?: string; thickness?: number },
@@ -30,12 +31,43 @@ type JscanifyScanner = {
         image: HTMLCanvasElement,
         resultWidth: number,
         resultHeight: number,
+        cornerPoints?: DocumentCorners,
     ) => HTMLCanvasElement | null;
+    getCornerPoints: (contour: CvContour) => Partial<DocumentCorners>;
+};
+
+type DocumentPoint = {
+    x: number;
+    y: number;
+};
+
+type DocumentCorners = {
+    topLeftCorner: DocumentPoint;
+    topRightCorner: DocumentPoint;
+    bottomLeftCorner: DocumentPoint;
+    bottomRightCorner: DocumentPoint;
+};
+
+type CvContour = {
+    delete?: () => void;
+};
+
+type CvMat = {
+    delete?: () => void;
+};
+
+type CvRuntime = {
+    Mat?: unknown;
+    imread?: (source: HTMLCanvasElement) => CvMat;
+    Canny?: unknown;
+    findContours?: unknown;
+    warpPerspective?: unknown;
+    contourArea?: (contour: CvContour) => number;
 };
 
 declare global {
     interface Window {
-        cv?: unknown;
+        cv?: CvRuntime;
     }
 }
 
@@ -43,6 +75,11 @@ const CAMERA_TIMEOUT_MS = 9000;
 const VIDEO_READY_TIMEOUT_MS = 8000;
 const SCANNER_LOAD_TIMEOUT_MS = 12000;
 const DETECTION_INTERVAL_MS = 700;
+const ANALYSIS_MAX_WIDTH = 1280;
+const OUTPUT_MAX_EDGE = 3000;
+const JPEG_QUALITY = 0.95;
+const MIN_DOCUMENT_AREA_RATIO = 0.16;
+const MIN_DOCUMENT_SIDE_RATIO = 0.34;
 const OPENCV_SCRIPT_SRC = "/vendor/jscanify-opencv.js";
 
 let jscanifyPromise: Promise<JscanifyConstructor> | null = null;
@@ -196,14 +233,33 @@ function canvasToFile(canvas: HTMLCanvasElement): Promise<File> {
                 );
             },
             "image/jpeg",
-            0.92,
+            JPEG_QUALITY,
         );
     });
 }
 
-function drawVideoFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+function getScaledDimensions(
+    width: number,
+    height: number,
+    maxEdge: number,
+): { width: number; height: number } {
+    const longestEdge = Math.max(width, height);
+    const scale = longestEdge > maxEdge ? maxEdge / longestEdge : 1;
+
+    return {
+        width: Math.max(1, Math.round(width * scale)),
+        height: Math.max(1, Math.round(height * scale)),
+    };
+}
+
+function drawVideoFrame(
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    maxEdge = OUTPUT_MAX_EDGE,
+) {
+    const dimensions = getScaledDimensions(video.videoWidth, video.videoHeight, maxEdge);
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
 
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) {
@@ -213,10 +269,126 @@ function drawVideoFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement) {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 }
 
+function enhanceDocumentCanvas(canvas: HTMLCanvasElement) {
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return;
+
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const contrast = 1.08;
+    const brightness = 4;
+
+    for (let index = 0; index < data.length; index += 4) {
+        data[index] = Math.min(
+            255,
+            Math.max(0, (data[index] - 128) * contrast + 128 + brightness),
+        );
+        data[index + 1] = Math.min(
+            255,
+            Math.max(0, (data[index + 1] - 128) * contrast + 128 + brightness),
+        );
+        data[index + 2] = Math.min(
+            255,
+            Math.max(0, (data[index + 2] - 128) * contrast + 128 + brightness),
+        );
+    }
+
+    context.putImageData(imageData, 0, 0);
+}
+
+function distance(pointA: DocumentPoint, pointB: DocumentPoint): number {
+    return Math.hypot(pointA.x - pointB.x, pointA.y - pointB.y);
+}
+
+function getCompleteCorners(
+    corners: Partial<DocumentCorners>,
+): DocumentCorners | null {
+    const {
+        topLeftCorner,
+        topRightCorner,
+        bottomLeftCorner,
+        bottomRightCorner,
+    } = corners;
+
+    if (
+        !topLeftCorner ||
+        !topRightCorner ||
+        !bottomLeftCorner ||
+        !bottomRightCorner
+    ) {
+        return null;
+    }
+
+    return {
+        topLeftCorner,
+        topRightCorner,
+        bottomLeftCorner,
+        bottomRightCorner,
+    };
+}
+
+function getDocumentDimensions(corners: DocumentCorners) {
+    const topWidth = distance(corners.topLeftCorner, corners.topRightCorner);
+    const bottomWidth = distance(corners.bottomLeftCorner, corners.bottomRightCorner);
+    const leftHeight = distance(corners.topLeftCorner, corners.bottomLeftCorner);
+    const rightHeight = distance(corners.topRightCorner, corners.bottomRightCorner);
+
+    return {
+        width: Math.max(topWidth, bottomWidth),
+        height: Math.max(leftHeight, rightHeight),
+    };
+}
+
+function drawDocumentOutline(
+    canvas: HTMLCanvasElement,
+    corners: DocumentCorners | null,
+) {
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (!corners) return;
+
+    const points = [
+        corners.topLeftCorner,
+        corners.topRightCorner,
+        corners.bottomRightCorner,
+        corners.bottomLeftCorner,
+    ];
+
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+    context.closePath();
+    context.lineWidth = Math.max(4, canvas.width / 180);
+    context.strokeStyle = "#22d3ee";
+    context.fillStyle = "rgba(8, 145, 178, 0.12)";
+    context.fill();
+    context.stroke();
+
+    points.forEach((point) => {
+        context.beginPath();
+        context.arc(point.x, point.y, Math.max(5, canvas.width / 150), 0, Math.PI * 2);
+        context.fillStyle = "#ffffff";
+        context.fill();
+        context.lineWidth = Math.max(2, canvas.width / 280);
+        context.strokeStyle = "#0891b2";
+        context.stroke();
+    });
+}
+
 async function getCameraStreamWithFallback(
     onLateStream: (stream: MediaStream) => void,
 ): Promise<MediaStream> {
     const constraints: MediaStreamConstraints[] = [
+        {
+            audio: false,
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+            },
+        },
         {
             audio: false,
             video: {
@@ -266,21 +438,60 @@ async function getCameraStreamWithFallback(
 function isCvReady(value: unknown): boolean {
     if (!value || typeof value !== "object") return false;
 
-    const runtime = value as {
-        Mat?: unknown;
-        imread?: unknown;
-        Canny?: unknown;
-        findContours?: unknown;
-        warpPerspective?: unknown;
-    };
+    const runtime = value as CvRuntime;
 
     return (
         typeof runtime.Mat === "function" &&
         typeof runtime.imread === "function" &&
         typeof runtime.Canny === "function" &&
         typeof runtime.findContours === "function" &&
-        typeof runtime.warpPerspective === "function"
+        typeof runtime.warpPerspective === "function" &&
+        typeof runtime.contourArea === "function"
     );
+}
+
+function detectDocument(
+    scanner: JscanifyScanner,
+    canvas: HTMLCanvasElement,
+): { corners: DocumentCorners; areaRatio: number } | null {
+    const cv = window.cv;
+    if (!cv?.imread || !cv.contourArea) return null;
+
+    const image = cv.imread(canvas);
+    const contour = scanner.findPaperContour(image);
+
+    try {
+        if (!contour) return null;
+
+        const area = Math.abs(cv.contourArea(contour));
+        const areaRatio = area / (canvas.width * canvas.height);
+        const corners = getCompleteCorners(scanner.getCornerPoints(contour));
+
+        if (!corners || areaRatio < MIN_DOCUMENT_AREA_RATIO) return null;
+
+        const dimensions = getDocumentDimensions(corners);
+        const widthRatio = dimensions.width / canvas.width;
+        const heightRatio = dimensions.height / canvas.height;
+        const aspectRatio =
+            Math.max(dimensions.width, dimensions.height) /
+            Math.max(1, Math.min(dimensions.width, dimensions.height));
+
+        if (
+            widthRatio < MIN_DOCUMENT_SIDE_RATIO &&
+            heightRatio < MIN_DOCUMENT_SIDE_RATIO
+        ) {
+            return null;
+        }
+
+        if (aspectRatio < 1.05 || aspectRatio > 2.7) {
+            return null;
+        }
+
+        return { corners, areaRatio };
+    } finally {
+        contour?.delete?.();
+        image.delete?.();
+    }
 }
 
 function loadOpenCvScript(): Promise<void> {
@@ -381,6 +592,9 @@ export function DocumentScannerDialog({
     const [isProcessingScan, setIsProcessingScan] = useState(false);
     const [isScannerUnavailable, setIsScannerUnavailable] = useState(false);
     const [documentDetected, setDocumentDetected] = useState(false);
+    const [scanHint, setScanHint] = useState(
+        "Dokument vollständig ins Bild halten oder Foto übernehmen",
+    );
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const stopScanner = useCallback(() => {
@@ -403,6 +617,7 @@ export function DocumentScannerDialog({
         detectionRunningRef.current = false;
         scannerRef.current = null;
         setDocumentDetected(false);
+        setScanHint("Dokument vollständig ins Bild halten oder Foto übernehmen");
 
         const overlayCanvas = overlayCanvasRef.current;
         const overlayContext = overlayCanvas?.getContext("2d");
@@ -420,6 +635,7 @@ export function DocumentScannerDialog({
         setIsProcessingScan(false);
         setIsScannerUnavailable(false);
         setDocumentDetected(false);
+        setScanHint("Dokument vollständig ins Bild halten oder Foto übernehmen");
         setErrorMessage(null);
     }, []);
 
@@ -436,16 +652,12 @@ export function DocumentScannerDialog({
         const video = videoRef.current;
         const frameCanvas = frameCanvasRef.current;
         const overlayCanvas = overlayCanvasRef.current;
-        const overlayContext = overlayCanvas?.getContext("2d", {
-            willReadFrequently: true,
-        });
 
         if (
             !scanner ||
             !video ||
             !frameCanvas ||
             !overlayCanvas ||
-            !overlayContext ||
             !isVideoDimensionReady(video)
         ) {
             return;
@@ -454,7 +666,7 @@ export function DocumentScannerDialog({
         detectionRunningRef.current = true;
 
         try {
-            const analysisWidth = Math.min(960, video.videoWidth);
+            const analysisWidth = Math.min(ANALYSIS_MAX_WIDTH, video.videoWidth);
             const analysisHeight = Math.round(
                 video.videoHeight * (analysisWidth / video.videoWidth),
             );
@@ -471,25 +683,24 @@ export function DocumentScannerDialog({
 
             frameContext.drawImage(video, 0, 0, analysisWidth, analysisHeight);
 
-            const highlightedCanvas = scanner.highlightPaper(frameCanvas, {
-                color: "#22d3ee",
-                thickness: Math.max(4, analysisWidth / 180),
-            });
+            const detectedDocument = detectDocument(scanner, frameCanvas);
 
-            overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-            overlayContext.drawImage(
-                highlightedCanvas,
-                0,
-                0,
-                overlayCanvas.width,
-                overlayCanvas.height,
-            );
+            if (!detectedDocument) {
+                drawDocumentOutline(overlayCanvas, null);
+                setDocumentDetected(false);
+                setScanHint(
+                    "Dokument vollständig ins Bild halten. Achte auf guten Kontrast zum Hintergrund.",
+                );
+                return;
+            }
 
+            drawDocumentOutline(overlayCanvas, detectedDocument.corners);
             setDocumentDetected(true);
+            setScanHint("Dokument erkannt - ruhig halten und Scan übernehmen");
         } catch {
-            const overlayContext = overlayCanvas.getContext("2d");
-            overlayContext?.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            drawDocumentOutline(overlayCanvas, null);
             setDocumentDetected(false);
+            setScanHint("Achte auf gute Beleuchtung und halte das Dokument näher an die Kamera.");
         } finally {
             detectionRunningRef.current = false;
         }
@@ -648,6 +859,7 @@ export function DocumentScannerDialog({
 
         try {
             drawVideoFrame(video, outputCanvas);
+            enhanceDocumentCanvas(outputCanvas);
 
             const file = await canvasToFile(outputCanvas);
             stopScanner();
@@ -678,16 +890,25 @@ export function DocumentScannerDialog({
 
         try {
             drawVideoFrame(video, frameCanvas);
+            const detectedDocument = detectDocument(scanner, frameCanvas);
 
-            const targetWidth = Math.min(1600, frameCanvas.width);
-            const targetHeight = Math.max(
-                1,
-                Math.round(frameCanvas.height * (targetWidth / frameCanvas.width)),
+            if (!detectedDocument) {
+                setIsProcessingScan(false);
+                await handlePhotoCapture();
+                return;
+            }
+
+            const documentDimensions = getDocumentDimensions(detectedDocument.corners);
+            const scaledDimensions = getScaledDimensions(
+                documentDimensions.width,
+                documentDimensions.height,
+                OUTPUT_MAX_EDGE,
             );
             const scannedCanvas = scanner.extractPaper(
                 frameCanvas,
-                targetWidth,
-                targetHeight,
+                scaledDimensions.width,
+                scaledDimensions.height,
+                detectedDocument.corners,
             );
 
             if (!scannedCanvas) {
@@ -706,6 +927,7 @@ export function DocumentScannerDialog({
             }
 
             outputContext.drawImage(scannedCanvas, 0, 0);
+            enhanceDocumentCanvas(outputCanvas);
 
             const file = await canvasToFile(outputCanvas);
             stopScanner();
@@ -779,7 +1001,7 @@ export function DocumentScannerDialog({
                     />
                     <canvas
                         ref={overlayCanvasRef}
-                        className="pointer-events-none absolute inset-0 size-full opacity-70"
+                        className="pointer-events-none absolute inset-0 size-full"
                     />
 
                     {showCameraLoading || showVideoPreparing ? (
@@ -831,12 +1053,12 @@ export function DocumentScannerDialog({
                         }
                     >
                         {documentDetected && scannerRef.current
-                            ? "Dokument erkannt - Scan übernehmen"
+                            ? scanHint
                             : isScannerUnavailable
                                 ? "Automatische Erkennung nicht verfügbar - Foto kann trotzdem übernommen werden."
                                 : isLoadingScanner
                                     ? "Dokumenterkennung wird geladen... Foto kann trotzdem übernommen werden."
-                                    : "Dokument vollständig ins Bild halten oder Foto übernehmen"}
+                                    : scanHint}
                     </div>
                 ) : null}
 
