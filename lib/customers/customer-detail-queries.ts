@@ -15,6 +15,7 @@ type CustomerBaseRow = {
     country: string | null;
     email: string | null;
     phone: string | null;
+    tax_number: string | null;
     vat_id: string | null;
     created_at: string;
 };
@@ -139,6 +140,7 @@ export type CustomerDetail = {
     address: string;
     email: string | null;
     phone: string | null;
+    tax_number: string | null;
     vat_id: string | null;
     created_at: string;
 
@@ -202,6 +204,7 @@ export async function getCustomerDetail(
       country,
       email,
       phone,
+      tax_number,
       vat_id,
       created_at
     `,
@@ -481,6 +484,7 @@ export async function getCustomerDetail(
         address: getCustomerAddress(customer),
         email: customer.email,
         phone: customer.phone,
+        tax_number: customer.tax_number,
         vat_id: customer.vat_id,
         created_at: customer.created_at,
 

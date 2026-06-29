@@ -57,6 +57,7 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
     const country = getStringValue(formData, "country");
     const email = getStringValue(formData, "email");
     const phone = getStringValue(formData, "phone");
+    const taxNumber = getStringValue(formData, "tax_number");
     const vatId = getStringValue(formData, "vat_id");
 
     if (!isValidPhoneNumber(phone)) {
@@ -72,6 +73,7 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
             country,
             email,
             phone,
+            tax_number: taxNumber,
             vat_id: vatId,
         })
         .eq("id", customerId)

@@ -135,7 +135,14 @@ export function CustomerDetail({
                                     <InfoRow label="Adresse" value={customer.address || "—"} />
                                     <InfoRow label="E-Mail" value={customer.email ?? "—"} />
                                     <InfoRow label="Telefon" value={customer.phone ?? "—"} />
-                                    <InfoRow label="USt-ID" value={customer.vat_id ?? "—"} />
+                                    <InfoRow
+                                        label="Steuernummer"
+                                        value={customer.tax_number ?? "Nicht hinterlegt"}
+                                    />
+                                    <InfoRow
+                                        label="USt-ID"
+                                        value={customer.vat_id ?? "Nicht hinterlegt"}
+                                    />
                                     <InfoRow
                                         label="Angelegt am"
                                         value={formatDate(customer.created_at)}
@@ -210,6 +217,13 @@ export function CustomerDetail({
                                             />
 
                                             <CustomerFormField
+                                                label="Steuernummer"
+                                                name="tax_number"
+                                                defaultValue={customer.tax_number ?? ""}
+                                                placeholder="z. B. 12/345/67890"
+                                            />
+
+                                            <CustomerFormField
                                                 label="USt-ID"
                                                 name="vat_id"
                                                 defaultValue={customer.vat_id ?? ""}
@@ -219,8 +233,9 @@ export function CustomerDetail({
 
                                         <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
                                             <p className="text-xs font-bold leading-5 text-amber-900">
-                                                Wichtig: Für Gelangensbestätigung und Verbringungsnachweis sollten
-                                                Stadt, Land und bei EU-Unternehmen die USt-ID vollständig gepflegt sein.
+                                                Für Inland-Verkäufe muss die Steuernummer gepflegt sein.
+                                                Für EU-Verkäufe muss die USt-ID gepflegt sein.
+                                                Stadt und Land werden zusätzlich für Export- und Verbringungsdokumente verwendet.
                                             </p>
                                         </div>
 

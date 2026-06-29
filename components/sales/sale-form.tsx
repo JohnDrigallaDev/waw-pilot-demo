@@ -304,7 +304,7 @@ export function SaleForm({
 
                                 {selectedCustomerMissingVatId ? (
                                     <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
-                                        Für EU-Verkäufe sollte beim Kunden eine
+                                        Für EU-Verkäufe muss beim Kunden eine
                                         USt-IdNr. hinterlegt sein.
                                     </p>
                                 ) : null}
