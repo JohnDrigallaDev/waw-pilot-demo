@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { MobileHeader } from "@/components/layout/mobile-header";
+import { StatusLegendTrigger } from "@/components/shared/status-legend-trigger";
 
 type DashboardShellProps = {
     children: ReactNode;
@@ -18,6 +19,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
                     {children}
                 </div>
             </main>
+
+            <StatusLegendTrigger />
         </div>
     );
 }

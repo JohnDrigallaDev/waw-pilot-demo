@@ -12,6 +12,7 @@ type StatusLegendProps = {
     title?: string;
     items?: StatusLegendItem[];
     className?: string;
+    compact?: boolean;
 };
 
 const defaultItems: StatusLegendItem[] = [
@@ -54,6 +55,7 @@ export function StatusLegend({
     title = "Statusfarben",
     items = defaultItems,
     className,
+    compact = false,
 }: StatusLegendProps) {
     return (
         <div
@@ -62,12 +64,22 @@ export function StatusLegend({
                 className,
             )}
         >
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div
+                className={cn(
+                    "flex flex-col gap-3",
+                    compact ? "items-stretch" : "lg:flex-row lg:items-center",
+                )}
+            >
                 <p className="shrink-0 text-xs font-black uppercase tracking-[0.24em] text-slate-500">
                     {title}
                 </p>
 
-                <div className="grid flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div
+                    className={cn(
+                        "status-legend-grid grid flex-1 gap-2",
+                        compact ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-5",
+                    )}
+                >
                     {items.map((item) => (
                         <div
                             key={`${item.tone}-${item.label}`}
