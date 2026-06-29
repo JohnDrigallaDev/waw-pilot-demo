@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ArrowUpRight,
     Building2,
@@ -30,17 +30,37 @@ import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type CustomersOverviewProps = {
     customers: CustomerRow[];
     customerSaved?: boolean;
+    customerCreated?: boolean;
+    highlightedCustomerId?: string;
 };
 
 export function CustomersOverview({
                                       customers,
                                       customerSaved = false,
+                                      customerCreated = false,
+                                      highlightedCustomerId,
                                   }: CustomersOverviewProps) {
     const [query, setQuery] = useState("");
+    const [activeHighlightId, setActiveHighlightId] = useState(
+        highlightedCustomerId,
+    );
+
+    useEffect(() => {
+        setActiveHighlightId(highlightedCustomerId);
+
+        if (!highlightedCustomerId) return;
+
+        const timeoutId = window.setTimeout(() => {
+            setActiveHighlightId(undefined);
+        }, 3000);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [highlightedCustomerId]);
 
     const filteredCustomers = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
@@ -112,6 +132,10 @@ export function CustomersOverview({
                 <FlashMessage message="Kundendaten wurden gespeichert." />
             ) : null}
 
+            {customerCreated ? (
+                <FlashMessage message="Kunde wurde angelegt." />
+            ) : null}
+
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <CustomerStatCard
                     label="Kunden gesamt"
@@ -172,7 +196,12 @@ export function CustomersOverview({
                                     onClick={() => {
                                         window.location.href = `/dashboard/customers/${customer.id}`;
                                     }}
-                                    className="cursor-pointer rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99]"
+                                    className={cn(
+                                        "cursor-pointer rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-500 active:scale-[0.99]",
+                                        activeHighlightId === customer.id
+                                            ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-300 shadow-lg shadow-emerald-900/10"
+                                            : "hover:border-cyan-200 hover:bg-cyan-50/30",
+                                    )}
                                 >
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex items-start gap-3">
@@ -314,7 +343,12 @@ export function CustomersOverview({
                                         onClick={() => {
                                             window.location.href = `/dashboard/customers/${customer.id}`;
                                         }}
-                                        className="group cursor-pointer bg-white transition-colors hover:bg-cyan-50/30"
+                                        className={cn(
+                                            "group cursor-pointer transition-all duration-500 hover:bg-cyan-50/30",
+                                            activeHighlightId === customer.id
+                                                ? "bg-emerald-50 shadow-[inset_4px_0_0_#34d399]"
+                                                : "bg-white",
+                                        )}
                                     >
                                         <td className="px-5 py-5">
                                             <div className="flex items-start gap-3">

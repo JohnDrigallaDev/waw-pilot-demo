@@ -149,5 +149,7 @@ export async function createCustomerAction(
         entityId: customer.id as string,
     });
 
-    redirect("/dashboard/customers?customerSaved=1");
+    redirect(
+        `/dashboard/customers?customerCreated=1&createdCustomerId=${customer.id}`,
+    );
 }

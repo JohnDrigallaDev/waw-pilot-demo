@@ -105,5 +105,5 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
     revalidatePath("/dashboard/checks");
     revalidatePath("/dashboard/activities");
 
-    redirect(`/dashboard/customers/${customerId}?customerSaved=1`);
+    redirect(`/dashboard/customers/${customerId}?customerSaved=1&highlight=1`);
 }

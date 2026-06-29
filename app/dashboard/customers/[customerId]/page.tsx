@@ -7,6 +7,8 @@ type CustomerDetailPageProps = {
     }>;
     searchParams: Promise<{
         customerSaved?: string;
+        customerCreated?: string;
+        highlight?: string;
     }>;
 };
 
@@ -24,6 +26,8 @@ export default async function CustomerDetailPage({
         <CustomerDetail
             customer={customer}
             customerSaved={resolvedSearchParams.customerSaved === "1"}
+            customerCreated={resolvedSearchParams.customerCreated === "1"}
+            highlight={resolvedSearchParams.highlight === "1"}
         />
     );
 }
