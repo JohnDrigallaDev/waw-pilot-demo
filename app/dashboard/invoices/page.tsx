@@ -3,8 +3,24 @@ export const dynamic = "force-dynamic";
 import { InvoicesOverview } from "@/components/invoices/invoices-overview";
 import { getInvoices } from "@/lib/invoices/invoice-queries";
 
-export default async function InvoicesPage() {
+type InvoicesPageProps = {
+    searchParams: Promise<{
+        invoiceCreated?: string;
+        invoiceRegenerated?: string;
+        highlightInvoiceId?: string;
+    }>;
+};
+
+export default async function InvoicesPage({ searchParams }: InvoicesPageProps) {
+    const resolvedSearchParams = await searchParams;
     const invoices = await getInvoices();
 
-    return <InvoicesOverview invoices={invoices} />;
+    return (
+        <InvoicesOverview
+            invoices={invoices}
+            invoiceCreated={Boolean(resolvedSearchParams.invoiceCreated)}
+            invoiceRegenerated={Boolean(resolvedSearchParams.invoiceRegenerated)}
+            highlightedInvoiceId={resolvedSearchParams.highlightInvoiceId}
+        />
+    );
 }

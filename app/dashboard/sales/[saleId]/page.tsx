@@ -11,6 +11,7 @@ type SaleDetailPageProps = {
         generatedDocument?: string;
         invoiceCreated?: string;
         invoiceRegenerated?: string;
+        highlightInvoiceId?: string;
         documentDeleted?: string;
         documentUploaded?: string;
         travelExpenseCreated?: string;
@@ -42,6 +43,7 @@ export default async function SaleDetailPage({
             generatedDocumentType={resolvedSearchParams.generatedDocument ?? null}
             invoiceCreatedNumber={resolvedSearchParams.invoiceCreated ?? null}
             invoiceRegeneratedNumber={resolvedSearchParams.invoiceRegenerated ?? null}
+            highlightInvoiceId={resolvedSearchParams.highlightInvoiceId ?? null}
             documentUploaded={resolvedSearchParams.documentUploaded === "1"}
             documentDeleted={resolvedSearchParams.documentDeleted === "1"}
             travelExpenseCreated={resolvedSearchParams.travelExpenseCreated === "1"}

@@ -276,7 +276,7 @@ export async function createSaleInvoiceAction(formData: FormData) {
     redirect(
         `/dashboard/sales/${saleId}?invoiceCreated=${encodeURIComponent(
             invoiceNumber,
-        )}`,
+        )}&highlightInvoiceId=${invoiceId}`,
     );
 }
 
@@ -356,7 +356,7 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
     redirect(
         `/dashboard/sales/${saleId}?invoiceRegenerated=${encodeURIComponent(
             String(invoiceData.invoice_number),
-        )}`,
+        )}&highlightInvoiceId=${invoiceId}`,
     );
 }
 

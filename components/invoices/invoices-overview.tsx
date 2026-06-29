@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ArrowUpRight,
     Download,
@@ -33,9 +33,14 @@ import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { FlashMessage } from "@/components/shared/flash-message";
+import { cn } from "@/lib/utils";
 
 type InvoicesOverviewProps = {
     invoices: InvoiceRow[];
+    invoiceCreated?: boolean;
+    invoiceRegenerated?: boolean;
+    highlightedInvoiceId?: string;
 };
 
 type InvoiceFilter = "all" | "standard" | "proforma" | "down_payment";
@@ -188,9 +193,29 @@ function getInvoiceSearchText(invoice: InvoiceRow): string {
     );
 }
 
-export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
+export function InvoicesOverview({
+    invoices,
+    invoiceCreated = false,
+    invoiceRegenerated = false,
+    highlightedInvoiceId,
+}: InvoicesOverviewProps) {
     const [query, setQuery] = useState("");
     const [invoiceFilter, setInvoiceFilter] = useState<InvoiceFilter>("all");
+    const [activeHighlightId, setActiveHighlightId] = useState(
+        highlightedInvoiceId,
+    );
+
+    useEffect(() => {
+        setActiveHighlightId(highlightedInvoiceId);
+
+        if (!highlightedInvoiceId) return;
+
+        const timeoutId = window.setTimeout(() => {
+            setActiveHighlightId(undefined);
+        }, 3000);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [highlightedInvoiceId]);
 
     const standardInvoices = invoices.filter(
         (invoice) => invoice.invoice_type === "standard",
@@ -257,6 +282,14 @@ export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
                     </Button>
                 }
             />
+
+            {invoiceCreated ? (
+                <FlashMessage message="Rechnung wurde erstellt." />
+            ) : null}
+
+            {invoiceRegenerated ? (
+                <FlashMessage message="Rechnung wurde neu generiert." />
+            ) : null}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <InvoiceStatCard
@@ -349,7 +382,12 @@ export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
                                     onClick={() => {
                                         window.location.href = `/dashboard/sales/${invoice.sale_id}`;
                                     }}
-                                    className="cursor-pointer rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99]"
+                                    className={cn(
+                                        "cursor-pointer rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-500 active:scale-[0.99]",
+                                        activeHighlightId === invoice.id
+                                            ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-300 shadow-lg shadow-emerald-900/10"
+                                            : "hover:border-cyan-200 hover:bg-cyan-50/30",
+                                    )}
                                 >
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
@@ -506,7 +544,12 @@ export function InvoicesOverview({ invoices }: InvoicesOverviewProps) {
                                         onClick={() => {
                                             window.location.href = `/dashboard/sales/${invoice.sale_id}`;
                                         }}
-                                        className="group cursor-pointer bg-white transition-colors hover:bg-cyan-50/30"
+                                        className={cn(
+                                            "group cursor-pointer transition-all duration-500 hover:bg-cyan-50/30",
+                                            activeHighlightId === invoice.id
+                                                ? "bg-emerald-50 shadow-[inset_4px_0_0_#34d399]"
+                                                : "bg-white",
+                                        )}
                                     >
                                         <td className="px-5 py-5">
                                             <InvoiceTypePill invoice={invoice} />

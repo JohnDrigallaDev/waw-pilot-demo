@@ -48,6 +48,7 @@ import { SaleExportDetailsForm } from "@/components/sales/sale-export-details-fo
 import type { SaleExportDetails } from "@/lib/sales/sale-export-details-queries";
 import { FlashMessage } from "@/components/shared/flash-message";
 import { DeleteSaleDocumentForm } from "@/components/sales/delete-sale-document-form";
+import { TemporaryHighlight } from "@/components/shared/temporary-highlight";
 
 type SaleDetailProps = {
     sale: SaleDetailType;
@@ -56,6 +57,7 @@ type SaleDetailProps = {
     generatedDocumentType?: string | null;
     invoiceCreatedNumber?: string | null;
     invoiceRegeneratedNumber?: string | null;
+    highlightInvoiceId?: string | null;
     documentUploaded?: boolean;
     documentDeleted?: boolean;
     travelExpenseCreated?: boolean;
@@ -70,6 +72,7 @@ export function SaleDetail({
                                generatedDocumentType = null,
                                invoiceCreatedNumber = null,
                                invoiceRegeneratedNumber = null,
+                               highlightInvoiceId = null,
                                documentUploaded = false,
                                documentDeleted = false,
                                travelExpenseCreated = false,
@@ -117,15 +120,15 @@ export function SaleDetail({
 
             {invoiceCreatedNumber ? (
                 <FlashMessage
-                    message={`Rechnung ${invoiceCreatedNumber} wurde erfolgreich erstellt.`}
-                    description="Die Rechnung ist unten im Bereich „Rechnungen & Zahlung“ verfügbar und kann dort geöffnet oder heruntergeladen werden."
+                    message="Rechnung wurde erstellt."
+                    description={`Rechnung ${invoiceCreatedNumber} ist unten im Bereich „Rechnungen & Zahlung“ verfügbar und kann dort geöffnet oder heruntergeladen werden.`}
                 />
             ) : null}
 
             {invoiceRegeneratedNumber ? (
                 <FlashMessage
-                    message={`PDF für Rechnung ${invoiceRegeneratedNumber} wurde neu generiert.`}
-                    description="Die aktualisierte PDF ist unten im Bereich „Rechnungen & Zahlung“ verfügbar."
+                    message="Rechnung wurde neu generiert."
+                    description={`Die aktualisierte PDF für Rechnung ${invoiceRegeneratedNumber} ist unten im Bereich „Rechnungen & Zahlung“ verfügbar.`}
                 />
             ) : null}
 
@@ -355,6 +358,7 @@ export function SaleDetail({
                                             saleId={sale.id}
                                             invoice={invoice}
                                             datevStatus={sale.datev_status}
+                                            highlighted={highlightInvoiceId === invoice.id}
                                         />
                                     ))}
                                 </div>
@@ -629,12 +633,15 @@ function InvoiceCard({
                          saleId,
                          invoice,
                          datevStatus,
+                         highlighted,
                      }: {
     saleId: string;
     invoice: SaleDetailInvoice;
     datevStatus: SaleDetailType["datev_status"];
+    highlighted?: boolean;
 }) {
     return (
+        <TemporaryHighlight active={highlighted}>
         <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
@@ -708,6 +715,7 @@ function InvoiceCard({
                 </form>
             </div>
         </div>
+        </TemporaryHighlight>
     );
 }
 

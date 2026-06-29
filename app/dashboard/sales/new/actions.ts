@@ -712,11 +712,11 @@ export async function createSaleAction(
         });
     }
 
-    if (invoiceNumber) {
+    if (invoiceNumber && invoiceId) {
         redirect(
             `/dashboard/sales/${saleId}?invoiceCreated=${encodeURIComponent(
                 invoiceNumber,
-            )}`,
+            )}&highlightInvoiceId=${invoiceId}`,
         );
     }
 
