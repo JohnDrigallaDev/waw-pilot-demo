@@ -20,12 +20,11 @@ export function StatusLegendTrigger() {
                 <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="fixed bottom-4 right-4 z-40 h-9 rounded-2xl border-cyan-200 bg-white/95 px-3 text-cyan-900 shadow-lg shadow-slate-900/10 backdrop-blur-xl hover:border-cyan-300 hover:bg-cyan-50 sm:bottom-5 sm:right-5"
+                    size="icon-sm"
+                    className="fixed right-4 top-20 z-40 rounded-full border-cyan-200 bg-white/95 text-cyan-900 shadow-lg shadow-slate-900/10 backdrop-blur-xl hover:border-cyan-300 hover:bg-cyan-50 sm:right-5 lg:top-4"
                     aria-label="Farblegende öffnen"
                 >
                     <Info className="size-4" />
-                    <span>Farblegende</span>
                 </Button>
             </SheetTrigger>
 
