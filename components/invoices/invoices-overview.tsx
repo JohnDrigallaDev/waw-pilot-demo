@@ -23,7 +23,6 @@ import {
     getInvoicePaymentStatusLabel,
     getInvoicePaymentStatusTone,
     getInvoiceStatusLabel,
-    getInvoiceStatusTone,
 } from "@/lib/invoices/invoice-helpers";
 import { formatCurrency } from "@/lib/format/currency";
 import { formatDate } from "@/lib/format/date";
@@ -389,7 +388,7 @@ export function InvoicesOverview({
                                             : "hover:border-cyan-200 hover:bg-cyan-50/30",
                                     )}
                                 >
-                                    <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-start gap-3">
                                         <div className="min-w-0">
                                             <InvoiceTypePill invoice={invoice} />
 
@@ -404,10 +403,6 @@ export function InvoicesOverview({
                                                 {formatDate(invoice.due_date)}
                                             </p>
                                         </div>
-
-                                        <StatusBadge tone={getInvoiceStatusTone(invoice.status)}>
-                                            {getInvoiceStatusLabel(invoice.status)}
-                                        </StatusBadge>
                                     </div>
 
                                     <div className="mt-4 rounded-2xl bg-slate-50 p-3">
@@ -520,7 +515,7 @@ export function InvoicesOverview({
                         </div>
 
                         <div className="hidden overflow-x-auto md:block">
-                            <table className="w-full min-w-[1320px] text-left">
+                            <table className="w-full min-w-[1220px] text-left">
                                 <thead className="bg-slate-50 text-xs font-extrabold uppercase tracking-wide text-slate-500">
                                 <tr>
                                     <th className="px-5 py-4">Rechnung</th>
@@ -530,7 +525,6 @@ export function InvoicesOverview({
                                     <th className="px-5 py-4">Netto</th>
                                     <th className="px-5 py-4">MwSt.</th>
                                     <th className="px-5 py-4">Brutto</th>
-                                    <th className="px-5 py-4">Status</th>
                                     <th className="px-5 py-4">Zahlung</th>
                                     <th className="px-5 py-4">DATEV</th>
                                     <th className="px-5 py-4 text-right">Aktionen</th>
@@ -605,12 +599,6 @@ export function InvoicesOverview({
                                             <p className="font-extrabold text-slate-950">
                                                 {formatCurrency(invoice.gross_amount)}
                                             </p>
-                                        </td>
-
-                                        <td className="px-5 py-5">
-                                            <StatusBadge tone={getInvoiceStatusTone(invoice.status)}>
-                                                {getInvoiceStatusLabel(invoice.status)}
-                                            </StatusBadge>
                                         </td>
 
                                         <td className="px-5 py-5">

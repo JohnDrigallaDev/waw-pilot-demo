@@ -202,7 +202,7 @@ export function SaleForm({
                                 {vehicles.map((vehicle) => (
                                     <option key={vehicle.id} value={vehicle.id}>
                                         {vehicle.internal_number} · {getVehicleDisplayName(vehicle)} ·
-                                        EK {formatCurrency(vehicle.purchase_price_net)}
+                                        EK netto {formatCurrency(vehicle.purchase_price_net)}
                                     </option>
                                 ))}
                             </select>
