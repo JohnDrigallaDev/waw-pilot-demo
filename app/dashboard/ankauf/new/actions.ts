@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { translateVehicleDatabaseError } from "@/lib/vehicles/vehicle-save-errors";
 
 type CreatePurchaseCaseState = {
     success: boolean;
@@ -168,9 +169,13 @@ export async function createPurchaseCaseAction(
         .eq("company_id", companyId);
 
     if (vehicleUpdateError) {
+        console.error("Vehicle update after purchase create failed", vehicleUpdateError);
+
         return {
             success: false,
-            message: `Ankaufsakte wurde gespeichert, aber Fahrzeug konnte nicht aktualisiert werden: ${vehicleUpdateError.message}`,
+            message: `Ankaufsakte wurde gespeichert, aber ${translateVehicleDatabaseError(
+                vehicleUpdateError,
+            )}`,
         };
     }
 

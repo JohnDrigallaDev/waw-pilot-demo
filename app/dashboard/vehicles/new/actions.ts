@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+    getDuplicateInternalNumberMessage,
+    getDuplicateVinMessage,
+    translateVehicleDatabaseError,
+} from "@/lib/vehicles/vehicle-save-errors";
 
 type CreateVehicleState = {
     success: boolean;
@@ -94,6 +99,51 @@ export async function createVehicleAction(
         model,
     });
 
+    const { data: duplicateVinVehicle, error: duplicateVinError } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("vin", vin)
+        .limit(1);
+
+    if (duplicateVinError) {
+        console.error("VIN duplicate check failed", duplicateVinError);
+    }
+
+    if (duplicateVinVehicle && duplicateVinVehicle.length > 0) {
+        return {
+            success: false,
+            message: getDuplicateVinMessage(),
+        };
+    }
+
+    const {
+        data: duplicateInternalNumberVehicle,
+        error: duplicateInternalNumberError,
+    } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("internal_number", internalNumber)
+        .limit(1);
+
+    if (duplicateInternalNumberError) {
+        console.error(
+            "Internal number duplicate check failed",
+            duplicateInternalNumberError,
+        );
+    }
+
+    if (
+        duplicateInternalNumberVehicle &&
+        duplicateInternalNumberVehicle.length > 0
+    ) {
+        return {
+            success: false,
+            message: getDuplicateInternalNumberMessage(),
+        };
+    }
+
     const { data: vehicle, error: vehicleError } = await supabase
         .from("vehicles")
         .insert({
@@ -117,11 +167,15 @@ export async function createVehicleAction(
         .single();
 
     if (vehicleError || !vehicle) {
+        if (vehicleError) {
+            console.error("Vehicle insert failed", vehicleError);
+        }
+
         return {
             success: false,
-            message: `Fahrzeug konnte nicht gespeichert werden: ${
-                vehicleError?.message ?? "Keine Fahrzeug-ID erhalten"
-            }`,
+            message: vehicleError
+                ? translateVehicleDatabaseError(vehicleError)
+                : "Fahrzeug konnte nicht gespeichert werden. Bitte versuche es erneut.",
         };
     }
 

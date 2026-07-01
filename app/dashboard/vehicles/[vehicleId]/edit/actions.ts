@@ -6,6 +6,11 @@ import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/activity-log";
 import { getCurrentCompanyId } from "@/lib/company";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+    getDuplicateInternalNumberMessage,
+    getDuplicateVinMessage,
+    translateVehicleDatabaseError,
+} from "@/lib/vehicles/vehicle-save-errors";
 
 export type UpdateVehicleState = {
     success: boolean;
@@ -159,6 +164,53 @@ export async function updateVehicleAction(
         };
     }
 
+    const { data: duplicateVinVehicle, error: duplicateVinError } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("vin", vin)
+        .neq("id", vehicleId)
+        .limit(1);
+
+    if (duplicateVinError) {
+        console.error("VIN duplicate check failed", duplicateVinError);
+    }
+
+    if (duplicateVinVehicle && duplicateVinVehicle.length > 0) {
+        return {
+            success: false,
+            message: getDuplicateVinMessage(),
+        };
+    }
+
+    const {
+        data: duplicateInternalNumberVehicle,
+        error: duplicateInternalNumberError,
+    } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("internal_number", internalNumber)
+        .neq("id", vehicleId)
+        .limit(1);
+
+    if (duplicateInternalNumberError) {
+        console.error(
+            "Internal number duplicate check failed",
+            duplicateInternalNumberError,
+        );
+    }
+
+    if (
+        duplicateInternalNumberVehicle &&
+        duplicateInternalNumberVehicle.length > 0
+    ) {
+        return {
+            success: false,
+            message: getDuplicateInternalNumberMessage(),
+        };
+    }
+
     const { error: updateError } = await supabase
         .from("vehicles")
         .update({
@@ -180,9 +232,11 @@ export async function updateVehicleAction(
         .eq("company_id", companyId);
 
     if (updateError) {
+        console.error("Vehicle update failed", updateError);
+
         return {
             success: false,
-            message: `Fahrzeug konnte nicht aktualisiert werden: ${updateError.message}`,
+            message: translateVehicleDatabaseError(updateError),
         };
     }
 
