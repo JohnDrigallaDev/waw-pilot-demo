@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
     Archive,
     Download,
@@ -16,6 +16,7 @@ import {
 
 import type { DocumentRow } from "@/lib/documents/document-queries";
 import {
+    formatFileSize,
     getDocumentSourceLabel,
     getDocumentStatusLabel,
     getDocumentStatusTone,
@@ -85,6 +86,153 @@ const vehicleDocumentTypes = [
     "tax_document",
 ];
 
+type DocumentGroupKey =
+    | "invoice"
+    | "vehicle"
+    | "purchase"
+    | "license_plate"
+    | "cashbook"
+    | "review"
+    | "other";
+
+const documentGroupOrder: DocumentGroupKey[] = [
+    "invoice",
+    "vehicle",
+    "purchase",
+    "license_plate",
+    "cashbook",
+    "other",
+];
+
+const documentGroupLabels: Record<DocumentGroupKey, string> = {
+    invoice: "Rechnungen",
+    vehicle: "Pflicht- und Fahrzeugdokumente",
+    purchase: "Ankaufsdokumente",
+    license_plate: "Kennzeichen",
+    cashbook: "Kassenbuch",
+    review: "Zu prüfen",
+    other: "Sonstige Dokumente",
+};
+
+const invoiceTitlePrefixes: Record<string, string> = {
+    invoice: "Rechnung",
+    invoice_pdf: "Rechnung",
+    proforma_invoice: "Proformarechnung",
+    down_payment_invoice: "Anzahlungsrechnung",
+};
+
+function getFileNameWithoutExtension(fileName: string): string {
+    return fileName.replace(/\.[a-z0-9]+$/i, "");
+}
+
+function extractReferenceNumber(fileName: string): string | null {
+    const withoutExtension = getFileNameWithoutExtension(fileName);
+    const match = withoutExtension.match(/(?:AZ-)?\d{2,4}-\d{3,}/i);
+
+    return match?.[0]?.toUpperCase() ?? null;
+}
+
+function cleanTechnicalFileName(fileName: string): string {
+    return getFileNameWithoutExtension(fileName)
+        .replace(/^scan-\d{4}-\d{2}-\d{2}[-_\d]*$/i, "Scan")
+        .replace(/scan-\d{4}-\d{2}-\d{2}[-_\d]*/gi, "")
+        .replace(/\b[a-f0-9]{8,}\b/gi, "")
+        .replace(/[-_]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\buebergabeprotokoll\b/gi, "Übergabeprotokoll")
+        .replace(/\bgelangensbestaetigung\b/gi, "Gelangensbestätigung")
+        .replace(/\bverbringungsnachweis\b/gi, "Verbringungsnachweis")
+        .replace(/\brechnung\b/gi, "Rechnung")
+        .replace(/\banzahlungsrechnung\b/gi, "Anzahlungsrechnung")
+        .replace(/\bproforma\b/gi, "Proforma")
+        .replace(/\bpdf\b/gi, "")
+        .trim();
+}
+
+function getDocumentDisplayName(document: DocumentRow): string {
+    const invoicePrefix = invoiceTitlePrefixes[document.document_type];
+
+    if (invoicePrefix) {
+        const number = document.invoice_number ?? extractReferenceNumber(document.file_name);
+
+        return number ? `${invoicePrefix} ${number}` : invoicePrefix;
+    }
+
+    if (
+        document.document_type === "handover_protocol" &&
+        /unterschrieben|signed/i.test(document.file_name)
+    ) {
+        return "Übergabeprotokoll unterschrieben";
+    }
+
+    const typeLabel = getDocumentTypeLabel(document.document_type);
+
+    if (typeLabel !== getDocumentTypeLabel("other")) {
+        return typeLabel;
+    }
+
+    return cleanTechnicalFileName(document.file_name) || "Dokument";
+}
+
+function getMimeTypeLabel(mimeType: string | null): string {
+    if (!mimeType) return "Dateityp unbekannt";
+
+    if (mimeType === "application/pdf") return "PDF";
+    if (mimeType === "image/jpeg") return "JPEG";
+    if (mimeType === "image/png") return "PNG";
+
+    return mimeType.split("/").at(1)?.toUpperCase() ?? mimeType;
+}
+
+function getDocumentSourceDisplay(document: DocumentRow): string {
+    if (/scan/i.test(document.file_name)) return "Scan";
+    if (document.generated_by_system || document.source === "generated") {
+        return "Automatisch erzeugt";
+    }
+
+    return getDocumentSourceLabel(document.source);
+}
+
+function getDocumentReferenceLabel(document: DocumentRow): string | null {
+    if (document.invoice_number) {
+        return `Rechnung ${document.invoice_number}`;
+    }
+
+    const referenceNumber = extractReferenceNumber(document.file_name);
+
+    if (document.sale_id && referenceNumber) {
+        return `Verkauf ${referenceNumber}`;
+    }
+
+    if (document.vehicle_internal_number) {
+        return document.vehicle_name
+            ? `${document.vehicle_internal_number} · ${document.vehicle_name}`
+            : document.vehicle_internal_number;
+    }
+
+    if (document.customer_name) return document.customer_name;
+
+    return null;
+}
+
+function getDocumentMetaText(document: DocumentRow): string {
+    const dateLabel =
+        document.generated_by_system || document.source === "generated"
+            ? "Erzeugt am"
+            : "Hochgeladen am";
+
+    return [
+        getDocumentSourceDisplay(document),
+        getMimeTypeLabel(document.mime_type),
+        formatFileSize(document.file_size),
+        getDocumentReferenceLabel(document),
+        `${dateLabel} ${formatDate(document.created_at)}`,
+    ]
+        .filter((part) => part && part !== "—")
+        .join(" · ");
+}
+
 export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
     const [query, setQuery] = useState("");
     const [documentFilter, setDocumentFilter] =
@@ -150,6 +298,8 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
             if (!normalizedQuery) return true;
 
             const searchableText = [
+                getDocumentDisplayName(document),
+                getDocumentMetaText(document),
                 document.file_name,
                 document.document_type,
                 getDocumentTypeLabel(document.document_type),
@@ -165,8 +315,30 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
                 .toLowerCase();
 
             return searchableText.includes(normalizedQuery);
+        }).sort((a, b) => {
+            const groupDifference =
+                documentGroupOrder.indexOf(getDocumentGroup(a.document_type)) -
+                documentGroupOrder.indexOf(getDocumentGroup(b.document_type));
+
+            if (groupDifference !== 0) return groupDifference;
+
+            return (
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
         });
     }, [query, documents, documentFilter]);
+
+    const groupedDocuments = useMemo(() => {
+        return documentGroupOrder
+            .map((group) => ({
+                group,
+                label: documentGroupLabels[group],
+                documents: filteredDocuments.filter(
+                    (document) => getDocumentGroup(document.document_type) === group,
+                ),
+            }))
+            .filter((group) => group.documents.length > 0);
+    }, [filteredDocuments]);
 
     return (
         <div className="space-y-6">
@@ -287,68 +459,51 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
 
                     <div>
                         <div className="grid gap-4 p-4 md:hidden">
-                            {filteredDocuments.map((document) => (
-                                <div
-                                    key={document.id}
-                                    className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99]"
-                                >
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <DocumentTypePill document={document} />
+                            {groupedDocuments.map((group) => (
+                                <div key={group.group} className="space-y-3">
+                                    <p className="px-1 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                                        {group.label}
+                                    </p>
 
-                                            <p className="mt-2 break-all text-base font-extrabold text-slate-950">
-                                                {document.file_name}
-                                            </p>
-                                            <p className="mt-1 text-sm font-semibold text-slate-500">
-                                                {document.mime_type ?? "Unbekannter Dateityp"}
-                                            </p>
+                                    {group.documents.map((document) => (
+                                        <div
+                                            key={document.id}
+                                            className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99]"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <DocumentTypePill document={document} />
+
+                                                    <p className="mt-2 line-clamp-2 text-base font-extrabold leading-6 text-slate-950">
+                                                        {getDocumentDisplayName(document)}
+                                                    </p>
+                                                    <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
+                                                        {getDocumentMetaText(document)}
+                                                    </p>
+                                                </div>
+
+                                                <StatusBadge tone={getDocumentStatusTone(document.status)}>
+                                                    {getDocumentStatusLabel(document.status)}
+                                                </StatusBadge>
+                                            </div>
+
+                                            {getDocumentReferenceLabel(document) ? (
+                                                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                                                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                                                        Bezug
+                                                    </p>
+                                                    <p className="mt-1 text-sm font-extrabold text-cyan-700">
+                                                        {getDocumentReferenceLabel(document)}
+                                                    </p>
+                                                </div>
+                                            ) : null}
+
+                                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                                <DocumentOpenButton document={document} fullWidth />
+                                                <DocumentDownloadButton document={document} fullWidth />
+                                            </div>
                                         </div>
-
-                                        <StatusBadge tone={getDocumentStatusTone(document.status)}>
-                                            {getDocumentStatusLabel(document.status)}
-                                        </StatusBadge>
-                                    </div>
-
-                                    <div className="mt-4 grid grid-cols-2 gap-2">
-                                        <DocumentMobileInfoBox
-                                            label="Quelle"
-                                            value={getDocumentSourceLabel(document.source)}
-                                        />
-                                        <DocumentMobileInfoBox
-                                            label="Datum"
-                                            value={formatDate(document.created_at)}
-                                        />
-                                        <DocumentMobileInfoBox
-                                            label="Kunde"
-                                            value={document.customer_name ?? "—"}
-                                        />
-                                        <DocumentMobileInfoBox
-                                            label="Fahrzeug"
-                                            value={
-                                                document.vehicle_internal_number
-                                                    ? `${document.vehicle_internal_number} · ${
-                                                        document.vehicle_name ?? ""
-                                                    }`
-                                                    : "—"
-                                            }
-                                        />
-                                    </div>
-
-                                    {document.invoice_number ? (
-                                        <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                                            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                                                Rechnung
-                                            </p>
-                                            <p className="mt-1 text-sm font-extrabold text-cyan-700">
-                                                {document.invoice_number}
-                                            </p>
-                                        </div>
-                                    ) : null}
-
-                                    <div className="mt-4 grid grid-cols-2 gap-2">
-                                        <DocumentOpenButton document={document} fullWidth />
-                                        <DocumentDownloadButton document={document} fullWidth />
-                                    </div>
+                                    ))}
                                 </div>
                             ))}
 
@@ -370,95 +525,93 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
                                 </thead>
 
                                 <tbody className="divide-y divide-slate-100">
-                                {filteredDocuments.map((document) => (
-                                    <tr
-                                        key={document.id}
-                                        className="group bg-white transition-colors hover:bg-cyan-50/30"
-                                    >
-                                        <td className="px-5 py-5">
-                                            <div className="flex items-start gap-3">
-                                                <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-100 bg-cyan-50 text-cyan-700">
-                                                    <FileText className="size-5" />
-                                                </div>
+                                {groupedDocuments.map((group) => (
+                                    <Fragment key={group.group}>
+                                        <tr className="bg-slate-50/80">
+                                            <td
+                                                colSpan={7}
+                                                className="px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-500"
+                                            >
+                                                {group.label}
+                                            </td>
+                                        </tr>
 
-                                                <div className="min-w-0">
-                                                    <p className="max-w-xs truncate font-extrabold text-slate-950">
-                                                        {document.file_name}
+                                        {group.documents.map((document) => (
+                                            <tr
+                                                key={document.id}
+                                                className="group bg-white transition-colors hover:bg-cyan-50/30"
+                                            >
+                                                <td className="px-5 py-5">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-100 bg-cyan-50 text-cyan-700">
+                                                            <FileText className="size-5" />
+                                                        </div>
+
+                                                        <div className="min-w-0">
+                                                            <p className="max-w-sm font-extrabold leading-6 text-slate-950">
+                                                                {getDocumentDisplayName(document)}
+                                                            </p>
+                                                            <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-slate-500">
+                                                                {getDocumentMetaText(document)}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-5 py-5">
+                                                    <DocumentTypePill document={document} />
+                                                </td>
+
+                                                <td className="px-5 py-5">
+                                                    <StatusBadge tone={getDocumentStatusTone(document.status)}>
+                                                        {getDocumentStatusLabel(document.status)}
+                                                    </StatusBadge>
+                                                </td>
+
+                                                <td className="px-5 py-5">
+                                                    <StatusBadge tone="neutral">
+                                                        {getDocumentSourceDisplay(document)}
+                                                    </StatusBadge>
+                                                </td>
+
+                                                <td className="px-5 py-5">
+                                                    <div className="space-y-1">
+                                                        {getDocumentReferenceLabel(document) ? (
+                                                            <p className="text-sm font-extrabold text-cyan-700">
+                                                                {getDocumentReferenceLabel(document)}
+                                                            </p>
+                                                        ) : null}
+
+                                                        {document.customer_name ? (
+                                                            <p className="text-sm font-bold text-slate-950">
+                                                                {document.customer_name}
+                                                            </p>
+                                                        ) : null}
+
+                                                        {!getDocumentReferenceLabel(document) &&
+                                                        !document.customer_name ? (
+                                                            <p className="text-sm font-semibold text-slate-400">
+                                                                —
+                                                            </p>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
+
+                                                <td className="px-5 py-5">
+                                                    <p className="text-sm font-semibold text-slate-700">
+                                                        {formatDate(document.created_at)}
                                                     </p>
-                                                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                                                        {document.mime_type ?? "Unbekannter Dateityp"}
-                                                    </p>
-                                                    {document.file_size ? (
-                                                        <p className="mt-1 text-xs font-semibold text-slate-400">
-                                                            {formatFileSize(document.file_size)}
-                                                        </p>
-                                                    ) : null}
-                                                </div>
-                                            </div>
-                                        </td>
+                                                </td>
 
-                                        <td className="px-5 py-5">
-                                            <DocumentTypePill document={document} />
-                                        </td>
-
-                                        <td className="px-5 py-5">
-                                            <StatusBadge tone={getDocumentStatusTone(document.status)}>
-                                                {getDocumentStatusLabel(document.status)}
-                                            </StatusBadge>
-                                        </td>
-
-                                        <td className="px-5 py-5">
-                                            <StatusBadge tone="neutral">
-                                                {getDocumentSourceLabel(document.source)}
-                                            </StatusBadge>
-                                        </td>
-
-                                        <td className="px-5 py-5">
-                                            <div className="space-y-1">
-                                                {document.customer_name ? (
-                                                    <p className="text-sm font-bold text-slate-950">
-                                                        {document.customer_name}
-                                                    </p>
-                                                ) : null}
-
-                                                {document.vehicle_internal_number ? (
-                                                    <p className="text-sm font-semibold text-slate-600">
-                                                        {document.vehicle_internal_number}
-                                                        {document.vehicle_name
-                                                            ? ` · ${document.vehicle_name}`
-                                                            : ""}
-                                                    </p>
-                                                ) : null}
-
-                                                {document.invoice_number ? (
-                                                    <p className="text-sm font-extrabold text-cyan-700">
-                                                        Rechnung {document.invoice_number}
-                                                    </p>
-                                                ) : null}
-
-                                                {!document.customer_name &&
-                                                !document.vehicle_internal_number &&
-                                                !document.invoice_number ? (
-                                                    <p className="text-sm font-semibold text-slate-400">
-                                                        —
-                                                    </p>
-                                                ) : null}
-                                            </div>
-                                        </td>
-
-                                        <td className="px-5 py-5">
-                                            <p className="text-sm font-semibold text-slate-700">
-                                                {formatDate(document.created_at)}
-                                            </p>
-                                        </td>
-
-                                        <td className="px-5 py-5">
-                                            <div className="flex justify-end gap-2">
-                                                <DocumentOpenButton document={document} />
-                                                <DocumentDownloadButton document={document} />
-                                            </div>
-                                        </td>
-                                    </tr>
+                                                <td className="px-5 py-5">
+                                                    <div className="flex justify-end gap-2">
+                                                        <DocumentOpenButton document={document} />
+                                                        <DocumentDownloadButton document={document} />
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </Fragment>
                                 ))}
                                 </tbody>
                             </table>
@@ -531,7 +684,7 @@ function DocumentTypePill({ document }: { document: DocumentRow }) {
 
 function getDocumentGroup(
     documentType: string,
-): "invoice" | "vehicle" | "purchase" | "license_plate" | "cashbook" | "review" | "other" {
+): DocumentGroupKey {
     if (invoiceDocumentTypes.includes(documentType)) return "invoice";
     if (vehicleDocumentTypes.includes(documentType)) return "vehicle";
     if (purchaseDocumentTypes.includes(documentType)) return "purchase";
@@ -666,16 +819,4 @@ function EmptyDocumentsState() {
             </p>
         </div>
     );
-}
-
-function formatFileSize(sizeInBytes: number): string {
-    if (sizeInBytes < 1024) {
-        return `${sizeInBytes} B`;
-    }
-
-    if (sizeInBytes < 1024 * 1024) {
-        return `${Math.round(sizeInBytes / 1024)} KB`;
-    }
-
-    return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
