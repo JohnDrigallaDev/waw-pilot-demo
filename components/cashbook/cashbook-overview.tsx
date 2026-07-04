@@ -6,7 +6,6 @@ import {
     Banknote,
     BookOpenCheck,
     Coins,
-    Download,
     ExternalLink,
     Plus,
     Receipt,
@@ -152,7 +151,7 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                 />
             </section>
 
-            <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
                 <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
                     <CardContent className="p-0">
                         <div className="border-b border-slate-200 bg-white p-5">
@@ -268,17 +267,17 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                     </CardContent>
                 </Card>
 
-                <div className="space-y-6">
-                    <Card className="rounded-[1.75rem] border-slate-200 bg-slate-950 text-white shadow-xl shadow-slate-300/40">
-                        <CardContent className="p-6">
+                <div className="space-y-4 xl:max-w-[360px]">
+                    <Card className="rounded-[1.5rem] border-slate-200 bg-slate-950 text-white shadow-xl shadow-slate-300/40">
+                        <CardContent className="p-4">
                             <div>
-                                <p className="text-xs font-extrabold uppercase tracking-[0.32em] text-cyan-200">
+                                <p className="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] text-cyan-200">
                                     Zusammenfassung
                                 </p>
-                                <h2 className="mt-2 text-2xl font-extrabold">Kasse & Bank</h2>
+                                <h2 className="mt-1.5 text-xl font-extrabold">Kasse & Bank</h2>
                             </div>
 
-                            <div className="mt-6 space-y-4">
+                            <div className="mt-4 space-y-2.5">
                                 <SummaryRow
                                     label="Einnahmen gesamt"
                                     value={formatCurrency(totalIncome)}
@@ -295,25 +294,17 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                                 <SummaryRow label="Bankbestand" value={formatCurrency(bankBalance)} />
                             </div>
 
-                            <div className="mt-6 rounded-3xl border border-white/10 bg-white/10 p-4">
-                                <p className="text-sm font-bold text-slate-200">
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-white/10 p-3">
+                                <p className="text-xs font-bold text-slate-200">
                                     Aktueller Gesamtsaldo
                                 </p>
-                                <p className="mt-2 text-3xl font-extrabold text-cyan-200">
+                                <p className="mt-1.5 break-words text-2xl font-extrabold text-cyan-200">
                                     {formatCurrency(totalBalance)}
                                 </p>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Button
-                        disabled
-                        variant="outline"
-                        className="h-12 w-full rounded-2xl border-slate-200 bg-white font-extrabold disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        <Download className="mr-2 size-4" />
-                        Export später
-                    </Button>
                 </div>
             </section>
         </div>
@@ -693,9 +684,9 @@ function CashbookStatCard({
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
     return (
-        <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-            <p className="text-sm font-bold text-slate-300">{label}</p>
-            <p className="font-extrabold text-white">{value}</p>
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
+            <p className="min-w-0 text-xs font-bold text-slate-300">{label}</p>
+            <p className="shrink-0 text-sm font-extrabold text-white">{value}</p>
         </div>
     );
 }
