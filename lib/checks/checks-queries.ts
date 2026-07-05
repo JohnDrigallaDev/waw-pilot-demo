@@ -1,26 +1,13 @@
 import { getDocuments } from "@/lib/documents/document-queries";
-import { getInvoices } from "@/lib/invoices/invoice-queries";
 import { getLicensePlateCases } from "@/lib/license-plates/license-plate-queries";
 import { getSales } from "@/lib/sales/sale-queries";
 import { getPurchaseCases } from "@/lib/purchases/purchase-queries";
 
 export type ChecksData = {
-    openInvoicesCount: number;
     documentsToCheckCount: number;
     openLicensePlateCasesCount: number;
     salesToCheckCount: number;
     purchaseCasesToCheckCount: number;
-
-    openInvoices: {
-        id: string;
-        sale_id: string;
-        invoice_number: string;
-        customer_name: string;
-        vehicle_name: string;
-        gross_amount: number;
-        invoice_date: string;
-        payment_status: string;
-    }[];
 
     documentsToCheck: {
         id: string;
@@ -58,34 +45,18 @@ export type ChecksData = {
         seller_name: string | null;
         vehicle_name: string | null;
         purchase_date: string;
-        payment_status: string;
         document_check_status: string;
     }[];
 };
 
 export async function getChecksData(): Promise<ChecksData> {
-    const [invoices, documents, licensePlateCases, sales, purchaseCases] =
+    const [documents, licensePlateCases, sales, purchaseCases] =
         await Promise.all([
-            getInvoices(),
             getDocuments(),
             getLicensePlateCases(),
             getSales(),
             getPurchaseCases(),
         ]);
-
-    const openInvoices = invoices
-        .filter((invoice) => invoice.payment_status !== "paid")
-        .slice(0, 8)
-        .map((invoice) => ({
-            id: invoice.id,
-            sale_id: invoice.sale_id,
-            invoice_number: invoice.invoice_number,
-            customer_name: invoice.customer_name,
-            vehicle_name: `${invoice.vehicle_internal_number} · ${invoice.vehicle_name}`,
-            gross_amount: invoice.gross_amount,
-            invoice_date: invoice.invoice_date,
-            payment_status: invoice.payment_status,
-        }));
 
     const documentsToCheck = documents
         .filter((document) => document.status !== "available")
@@ -129,11 +100,7 @@ export async function getChecksData(): Promise<ChecksData> {
         }));
 
     const purchaseCasesToCheck = purchaseCases
-        .filter(
-            (purchase) =>
-                purchase.payment_status !== "paid" ||
-                purchase.document_check_status !== "complete",
-        )
+        .filter((purchase) => purchase.document_check_status !== "complete")
         .slice(0, 8)
         .map((purchase) => ({
             id: purchase.id,
@@ -143,14 +110,10 @@ export async function getChecksData(): Promise<ChecksData> {
                 ? `${purchase.vehicle_internal_number ?? "—"} · ${purchase.vehicle_name}`
                 : purchase.vehicle_internal_number,
             purchase_date: purchase.purchase_date,
-            payment_status: purchase.payment_status,
             document_check_status: purchase.document_check_status,
         }));
 
     return {
-        openInvoicesCount: invoices.filter(
-            (invoice) => invoice.payment_status !== "paid",
-        ).length,
         documentsToCheckCount: documents.filter(
             (document) => document.status !== "available",
         ).length,
@@ -161,13 +124,10 @@ export async function getChecksData(): Promise<ChecksData> {
             (sale) => sale.document_check_status !== "complete",
         ).length,
         purchaseCasesToCheckCount: purchaseCases.filter(
-            (purchase) =>
-                purchase.payment_status !== "paid" ||
-                purchase.document_check_status !== "complete",
+            (purchase) => purchase.document_check_status !== "complete",
         ).length,
 
         purchaseCasesToCheck,
-        openInvoices,
         documentsToCheck,
         openLicensePlateCases,
         salesToCheck,
