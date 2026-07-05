@@ -135,6 +135,7 @@ export function VehicleInventory({ vehicles }: VehicleInventoryProps) {
                     value={missingDocumentsCount}
                     description="Prüfung erforderlich"
                     icon={FileWarning}
+                    href="/dashboard/documents?status=open"
                     danger={missingDocumentsCount > 0}
                 />
             </section>
@@ -198,6 +199,7 @@ type InventoryStatCardProps = {
     value: string | number;
     description: string;
     icon: typeof Truck;
+    href?: string;
     danger?: boolean;
 };
 
@@ -206,9 +208,10 @@ function InventoryStatCard({
                                value,
                                description,
                                icon: Icon,
+                               href,
                                danger = false,
                            }: InventoryStatCardProps) {
-    return (
+    const card = (
         <CompactStatCard
             label={label}
             value={value}
@@ -217,6 +220,10 @@ function InventoryStatCard({
             tone={danger ? "danger" : "info"}
         />
     );
+
+    if (!href) return card;
+
+    return <Link href={href}>{card}</Link>;
 }
 
 type VehicleTableProps = {
@@ -336,7 +343,7 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                             </div>
 
                             <div
-                                className="mt-4 grid grid-cols-2 gap-2"
+                                className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"
                                 onClick={(event) => event.stopPropagation()}
                             >
                                 <Button
@@ -346,6 +353,16 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                                 >
                                     <Link href={`/dashboard/vehicles/${vehicle.id}`}>
                                         Fahrzeugakte
+                                    </Link>
+                                </Button>
+
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="h-11 rounded-2xl font-bold"
+                                >
+                                    <Link href={`/dashboard/documents?vehicleId=${vehicle.id}`}>
+                                        Dokumente
                                     </Link>
                                 </Button>
 
@@ -477,11 +494,17 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                                 </td>
 
                                 <td className="px-5 py-5">
-                                    <StatusBadge
-                                        tone={getDocumentStatusTone(vehicle.document_status)}
+                                    <Link
+                                        href={`/dashboard/documents?vehicleId=${vehicle.id}`}
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="inline-flex rounded-full transition hover:opacity-80"
                                     >
-                                        {getVehicleDocumentStatusLabel(vehicle.document_status)}
-                                    </StatusBadge>
+                                        <StatusBadge
+                                            tone={getDocumentStatusTone(vehicle.document_status)}
+                                        >
+                                            {getVehicleDocumentStatusLabel(vehicle.document_status)}
+                                        </StatusBadge>
+                                    </Link>
                                 </td>
 
                                 <td
@@ -489,15 +512,26 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                                     onClick={(event) => event.stopPropagation()}
                                 >
                                     <div className="flex justify-end gap-2">
-                                        <Button
-                                            asChild
-                                            variant="outline"
-                                            size="sm"
-                                            className="rounded-xl font-bold"
-                                        >
-                                            <Link href={`/dashboard/vehicles/${vehicle.id}`}>
-                                                Fahrzeugakte
-                                            </Link>
+                                            <Button
+                                                asChild
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-xl font-bold"
+                                            >
+                                                <Link href={`/dashboard/documents?vehicleId=${vehicle.id}`}>
+                                                    Dokumente
+                                                </Link>
+                                            </Button>
+
+                                            <Button
+                                                asChild
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-xl font-bold"
+                                            >
+                                                <Link href={`/dashboard/vehicles/${vehicle.id}`}>
+                                                    Fahrzeugakte
+                                                </Link>
                                         </Button>
 
                                         {tab === "current" ? (

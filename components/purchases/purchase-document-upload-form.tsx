@@ -82,7 +82,7 @@ export function PurchaseDocumentUploadForm({
                 </span>
 
                 <span className="hidden rounded-xl bg-slate-950 px-3 py-2 text-xs font-extrabold text-white transition group-hover:bg-slate-800 sm:inline-flex">
-                    Durchsuchen
+                    Hochladen
                 </span>
 
                 <input

@@ -172,7 +172,7 @@ export function SaleDocumentUploadForm({
                             : "hidden rounded-xl bg-slate-950 px-3 py-2 text-xs font-extrabold text-white transition group-hover:bg-slate-800 sm:inline-flex"
                     }
                 >
-                    {hasExistingDocument ? "Ersetzen" : "Durchsuchen"}
+                    {hasExistingDocument ? "Ersetzen" : "Hochladen"}
                 </span>
 
                 <input

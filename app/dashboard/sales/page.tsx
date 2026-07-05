@@ -3,8 +3,20 @@ export const dynamic = "force-dynamic";
 import { SalesOverview } from "@/components/sales/sales-overview";
 import { getSales } from "@/lib/sales/sale-queries";
 
-export default async function SalesPage() {
+type SalesPageProps = {
+    searchParams: Promise<{
+        paymentStatus?: string;
+    }>;
+};
+
+export default async function SalesPage({ searchParams }: SalesPageProps) {
+    const resolvedSearchParams = await searchParams;
     const sales = await getSales();
 
-    return <SalesOverview sales={sales} />;
+    return (
+        <SalesOverview
+            sales={sales}
+            initialPaymentStatus={resolvedSearchParams.paymentStatus ?? null}
+        />
+    );
 }

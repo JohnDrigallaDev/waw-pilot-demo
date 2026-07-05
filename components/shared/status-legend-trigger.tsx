@@ -21,7 +21,7 @@ export function StatusLegendTrigger() {
                     type="button"
                     variant="outline"
                     size="icon-sm"
-                    className="fixed right-4 top-20 z-40 rounded-full border-cyan-200 bg-white/95 text-cyan-900 shadow-lg shadow-slate-900/10 backdrop-blur-xl hover:border-cyan-300 hover:bg-cyan-50 sm:right-5 lg:top-4"
+                    className="fixed right-4 top-20 z-40 rounded-full border-cyan-400 bg-cyan-600 text-white shadow-xl shadow-cyan-900/20 ring-2 ring-white/90 backdrop-blur-xl hover:border-cyan-500 hover:bg-cyan-700 sm:right-5 lg:top-4"
                     aria-label="Farblegende öffnen"
                 >
                     <Info className="size-4" />

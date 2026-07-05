@@ -62,6 +62,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     value={totalRequiredChecks}
                     description="fehlende Angaben & Dokumente"
                     icon={ClipboardCheck}
+                    href="#required-checks"
                     danger={totalRequiredChecks > 0}
                 />
                 <CheckStatCard
@@ -69,7 +70,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     value={data.documentsToCheckCount}
                     description="fehlend oder needs_review"
                     icon={FileWarning}
-                    href="/dashboard/documents"
+                    href="/dashboard/documents?status=open"
                     danger={data.documentsToCheckCount > 0}
                 />
                 <CheckStatCard
@@ -77,7 +78,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     value={data.openLicensePlateCasesCount}
                     description="offen oder beantragt"
                     icon={BadgeCheck}
-                    href="/dashboard/plates"
+                    href="#open-plate-checks"
                     danger={data.openLicensePlateCasesCount > 0}
                 />
                 <CheckStatCard
@@ -85,7 +86,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     value={data.purchaseCasesToCheckCount}
                     description="Dokumente offen"
                     icon={ShoppingCart}
-                    href="/dashboard/ankauf"
+                    href="#purchase-checks"
                     danger={data.purchaseCasesToCheckCount > 0}
                 />
             </section>
@@ -106,7 +107,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                 </Card>
             ) : null}
 
-            <section className="space-y-4">
+            <section id="required-checks" className="scroll-mt-24 space-y-4">
                 <div>
                     <h2 className="text-xl font-extrabold text-slate-950">
                         Pflichtprüfungen
@@ -118,15 +119,16 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
 
                 <div className="grid gap-6 xl:grid-cols-2">
                     <CheckListCard
+                        id="document-checks"
                         title="Dokumente mit Handlungsbedarf"
                         description="Dokumente, die fehlen oder geprüft werden müssen."
                         emptyText="Keine Dokumente mit Handlungsbedarf."
-                        href="/dashboard/documents"
+                        href="/dashboard/documents?status=open"
                     >
                         {data.documentsToCheck.map((document) => (
                             <Link
                                 key={document.id}
-                                href="/dashboard/documents"
+                                href="/dashboard/documents?status=open"
                                 className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
                             >
                                 <div className="flex items-start justify-between gap-3">
@@ -159,6 +161,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     </CheckListCard>
 
                     <CheckListCard
+                        id="open-plate-checks"
                         title="Offene Kennzeichen-Vorgänge"
                         description="Kurzzeit-, Export- oder Zollkennzeichen, die noch offen sind."
                         emptyText="Keine offenen Kennzeichen-Vorgänge."
@@ -200,6 +203,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     </CheckListCard>
 
                     <CheckListCard
+                        id="purchase-checks"
                         title="Ankaufsakten prüfen"
                         description="Ankäufe mit fehlenden Pflichtdokumenten."
                         emptyText="Keine Ankaufsakten mit offener Prüfung."
@@ -241,6 +245,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     </CheckListCard>
 
                     <CheckListCard
+                        id="sale-checks"
                         title="Verkaufsakten prüfen"
                         description="Verkäufe mit offener Dokumentenprüfung."
                         emptyText="Keine Verkaufsakten mit offener Prüfung."
@@ -310,12 +315,14 @@ function CheckStatCard({
 }
 
 function CheckListCard({
+                           id,
                            title,
                            description,
                            emptyText,
                            href,
                            children,
                        }: {
+    id?: string;
     title: string;
     description: string;
     emptyText: string;
@@ -327,7 +334,10 @@ function CheckListCard({
         : Boolean(children);
 
     return (
-        <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+        <Card
+            id={id}
+            className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm"
+        >
             <CardContent className="p-0">
                 <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
                     <div>

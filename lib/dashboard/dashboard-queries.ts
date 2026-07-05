@@ -198,7 +198,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         openActions.push({
             label: `${incompleteDocuments.length} Dokument(e) prüfen`,
             description: "Dokumentenarchiv auf fehlende oder zu prüfende Dateien kontrollieren.",
-            href: "/dashboard/documents",
+            href: "/dashboard/documents?status=open",
             tone: "info",
         });
     }

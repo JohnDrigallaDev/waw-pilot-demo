@@ -38,17 +38,40 @@ import { Input } from "@/components/ui/input";
 
 type SalesOverviewProps = {
     sales: SaleRow[];
+    initialPaymentStatus?: string | null;
 };
 
-export function SalesOverview({ sales }: SalesOverviewProps) {
+type PaymentFilter = "all" | "open" | "paid";
+
+function getInitialPaymentFilter(paymentStatus: string | null | undefined): PaymentFilter {
+    if (paymentStatus === "open" || paymentStatus === "unpaid") return "open";
+    if (paymentStatus === "paid") return "paid";
+
+    return "all";
+}
+
+export function SalesOverview({
+                                  sales,
+                                  initialPaymentStatus = null,
+                              }: SalesOverviewProps) {
     const [query, setQuery] = useState("");
+    const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>(() =>
+        getInitialPaymentFilter(initialPaymentStatus),
+    );
 
     const filteredSales = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
 
-        if (!normalizedQuery) return sales;
-
         return sales.filter((sale) => {
+            const matchesPaymentFilter =
+                paymentFilter === "all" ||
+                (paymentFilter === "open" && sale.payment_status !== "paid") ||
+                (paymentFilter === "paid" && sale.payment_status === "paid");
+
+            if (!matchesPaymentFilter) return false;
+
+            if (!normalizedQuery) return true;
+
             const searchableText = [
                 sale.invoice_number,
                 sale.vehicle_internal_number,
@@ -65,7 +88,7 @@ export function SalesOverview({ sales }: SalesOverviewProps) {
 
             return searchableText.includes(normalizedQuery);
         });
-    }, [query, sales]);
+    }, [query, sales, paymentFilter]);
 
     const openPayments = sales.filter(
         (sale) => sale.payment_status !== "paid",
@@ -123,6 +146,7 @@ export function SalesOverview({ sales }: SalesOverviewProps) {
                     value={openPayments}
                     description="Kassenbuch prüfen"
                     icon={Wallet}
+                    href="/dashboard/sales?paymentStatus=open"
                     danger={openPayments > 0}
                 />
                 <SaleStatCard
@@ -157,6 +181,23 @@ export function SalesOverview({ sales }: SalesOverviewProps) {
                                 />
                             </div>
                         </div>
+
+                        {paymentFilter !== "all" ? (
+                            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+                                <p className="text-sm font-bold text-cyan-900">
+                                    Gefiltert: {paymentFilter === "open" ? "Offene Zahlungen" : "Bezahlte Verkäufe"}
+                                </p>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 rounded-xl border-cyan-200 bg-white font-bold text-cyan-800 hover:bg-cyan-50"
+                                    onClick={() => setPaymentFilter("all")}
+                                >
+                                    Filter zurücksetzen
+                                </Button>
+                            </div>
+                        ) : null}
                     </div>
 
                     <div>
@@ -429,6 +470,7 @@ type SaleStatCardProps = {
     value: string | number;
     description: string;
     icon: typeof Receipt;
+    href?: string;
     danger?: boolean;
 };
 
@@ -437,9 +479,10 @@ function SaleStatCard({
                           value,
                           description,
                           icon: Icon,
+                          href,
                           danger = false,
                       }: SaleStatCardProps) {
-    return (
+    const card = (
         <CompactStatCard
             label={label}
             value={value}
@@ -448,6 +491,10 @@ function SaleStatCard({
             tone={danger ? "warning" : "info"}
         />
     );
+
+    if (!href) return card;
+
+    return <Link href={href}>{card}</Link>;
 }
 
 function RequiredDocumentsCell({ sale }: { sale: SaleRow }) {

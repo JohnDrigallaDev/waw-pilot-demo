@@ -32,6 +32,8 @@ import { Input } from "@/components/ui/input";
 
 type DocumentsOverviewProps = {
     documents: DocumentRow[];
+    initialFilter?: string | null;
+    initialVehicleId?: string | null;
 };
 
 type DocumentFilter =
@@ -42,6 +44,24 @@ type DocumentFilter =
     | "license_plates"
     | "cashbook"
     | "needs_review";
+
+function getInitialDocumentFilter(filter: string | null | undefined): DocumentFilter {
+    if (filter === "open" || filter === "needs_review" || filter === "review") {
+        return "needs_review";
+    }
+
+    if (
+        filter === "invoices" ||
+        filter === "vehicle_documents" ||
+        filter === "purchase_documents" ||
+        filter === "license_plates" ||
+        filter === "cashbook"
+    ) {
+        return filter;
+    }
+
+    return "all";
+}
 
 const invoiceDocumentTypes = [
     "invoice",
@@ -233,10 +253,14 @@ function getDocumentMetaText(document: DocumentRow): string {
         .join(" · ");
 }
 
-export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
+export function DocumentsOverview({
+                                      documents,
+                                      initialFilter = null,
+                                      initialVehicleId = null,
+                                  }: DocumentsOverviewProps) {
     const [query, setQuery] = useState("");
     const [documentFilter, setDocumentFilter] =
-        useState<DocumentFilter>("all");
+        useState<DocumentFilter>(() => getInitialDocumentFilter(initialFilter));
 
     const availableDocuments = documents.filter(
         (document) => document.status === "available",
@@ -278,6 +302,11 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
         const normalizedQuery = query.trim().toLowerCase();
 
         return documents.filter((document) => {
+            const matchesVehicle =
+                !initialVehicleId || document.vehicle_id === initialVehicleId;
+
+            if (!matchesVehicle) return false;
+
             const matchesFilter =
                 documentFilter === "all" ||
                 (documentFilter === "invoices" &&
@@ -326,7 +355,7 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             );
         });
-    }, [query, documents, documentFilter]);
+    }, [query, documents, documentFilter, initialVehicleId]);
 
     const groupedDocuments = useMemo(() => {
         return documentGroupOrder
@@ -455,6 +484,28 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
                                 />
                             </div>
                         </div>
+
+                        {documentFilter !== "all" || initialVehicleId ? (
+                            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+                                <p className="text-sm font-bold text-cyan-900">
+                                    Gefiltert:
+                                    {documentFilter === "needs_review"
+                                        ? " Dokumente mit Prüfbedarf"
+                                        : documentFilter !== "all"
+                                            ? ` ${documentGroupLabels[getFilterGroup(documentFilter)]}`
+                                            : ""}
+                                    {initialVehicleId ? " · Fahrzeugdokumente" : ""}
+                                </p>
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 rounded-xl border-cyan-200 bg-white font-bold text-cyan-800 hover:bg-cyan-50"
+                                >
+                                    <Link href="/dashboard/documents">Filter zurücksetzen</Link>
+                                </Button>
+                            </div>
+                        ) : null}
                     </div>
 
                     <div>
@@ -623,6 +674,17 @@ export function DocumentsOverview({ documents }: DocumentsOverviewProps) {
             </Card>
         </div>
     );
+}
+
+function getFilterGroup(filter: DocumentFilter): DocumentGroupKey {
+    if (filter === "invoices") return "invoice";
+    if (filter === "vehicle_documents") return "vehicle";
+    if (filter === "purchase_documents") return "purchase";
+    if (filter === "license_plates") return "license_plate";
+    if (filter === "cashbook") return "cashbook";
+    if (filter === "needs_review") return "review";
+
+    return "other";
 }
 
 function DocumentFilterButton({
