@@ -24,6 +24,7 @@ type SaleInvoiceSourceRow = {
     vat_rate: number | string;
     vat_amount: number | string;
     gross_amount: number | string;
+    include_damage_notes_on_invoice: boolean | null;
 };
 
 function getStringValue(formData: FormData, key: string): string | null {
@@ -88,6 +89,8 @@ export async function createSaleInvoiceAction(formData: FormData) {
 
     const saleId = getStringValue(formData, "sale_id");
     const invoiceType = getInvoiceTypeValue(formData);
+    const includeDamageNotesOnInvoice =
+        getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
 
     if (!saleId) {
         throw new Error("Verkauf fehlt.");
@@ -105,7 +108,8 @@ export async function createSaleInvoiceAction(formData: FormData) {
       net_amount,
       vat_rate,
       vat_amount,
-      gross_amount
+      gross_amount,
+      include_damage_notes_on_invoice
     `,
         )
         .eq("id", saleId)
@@ -121,6 +125,25 @@ export async function createSaleInvoiceAction(formData: FormData) {
     }
 
     const sale = saleData as SaleInvoiceSourceRow;
+
+    if (
+        Boolean(sale.include_damage_notes_on_invoice) !==
+        includeDamageNotesOnInvoice
+    ) {
+        const { error: saleUpdateError } = await supabase
+            .from("sales")
+            .update({
+                include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
+            })
+            .eq("id", saleId)
+            .eq("company_id", companyId);
+
+        if (saleUpdateError) {
+            throw new Error(
+                `Rechnungsoption konnte nicht gespeichert werden: ${saleUpdateError.message}`,
+            );
+        }
+    }
 
     const { data: existingInvoiceData, error: existingInvoiceError } =
         await supabase

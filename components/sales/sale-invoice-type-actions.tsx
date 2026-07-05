@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { CheckCircle2, FileText, Loader2, Receipt } from "lucide-react";
 
@@ -10,76 +11,123 @@ import { Button } from "@/components/ui/button";
 type SaleInvoiceTypeActionsProps = {
     saleId: string;
     existingInvoiceTypes?: InvoiceType[];
+    damageNotes?: string | null;
+    includeDamageNotesOnInvoice?: boolean;
 };
 
 export function SaleInvoiceTypeActions({
                                            saleId,
                                            existingInvoiceTypes = [],
+                                           damageNotes = null,
+                                           includeDamageNotesOnInvoice = false,
                                        }: SaleInvoiceTypeActionsProps) {
     const hasStandard = existingInvoiceTypes.includes("standard");
     const hasProforma = existingInvoiceTypes.includes("proforma");
     const hasDownPayment = existingInvoiceTypes.includes("down_payment");
+    const [includeDamageNotes, setIncludeDamageNotes] = useState(
+        includeDamageNotesOnInvoice,
+    );
+    const hasDamageNotes = Boolean(damageNotes?.trim());
 
     return (
-        <div className="mt-5 grid gap-3 lg:grid-cols-3">
-            <form action={createSaleInvoiceAction}>
-                <input type="hidden" name="sale_id" value={saleId} />
-                <input type="hidden" name="invoice_type" value="standard" />
+        <div className="mt-5 space-y-3">
+            {hasDamageNotes ? (
+                <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+                    <input
+                        type="checkbox"
+                        checked={includeDamageNotes}
+                        onChange={(event) =>
+                            setIncludeDamageNotes(event.currentTarget.checked)
+                        }
+                        className="mt-1 size-4 rounded border-amber-300 text-amber-700"
+                    />
+                    <span>
+                        <span className="block font-extrabold text-amber-950">
+                            Schäden auf Rechnung aufführen
+                        </span>
+                        <span className="mt-1 block text-sm font-medium leading-6 text-amber-900">
+                            Die beim Fahrzeug hinterlegten Schäden werden als Hinweis auf
+                            der Rechnung ausgegeben.
+                        </span>
+                    </span>
+                </label>
+            ) : null}
 
-                <InvoiceSubmitButton
-                    icon="receipt"
-                    label={hasStandard ? "Rechnung vorhanden" : "Rechnung erstellen"}
-                    description={
-                        hasStandard
-                            ? "Bereits in der Rechnungsliste unten sichtbar"
-                            : "Erstellt die normale Verkaufsrechnung"
-                    }
-                    disabled={hasStandard}
-                    done={hasStandard}
-                />
-            </form>
+            <div className="grid gap-3 lg:grid-cols-3">
+                <form action={createSaleInvoiceAction}>
+                    <input type="hidden" name="sale_id" value={saleId} />
+                    <input type="hidden" name="invoice_type" value="standard" />
+                    <input
+                        type="hidden"
+                        name="include_damage_notes_on_invoice"
+                        value={includeDamageNotes ? "yes" : "no"}
+                    />
 
-            <form action={createSaleInvoiceAction}>
-                <input type="hidden" name="sale_id" value={saleId} />
-                <input type="hidden" name="invoice_type" value="proforma" />
+                    <InvoiceSubmitButton
+                        icon="receipt"
+                        label={hasStandard ? "Rechnung vorhanden" : "Rechnung erstellen"}
+                        description={
+                            hasStandard
+                                ? "Bereits in der Rechnungsliste unten sichtbar"
+                                : "Erstellt die normale Verkaufsrechnung"
+                        }
+                        disabled={hasStandard}
+                        done={hasStandard}
+                    />
+                </form>
 
-                <InvoiceSubmitButton
-                    icon="file"
-                    label={
-                        hasProforma
-                            ? "Proforma-Rechnung vorhanden"
-                            : "Proforma-Rechnung erstellen"
-                    }
-                    description={
-                        hasProforma
-                            ? "Bereits in der Rechnungsliste unten sichtbar"
-                            : "Eigener Nummernkreis PRO-026"
-                    }
-                    disabled={hasProforma}
-                    done={hasProforma}
-                />
-            </form>
+                <form action={createSaleInvoiceAction}>
+                    <input type="hidden" name="sale_id" value={saleId} />
+                    <input type="hidden" name="invoice_type" value="proforma" />
+                    <input
+                        type="hidden"
+                        name="include_damage_notes_on_invoice"
+                        value={includeDamageNotes ? "yes" : "no"}
+                    />
 
-            <form action={createSaleInvoiceAction}>
-                <input type="hidden" name="sale_id" value={saleId} />
-                <input type="hidden" name="invoice_type" value="down_payment" />
+                    <InvoiceSubmitButton
+                        icon="file"
+                        label={
+                            hasProforma
+                                ? "Proforma-Rechnung vorhanden"
+                                : "Proforma-Rechnung erstellen"
+                        }
+                        description={
+                            hasProforma
+                                ? "Bereits in der Rechnungsliste unten sichtbar"
+                                : "Eigener Nummernkreis PRO-026"
+                        }
+                        disabled={hasProforma}
+                        done={hasProforma}
+                    />
+                </form>
 
-                <InvoiceSubmitButton
-                    icon="receipt"
-                    label={
-                        hasDownPayment
-                            ? "Anzahlungsrechnung vorhanden"
-                            : "Anzahlungsrechnung erstellen"
-                    }
-                    description={
-                        hasDownPayment
-                            ? "Bereits in der Rechnungsliste unten sichtbar"
-                            : "Eigener Nummernkreis AZ-026"
-                    }
-                    disabled={hasDownPayment}
-                    done={hasDownPayment}
-                />
-            </form>
+                <form action={createSaleInvoiceAction}>
+                    <input type="hidden" name="sale_id" value={saleId} />
+                    <input type="hidden" name="invoice_type" value="down_payment" />
+                    <input
+                        type="hidden"
+                        name="include_damage_notes_on_invoice"
+                        value={includeDamageNotes ? "yes" : "no"}
+                    />
+
+                    <InvoiceSubmitButton
+                        icon="receipt"
+                        label={
+                            hasDownPayment
+                                ? "Anzahlungsrechnung vorhanden"
+                                : "Anzahlungsrechnung erstellen"
+                        }
+                        description={
+                            hasDownPayment
+                                ? "Bereits in der Rechnungsliste unten sichtbar"
+                                : "Eigener Nummernkreis AZ-026"
+                        }
+                        disabled={hasDownPayment}
+                        done={hasDownPayment}
+                    />
+                </form>
+            </div>
         </div>
     );
 }

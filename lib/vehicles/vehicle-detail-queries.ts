@@ -18,6 +18,7 @@ type VehicleBaseRow = {
     sale_price_net: number | string | null;
     additional_costs_net: number | string | null;
     notes: string | null;
+    damage_notes: string | null;
     created_at: string;
     seller_customer_id: string | null;
     buyer_customer_id: string | null;
@@ -109,6 +110,7 @@ export type VehicleDetail = {
     additional_costs_net: number;
     document_status: "complete" | "partial" | "missing";
     notes: string | null;
+    damage_notes: string | null;
     created_at: string;
 
     seller: {
@@ -249,6 +251,7 @@ export async function getVehicleDetail(
       sale_price_net,
       additional_costs_net,
       notes,
+      damage_notes,
       created_at,
       seller_customer_id,
       buyer_customer_id
@@ -434,6 +437,7 @@ export async function getVehicleDetail(
         additional_costs_net: Number(vehicle.additional_costs_net ?? 0),
         document_status: getVehicleDocumentStatus(documents),
         notes: vehicle.notes,
+        damage_notes: vehicle.damage_notes,
         created_at: vehicle.created_at,
 
         seller: mapCustomer(seller),

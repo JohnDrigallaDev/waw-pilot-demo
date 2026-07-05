@@ -10,6 +10,7 @@ import {
     getDuplicateVinMessage,
     translateVehicleDatabaseError,
 } from "@/lib/vehicles/vehicle-save-errors";
+import { getNextVehicleInternalNumber } from "@/lib/vehicles/vehicle-numbering";
 
 type CreateVehicleState = {
     success: boolean;
@@ -60,7 +61,7 @@ export async function createVehicleAction(
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
 
-    const internalNumber = getStringValue(formData, "internal_number");
+    const submittedInternalNumber = getStringValue(formData, "internal_number");
     const manufacturer = getStringValue(formData, "manufacturer");
     const model = getStringValue(formData, "model");
     const vehicleType = getStringValue(formData, "vehicle_type");
@@ -77,6 +78,9 @@ export async function createVehicleAction(
     const sellerCustomerId = getStringValue(formData, "seller_customer_id");
     const purchaseDate = getDateValue(formData, "purchase_date");
     const notes = getStringValue(formData, "notes");
+    const damageNotes = getStringValue(formData, "damage_notes");
+
+    const internalNumber = submittedInternalNumber ?? (await getNextVehicleInternalNumber());
 
     if (!internalNumber || !manufacturer || !model || !vehicleType || !vin) {
         return {
@@ -162,6 +166,7 @@ export async function createVehicleAction(
             status: "in_stock",
             seller_customer_id: sellerCustomerId || null,
             notes,
+            damage_notes: damageNotes,
         })
         .select("id")
         .single();
@@ -218,5 +223,5 @@ export async function createVehicleAction(
         });
     }
 
-    redirect("/dashboard/vehicles");
+    redirect(`/dashboard/vehicles?vehicleCreated=1&highlightVehicleId=${vehicleId}`);
 }

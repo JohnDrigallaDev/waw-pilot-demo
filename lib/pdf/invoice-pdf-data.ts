@@ -36,10 +36,12 @@ type VehicleRelation = {
     vin: string;
     first_registration: string | null;
     construction_year: number | null;
+    damage_notes: string | null;
 };
 
 type SaleRelation = {
     sale_type: SaleType | null;
+    include_damage_notes_on_invoice: boolean | null;
 };
 
 type SupabaseRelation<T> = T | T[] | null;
@@ -143,10 +145,12 @@ export async function getInvoicePdfData(
         vehicle_type,
         vin,
         first_registration,
-        construction_year
+        construction_year,
+        damage_notes
       ),
       sales (
-        sale_type
+        sale_type,
+        include_damage_notes_on_invoice
       )
     `,
         )
@@ -207,7 +211,11 @@ export async function getInvoicePdfData(
             vin: vehicle.vin,
             firstRegistration: vehicle.first_registration,
             constructionYear: vehicle.construction_year,
+            damageNotes: vehicle.damage_notes,
         },
+        includeDamageNotesOnInvoice: Boolean(
+            sale?.include_damage_notes_on_invoice,
+        ),
         amounts: {
             netAmount: Number(invoice.net_amount),
             vatRate: Number(invoice.vat_rate),

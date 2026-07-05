@@ -84,6 +84,7 @@ export async function updateVehicleAction(
     const additionalCostsNet = getNumberValue(formData, "additional_costs_net") ?? 0;
     const status = getStatusValue(formData);
     const notes = getStringValue(formData, "notes");
+    const damageNotes = getStringValue(formData, "damage_notes");
 
     if (!vehicleId) {
         return {
@@ -144,7 +145,7 @@ export async function updateVehicleAction(
     if (additionalCostsNet < 0) {
         return {
             success: false,
-            message: "Bitte gib gültige Nebenkosten ein.",
+            message: "Bitte prüfe die Preisangaben.",
         };
     }
 
@@ -227,6 +228,7 @@ export async function updateVehicleAction(
             additional_costs_net: additionalCostsNet,
             status,
             notes,
+            damage_notes: damageNotes,
         })
         .eq("id", vehicleId)
         .eq("company_id", companyId);

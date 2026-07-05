@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ArrowUpRight,
     Car,
@@ -30,22 +30,46 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { CompactStatCard } from "@/components/cards/compact-stat-card";
+import { FlashMessage } from "@/components/shared/flash-message";
 
 type VehicleTab = "current" | "sold";
 
 type VehicleInventoryProps = {
     vehicles: VehicleRow[];
+    vehicleCreated?: boolean;
+    highlightVehicleId?: string | null;
 };
 
-export function VehicleInventory({ vehicles }: VehicleInventoryProps) {
+export function VehicleInventory({
+                                     vehicles,
+                                     vehicleCreated = false,
+                                     highlightVehicleId = null,
+                                 }: VehicleInventoryProps) {
     const [query, setQuery] = useState("");
+    const [activeHighlightId, setActiveHighlightId] = useState(highlightVehicleId);
+
+    useEffect(() => {
+        setActiveHighlightId(highlightVehicleId);
+
+        if (!highlightVehicleId) return;
+
+        const timeout = window.setTimeout(() => {
+            setActiveHighlightId(null);
+        }, 3000);
+
+        return () => window.clearTimeout(timeout);
+    }, [highlightVehicleId]);
 
     const filteredVehicles = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
 
-        if (!normalizedQuery) return vehicles;
+        const sortedVehicles = [...vehicles].sort((firstVehicle, secondVehicle) =>
+            secondVehicle.created_at.localeCompare(firstVehicle.created_at),
+        );
 
-        return vehicles.filter((vehicle) => {
+        if (!normalizedQuery) return sortedVehicles;
+
+        return sortedVehicles.filter((vehicle) => {
             const searchableText = [
                 vehicle.internal_number,
                 vehicle.manufacturer,
@@ -110,6 +134,10 @@ export function VehicleInventory({ vehicles }: VehicleInventoryProps) {
                     </div>
                 }
             />
+
+            {vehicleCreated ? (
+                <FlashMessage message="Fahrzeug wurde angelegt." />
+            ) : null}
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <InventoryStatCard
@@ -181,11 +209,19 @@ export function VehicleInventory({ vehicles }: VehicleInventoryProps) {
                         </div>
 
                         <TabsContent value="current" className="m-0">
-                            <VehicleTable vehicles={currentVehicles} tab="current" />
+                            <VehicleTable
+                                vehicles={currentVehicles}
+                                tab="current"
+                                highlightedVehicleId={activeHighlightId}
+                            />
                         </TabsContent>
 
                         <TabsContent value="sold" className="m-0">
-                            <VehicleTable vehicles={soldVehicles} tab="sold" />
+                            <VehicleTable
+                                vehicles={soldVehicles}
+                                tab="sold"
+                                highlightedVehicleId={activeHighlightId}
+                            />
                         </TabsContent>
                     </Tabs>
                 </CardContent>
@@ -229,9 +265,14 @@ function InventoryStatCard({
 type VehicleTableProps = {
     vehicles: VehicleRow[];
     tab: VehicleTab;
+    highlightedVehicleId?: string | null;
 };
 
-function VehicleTable({ vehicles, tab }: VehicleTableProps) {
+function VehicleTable({
+                          vehicles,
+                          tab,
+                          highlightedVehicleId = null,
+                      }: VehicleTableProps) {
     if (vehicles.length === 0) {
         return (
             <div className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
@@ -253,6 +294,7 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
             <div className="grid gap-4 p-4 md:hidden">
                 {vehicles.map((vehicle) => {
                     const profit = getVehicleProfit(vehicle);
+                    const isHighlighted = highlightedVehicleId === vehicle.id;
 
                     return (
                         <div
@@ -260,7 +302,11 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                             onClick={() => {
                                 window.location.href = `/dashboard/vehicles/${vehicle.id}`;
                             }}
-                            className="cursor-pointer rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99]"
+                            className={`cursor-pointer rounded-[1.5rem] border p-4 shadow-sm transition-all duration-300 active:scale-[0.99] ${
+                                isHighlighted
+                                    ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-200"
+                                    : "border-slate-200 bg-white"
+                            }`}
                         >
                             <div className="flex items-start justify-between gap-3">
                                 <div>
@@ -409,6 +455,7 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                     <tbody className="divide-y divide-slate-100">
                     {vehicles.map((vehicle) => {
                         const profit = getVehicleProfit(vehicle);
+                        const isHighlighted = highlightedVehicleId === vehicle.id;
 
                         return (
                             <tr
@@ -416,7 +463,11 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                                 onClick={() => {
                                     window.location.href = `/dashboard/vehicles/${vehicle.id}`;
                                 }}
-                                className="group cursor-pointer bg-white transition-colors hover:bg-cyan-50/30"
+                                className={`group cursor-pointer transition-colors ${
+                                    isHighlighted
+                                        ? "bg-emerald-50 ring-2 ring-inset ring-emerald-200"
+                                        : "bg-white hover:bg-cyan-50/30"
+                                }`}
                             >
                                 <td className="px-5 py-5">
                                     <div>
@@ -460,10 +511,6 @@ function VehicleTable({ vehicles, tab }: VehicleTableProps) {
                                 <td className="px-5 py-5">
                                     <p className="font-extrabold text-slate-950">
                                         {formatCurrency(vehicle.purchase_price_net)}
-                                    </p>
-                                    <p className="mt-1 text-xs font-medium text-slate-500">
-                                        Nebenkosten:{" "}
-                                        {formatCurrency(vehicle.additional_costs_net ?? 0)}
                                     </p>
                                 </td>
 

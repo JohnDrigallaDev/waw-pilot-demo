@@ -293,6 +293,8 @@ export async function createSaleAction(
     const netAmount = getNumberValue(formData, "net_amount");
     const vatRate = resolveVatRate(formData, saleType);
     const notes = getStringValue(formData, "notes");
+    const includeDamageNotesOnInvoice =
+        getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
 
     const exportDestinationCity = getStringValue(
         formData,
@@ -349,7 +351,7 @@ export async function createSaleAction(
 
     const { data: vehicleData, error: vehicleLoadError } = await supabase
         .from("vehicles")
-        .select("internal_number, manufacturer, model, status")
+        .select("internal_number, manufacturer, model, status, damage_notes")
         .eq("id", vehicleId)
         .eq("company_id", companyId)
         .single();
@@ -483,6 +485,7 @@ export async function createSaleAction(
             document_check_status: "missing",
             datev_status: "not_sent",
             notes,
+            include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
 
             export_destination_city: exportDestinationCity,
             export_destination_country: exportDestinationCountry,

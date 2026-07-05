@@ -21,9 +21,13 @@ const initialState = {
 
 type VehicleFormProps = {
     customers: CustomerRow[];
+    suggestedInternalNumber: string;
 };
 
-export function VehicleForm({ customers }: VehicleFormProps) {
+export function VehicleForm({
+                                customers,
+                                suggestedInternalNumber,
+                            }: VehicleFormProps) {
     const [state, formAction, isPending] = useActionState(
         createVehicleAction,
         initialState,
@@ -62,12 +66,20 @@ export function VehicleForm({ customers }: VehicleFormProps) {
                         />
 
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            <FormField label="Interne Nummer *" name="internal_number" required />
+                            <FormField
+                                label="Interne Nummer *"
+                                name="internal_number"
+                                defaultValue={suggestedInternalNumber}
+                                required
+                            />
                             <FormField label="Hersteller *" name="manufacturer" required />
                             <FormField label="Modell *" name="model" required />
                             <FormField label="Fahrzeugtyp *" name="vehicle_type" required />
                             <FormField label="FIN / VIN *" name="vin" required />
-                            <FormField label="Kennzeichen" name="license_plate" />
+                            <FormField
+                                label="Vorheriges Kennzeichen (optional)"
+                                name="license_plate"
+                            />
                         </div>
                     </CardContent>
                 </Card>
@@ -77,26 +89,48 @@ export function VehicleForm({ customers }: VehicleFormProps) {
                         <SectionTitle
                             icon={CalendarDays}
                             title="Zulassung & Zustand"
-                            description="Baujahr, Erstzulassung und relevante Termine."
+                            description="Baujahr und Erstzulassung in einer Gruppe, bekannte Schäden separat erfassen."
                         />
 
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            <FormField
-                                label="Baujahr"
-                                name="construction_year"
-                                type="number"
-                                placeholder="z. B. 2019"
-                            />
-                            <FormField
-                                label="Erstzulassung"
-                                name="first_registration"
-                                type="date"
-                            />
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                                <p className="mb-3 text-sm font-extrabold text-slate-700">
+                                    Baujahr / Erstzulassung
+                                </p>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <FormField
+                                        label="Baujahr"
+                                        name="construction_year"
+                                        type="number"
+                                        placeholder="z. B. 2019"
+                                    />
+                                    <FormField
+                                        label="Erstzulassung"
+                                        name="first_registration"
+                                        type="date"
+                                    />
+                                </div>
+                            </div>
                             <FormField
                                 label="Ankaufsdatum"
                                 name="purchase_date"
                                 type="date"
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="damage_notes" className="font-bold text-slate-700">
+                                Schäden
+                            </Label>
+                            <Textarea
+                                id="damage_notes"
+                                name="damage_notes"
+                                placeholder="Bekannte Schäden oder Mängel am Fahrzeug eintragen."
+                                className="min-h-28 rounded-2xl border-slate-200 bg-slate-50 font-medium"
+                            />
+                            <p className="text-xs font-semibold text-slate-500">
+                                Bekannte Schäden oder Mängel am Fahrzeug eintragen.
+                            </p>
                         </div>
                     </CardContent>
                 </Card>
@@ -108,7 +142,7 @@ export function VehicleForm({ customers }: VehicleFormProps) {
                                 Preise & Verkäufer
                             </h2>
                             <p className="mt-1 text-sm font-medium text-slate-500">
-                                Einkaufspreis, Nebenkosten und optionale Kundenzuordnung.
+                                Einkaufspreis, geplanter Verkaufspreis und optionale Kundenzuordnung.
                             </p>
                         </div>
 
@@ -126,14 +160,6 @@ export function VehicleForm({ customers }: VehicleFormProps) {
                                 type="number"
                                 step="0.01"
                             />
-                            <FormField
-                                label="Nebenkosten netto"
-                                name="additional_costs_net"
-                                type="number"
-                                step="0.01"
-                                defaultValue="0"
-                            />
-
                             <div className="space-y-2 md:col-span-2 xl:col-span-3">
                                 <Label
                                     htmlFor="seller_customer_id"

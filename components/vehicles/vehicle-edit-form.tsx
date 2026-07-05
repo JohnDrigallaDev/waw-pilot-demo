@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 type VehicleEditFormProps = {
     vehicle: VehicleDetail;
@@ -137,29 +138,36 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                         />
                                     </FormField>
 
-                                    <FormField label="Baujahr" htmlFor="construction_year">
-                                        <Input
-                                            id="construction_year"
-                                            name="construction_year"
-                                            type="number"
-                                            min="1900"
-                                            max="2100"
-                                            defaultValue={getNumberInputValue(vehicle.construction_year)}
-                                            className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
-                                        />
-                                    </FormField>
+                                    <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
+                                        <p className="text-sm font-extrabold text-slate-700">
+                                            Baujahr / Erstzulassung
+                                        </p>
+                                        <div className="mt-3 grid gap-4 md:grid-cols-2">
+                                            <FormField label="Baujahr" htmlFor="construction_year">
+                                                <Input
+                                                    id="construction_year"
+                                                    name="construction_year"
+                                                    type="number"
+                                                    min="1900"
+                                                    max="2100"
+                                                    defaultValue={getNumberInputValue(vehicle.construction_year)}
+                                                    className="h-12 rounded-2xl border-slate-200 bg-white font-semibold"
+                                                />
+                                            </FormField>
 
-                                    <FormField label="Erstzulassung" htmlFor="first_registration">
-                                        <Input
-                                            id="first_registration"
-                                            name="first_registration"
-                                            type="date"
-                                            defaultValue={getDateInputValue(vehicle.first_registration)}
-                                            className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
-                                        />
-                                    </FormField>
+                                            <FormField label="Erstzulassung" htmlFor="first_registration">
+                                                <Input
+                                                    id="first_registration"
+                                                    name="first_registration"
+                                                    type="date"
+                                                    defaultValue={getDateInputValue(vehicle.first_registration)}
+                                                    className="h-12 rounded-2xl border-slate-200 bg-white font-semibold"
+                                                />
+                                            </FormField>
+                                        </div>
+                                    </div>
 
-                                    <FormField label="Kennzeichen" htmlFor="license_plate">
+                                    <FormField label="Vorheriges Kennzeichen (optional)" htmlFor="license_plate">
                                         <Input
                                             id="license_plate"
                                             name="license_plate"
@@ -188,10 +196,16 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                 <SectionTitle
                                     icon={Wallet}
                                     title="Preise & Kalkulation"
-                                    description="Einkauf, Verkauf, Nebenkosten und Rohgewinn-Basis."
+                                    description="Einkauf, Verkauf und Rohgewinn-Basis."
                                 />
 
-                                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                                <input
+                                    type="hidden"
+                                    name="additional_costs_net"
+                                    value={vehicle.additional_costs_net}
+                                />
+
+                                <div className="mt-6 grid gap-4 md:grid-cols-2">
                                     <FormField label="Einkauf netto" htmlFor="purchase_price_net" required>
                                         <Input
                                             id="purchase_price_net"
@@ -201,18 +215,6 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                             step="0.01"
                                             defaultValue={vehicle.purchase_price_net}
                                             required
-                                            className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
-                                        />
-                                    </FormField>
-
-                                    <FormField label="Nebenkosten netto" htmlFor="additional_costs_net">
-                                        <Input
-                                            id="additional_costs_net"
-                                            name="additional_costs_net"
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            defaultValue={vehicle.additional_costs_net}
                                             className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
                                         />
                                     </FormField>
@@ -243,6 +245,26 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                 />
 
                                 <div className="mt-6">
+                                    <div className="mb-5">
+                                        <label
+                                            htmlFor="damage_notes"
+                                            className="text-sm font-extrabold text-slate-700"
+                                        >
+                                            Schäden
+                                        </label>
+                                        <Textarea
+                                            id="damage_notes"
+                                            name="damage_notes"
+                                            defaultValue={vehicle.damage_notes ?? ""}
+                                            rows={5}
+                                            className="mt-2 rounded-3xl border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-7 text-slate-950"
+                                            placeholder="Bekannte Schäden oder Mängel am Fahrzeug eintragen."
+                                        />
+                                        <p className="mt-2 text-xs font-semibold text-slate-500">
+                                            Bekannte Schäden oder Mängel am Fahrzeug eintragen.
+                                        </p>
+                                    </div>
+
                                     <label
                                         htmlFor="notes"
                                         className="text-sm font-extrabold text-slate-700"

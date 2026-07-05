@@ -348,6 +348,10 @@ export function SaleDetail({
                             <SaleInvoiceTypeActions
                                 saleId={sale.id}
                                 existingInvoiceTypes={existingInvoiceTypes}
+                                damageNotes={sale.vehicle.damage_notes}
+                                includeDamageNotesOnInvoice={
+                                    sale.include_damage_notes_on_invoice
+                                }
                             />
 
                             {sale.invoices.length > 0 ? (

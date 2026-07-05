@@ -110,7 +110,7 @@ export function VehicleDetail({
                 <VehicleStatCard
                     label="Rohgewinn"
                     value={estimatedProfit === null ? "—" : formatCurrency(estimatedProfit)}
-                    description="Verkauf - Einkauf - Kosten"
+                    description="interne Kalkulation"
                     icon={ArrowUpRight}
                     tone={
                         estimatedProfit === null
@@ -138,14 +138,13 @@ export function VehicleDetail({
                                 <InfoRow label="Modell" value={vehicle.model} />
                                 <InfoRow label="Fahrzeugtyp" value={vehicle.vehicle_type} />
                                 <InfoRow label="VIN" value={vehicle.vin} />
-                                <InfoRow label="Kennzeichen" value={vehicle.license_plate ?? "—"} />
                                 <InfoRow
-                                    label="Baujahr"
-                                    value={vehicle.construction_year?.toString() ?? "—"}
+                                    label="Kennzeichen bisher"
+                                    value={vehicle.license_plate ?? "—"}
                                 />
                                 <InfoRow
-                                    label="Erstzulassung"
-                                    value={formatDate(vehicle.first_registration)}
+                                    label="Baujahr / Erstzulassung"
+                                    value={`${vehicle.construction_year?.toString() ?? "—"} / ${formatDate(vehicle.first_registration)}`}
                                 />
                                 <InfoRow
                                     label="Angelegt am"
@@ -158,19 +157,29 @@ export function VehicleDetail({
                     <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
                         <CardContent className="p-5">
                             <SectionTitle
+                                icon={FileText}
+                                title="Schäden"
+                                description="Bekannte Schäden oder Mängel am Fahrzeug."
+                            />
+
+                            <p className="mt-5 rounded-3xl bg-slate-50 p-4 text-sm font-semibold leading-7 text-slate-700">
+                                {vehicle.damage_notes?.trim() || "Keine Schäden hinterlegt."}
+                            </p>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="p-5">
+                            <SectionTitle
                                 icon={Wallet}
                                 title="Preise & Kalkulation"
-                                description="Einkauf, Nebenkosten, Verkauf und Rohgewinn."
+                                description="Einkauf, Verkauf und Rohgewinn."
                             />
 
                             <div className="mt-5 space-y-3">
                                 <InfoRow
                                     label="Einkauf netto"
                                     value={formatCurrency(vehicle.purchase_price_net)}
-                                />
-                                <InfoRow
-                                    label="Nebenkosten netto"
-                                    value={formatCurrency(vehicle.additional_costs_net)}
                                 />
                                 <InfoRow
                                     label="Verkauf netto"

@@ -124,12 +124,17 @@ export function SaleForm({
     const [selectedCustomerId, setSelectedCustomerId] = useState(
         defaultCustomerId ?? "",
     );
+    const [selectedVehicleId, setSelectedVehicleId] = useState(
+        defaultVehicleId ?? "",
+    );
     const [netAmount, setNetAmount] = useState("");
     const [vatRate, setVatRate] = useState("19");
     const requiresExportDetails =
         saleType === "eu" || saleType === "export_third_country";
     const selectedCustomer =
         customers.find((customer) => customer.id === selectedCustomerId) ?? null;
+    const selectedVehicle =
+        vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
     const selectedCustomerMissingTaxNumber =
         buyerMode === "existing" &&
         saleType === "inland" &&
@@ -196,7 +201,8 @@ export function SaleForm({
                                 name="vehicle_id"
                                 required
                                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
-                                defaultValue={defaultVehicleId ?? ""}
+                                value={selectedVehicleId}
+                                onChange={(event) => setSelectedVehicleId(event.target.value)}
                             >
                                 <option value="">Fahrzeug auswählen</option>
                                 {vehicles.map((vehicle) => (
@@ -725,6 +731,26 @@ export function SaleForm({
                                 </p>
                             </div>
                         </label>
+
+                        {selectedVehicle?.damage_notes ? (
+                            <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+                                <input
+                                    type="checkbox"
+                                    name="include_damage_notes_on_invoice"
+                                    value="yes"
+                                    className="mt-1 size-4 rounded border-amber-300 text-amber-700"
+                                />
+                                <div>
+                                    <p className="font-extrabold text-amber-950">
+                                        Schäden auf Rechnung aufführen
+                                    </p>
+                                    <p className="mt-1 text-sm font-medium leading-6 text-amber-900">
+                                        Die beim Fahrzeug hinterlegten Schäden werden als Hinweis
+                                        auf der Rechnung ausgegeben.
+                                    </p>
+                                </div>
+                            </label>
+                        ) : null}
 
                         <div className="grid gap-4 md:grid-cols-[1fr_0.6fr]">
                             <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-emerald-100 bg-emerald-50 p-4">

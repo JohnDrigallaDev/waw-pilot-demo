@@ -45,7 +45,10 @@ export type InvoicePdfData = {
         vin: string;
         firstRegistration: string | null;
         constructionYear: number | null;
+        damageNotes: string | null;
     };
+
+    includeDamageNotesOnInvoice: boolean;
 
     amounts: {
         netAmount: number;
@@ -478,10 +481,20 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
         "Delivery terms: EXW (Ex Works) according to Incoterms",
         "Das KFZ wird unter Ausschluss jeder Gewährleistung, so wie es steht, verkauft. | Sold without warranty or guarantee .",
     ];
+    const damageNotes = data.vehicle.damageNotes?.trim();
+    const damageLines =
+        data.includeDamageNotesOnInvoice && damageNotes
+            ? [
+                  "",
+                  "Hinweis zu bekannten Schäden/Mängeln:",
+                  damageNotes,
+              ]
+            : [];
 
     if (data.saleType === "eu") {
         return [
             ...baseLines,
+            ...damageLines,
             "",
             "Steuerfreie innergemeinschaftliche Lieferung gemäß § 4 Nr. 1b UStG i.V.m. § 6a UStG. | Intra-Community supply exempt from VAT.",
         ];
@@ -490,12 +503,13 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
     if (data.saleType === "export_third_country") {
         return [
             ...baseLines,
+            ...damageLines,
             "",
             "Steuerfreie Ausfuhrlieferung gemäß § 4 Nr. 1a UStG. | Export delivery exempt from VAT according to § 4 No. 1a German VAT Act.",
         ];
     }
 
-    return baseLines;
+    return [...baseLines, ...damageLines];
 }
 
 export async function generateInvoicePdf(

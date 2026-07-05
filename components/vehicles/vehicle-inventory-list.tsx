@@ -187,11 +187,6 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
         0,
     );
 
-    const totalAdditionalCostsNet = filteredRows.reduce(
-        (sum, row) => sum + row.additionalCostsNet,
-        0,
-    );
-
     const totalSaleNet = filteredRows.reduce(
         (sum, row) => sum + (row.saleNetAmount ?? 0),
         0,
@@ -276,7 +271,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                 <SummaryCard
                     title="Rohgewinn netto"
                     value={formatMoney(totalRawProfitNet)}
-                    description={`Nebenkosten: ${formatMoney(totalAdditionalCostsNet)}`}
+                    description="Summe Rohgewinn"
                     icon={TrendingUp}
                 />
             </div>
@@ -382,9 +377,6 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                 <th className="px-4 py-3 text-right font-black print:px-1 print:py-1">
                                     EK netto
                                 </th>
-                                <th className="px-4 py-3 text-right font-black print:px-1 print:py-1">
-                                    Nebenk.
-                                </th>
                                 <th className="px-4 py-3 font-black print:px-1 print:py-1">
                                     VK-Nr.
                                 </th>
@@ -455,10 +447,6 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                             {formatMoney(row.purchaseNetAmount)}
                                         </td>
 
-                                        <td className="px-4 py-3 text-right font-bold text-slate-700 print:px-1 print:py-1">
-                                            {formatMoney(row.additionalCostsNet)}
-                                        </td>
-
                                         <td className="px-4 py-3 font-black text-slate-950 print:px-1 print:py-1">
                                             {row.saleNumber ?? "—"}
                                         </td>
@@ -507,7 +495,7 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                             ) : (
                                 <tr>
                                     <td
-                                        colSpan={14}
+                                        colSpan={13}
                                         className="px-4 py-12 text-center text-sm font-bold text-slate-500"
                                     >
                                         Keine passenden Fahrzeuge gefunden.
@@ -527,9 +515,6 @@ export function VehicleInventoryList({ rows }: VehicleInventoryListProps) {
                                     </td>
                                     <td className="px-4 py-3 text-right print:px-1 print:py-1">
                                         {formatMoney(totalPurchaseNet)}
-                                    </td>
-                                    <td className="px-4 py-3 text-right print:px-1 print:py-1">
-                                        {formatMoney(totalAdditionalCostsNet)}
                                     </td>
                                     <td
                                         colSpan={4}

@@ -55,6 +55,7 @@ type SaleDetailQueryRow = {
     payment_status: PaymentStatus;
     datev_status: DatevStatus;
     notes: string | null;
+    include_damage_notes_on_invoice: boolean | null;
     created_at: string;
 
     vehicles: {
@@ -68,6 +69,7 @@ type SaleDetailQueryRow = {
         first_registration: string | null;
         purchase_price_net: number | string;
         additional_costs_net: number | string;
+        damage_notes: string | null;
     } | null;
 
     customers: {
@@ -127,6 +129,7 @@ export type SaleDetail = {
     payment_status: PaymentStatus;
     datev_status: DatevStatus;
     notes: string | null;
+    include_damage_notes_on_invoice: boolean;
 
     net_amount: number;
     vat_rate: number;
@@ -159,6 +162,7 @@ export type SaleDetail = {
         first_registration: string | null;
         purchase_price_net: number;
         additional_costs_net: number;
+        damage_notes: string | null;
     };
 
     invoice: SaleDetailInvoice | null;
@@ -229,6 +233,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
       payment_status,
       datev_status,
       notes,
+      include_damage_notes_on_invoice,
       created_at,
       vehicles (
         internal_number,
@@ -240,7 +245,8 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         construction_year,
         first_registration,
         purchase_price_net,
-        additional_costs_net
+        additional_costs_net,
+        damage_notes
       ),
       customers:buyer_customer_id (
         type,
@@ -390,6 +396,9 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         payment_status: sale.payment_status,
         datev_status: sale.datev_status,
         notes: sale.notes,
+        include_damage_notes_on_invoice: Boolean(
+            sale.include_damage_notes_on_invoice,
+        ),
 
         net_amount: netAmount,
         vat_rate: Number(sale.vat_rate),
@@ -422,6 +431,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             first_registration: sale.vehicles.first_registration,
             purchase_price_net: purchasePriceNet,
             additional_costs_net: additionalCostsNet,
+            damage_notes: sale.vehicles.damage_notes,
         },
 
         invoice: mainInvoice,
