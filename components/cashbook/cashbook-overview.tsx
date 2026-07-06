@@ -6,8 +6,10 @@ import {
     Banknote,
     BookOpenCheck,
     Coins,
+    Download,
     ExternalLink,
     Plus,
+    Printer,
     Receipt,
     Search,
     ShoppingCart,
@@ -36,16 +38,93 @@ import { Input } from "@/components/ui/input";
 
 type CashbookOverviewProps = {
     entries: CashbookEntryRow[];
+    dateFrom?: string | null;
+    dateTo?: string | null;
 };
 
 type CashbookFilter = "all" | "cash" | "bank";
 type EntryTypeFilter = "all" | "income" | "expense";
 
-export function CashbookOverview({ entries }: CashbookOverviewProps) {
+function getPeriodLabel(dateFrom?: string | null, dateTo?: string | null): string {
+    if (dateFrom && dateTo) {
+        return `${formatDate(dateFrom)} bis ${formatDate(dateTo)}`;
+    }
+
+    if (dateFrom) {
+        return `ab ${formatDate(dateFrom)}`;
+    }
+
+    if (dateTo) {
+        return `bis ${formatDate(dateTo)}`;
+    }
+
+    return "Alle Buchungen";
+}
+
+function escapeCsvValue(value: string | number | null | undefined): string {
+    const text = String(value ?? "");
+    return `"${text.replaceAll('"', '""')}"`;
+}
+
+function formatCsvAmount(value: number): string {
+    return value.toFixed(2).replace(".", ",");
+}
+
+function createCashbookCsv(entries: CashbookEntryRow[]): string {
+    const header = [
+        "Datum",
+        "Typ",
+        "Kategorie",
+        "Beschreibung",
+        "Zahlungsart",
+        "Betrag",
+        "Kunde",
+        "Fahrzeug",
+        "Verkauf",
+        "Rechnung",
+    ];
+
+    const rows = entries.map((entry) => [
+        formatDate(entry.booking_date),
+        getCashbookTypeLabel(entry.entry_type),
+        getCashbookCategoryLabel(entry.category),
+        entry.description,
+        getCashbookPaymentMethodLabel(entry.payment_method),
+        `${entry.entry_type === "income" ? "" : "-"}${formatCsvAmount(entry.amount)}`,
+        entry.customer_name ?? "",
+        [entry.vehicle_internal_number, entry.vehicle_name].filter(Boolean).join(" · "),
+        entry.sale_id ?? "",
+        entry.invoice_number ?? "",
+    ]);
+
+    return [
+        header.map(escapeCsvValue).join(";"),
+        ...rows.map((row) => row.map(escapeCsvValue).join(";")),
+    ].join("\n");
+}
+
+function getCashbookExportFilename(
+    dateFrom?: string | null,
+    dateTo?: string | null,
+): string {
+    if (dateFrom || dateTo) {
+        return `kassenbuch-${dateFrom ?? "start"}-bis-${dateTo ?? "heute"}.csv`;
+    }
+
+    return "kassenbuch.csv";
+}
+
+export function CashbookOverview({
+                                     entries,
+                                     dateFrom,
+                                     dateTo,
+                                 }: CashbookOverviewProps) {
     const [query, setQuery] = useState("");
     const [paymentFilter, setPaymentFilter] = useState<CashbookFilter>("all");
     const [entryTypeFilter, setEntryTypeFilter] =
         useState<EntryTypeFilter>("all");
+    const isDateFiltered = Boolean(dateFrom || dateTo);
+    const periodLabel = getPeriodLabel(dateFrom, dateTo);
 
     const filteredEntries = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
@@ -80,13 +159,13 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
         });
     }, [query, entries, paymentFilter, entryTypeFilter]);
 
-    const totalIncome = calculateTotalIncome(entries);
-    const totalExpenses = calculateTotalExpenses(entries);
-    const totalBalance = calculateBalance(entries);
-    const cashBalance = calculatePaymentMethodBalance(entries, "cash");
-    const bankBalance = calculatePaymentMethodBalance(entries, "bank");
+    const totalIncome = calculateTotalIncome(filteredEntries);
+    const totalExpenses = calculateTotalExpenses(filteredEntries);
+    const totalBalance = calculateBalance(filteredEntries);
+    const cashBalance = calculatePaymentMethodBalance(filteredEntries, "cash");
+    const bankBalance = calculatePaymentMethodBalance(filteredEntries, "bank");
 
-    const purchaseExpenses = entries
+    const purchaseExpenses = filteredEntries
         .filter(
             (entry) =>
                 entry.entry_type === "expense" &&
@@ -94,26 +173,58 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
         )
         .reduce((sum, entry) => sum + entry.amount, 0);
 
-    return (
-        <div className="space-y-6">
-            <PageHeader
-                eyebrow="Finanzen"
-                title="Kassenbuch"
-                description="Einnahmen, Ausgaben, Barbestand, Bankbestand und Zahlungsbewegungen aus Supabase."
-                action={
-                    <Button
-                        asChild
-                        className="rounded-2xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
-                    >
-                        <Link href="/dashboard/cashbook/new">
-                            <Plus className="mr-2 size-4" />
-                            Buchung erfassen
-                        </Link>
-                    </Button>
-                }
-            />
+    function handlePrint() {
+        window.print();
+    }
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    function handleCsvExport() {
+        const csv = `\uFEFF${createCashbookCsv(filteredEntries)}`;
+        const blob = new Blob([csv], {
+            type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+
+        link.href = url;
+        link.download = getCashbookExportFilename(dateFrom, dateTo);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    return (
+        <div className="cashbook-print-area space-y-6 print:space-y-4">
+            <div className="hidden print:block">
+                <h1 className="text-2xl font-black text-slate-950">Kassenbuch</h1>
+                <p className="mt-1 text-sm font-semibold text-slate-700">
+                    Zeitraum: {periodLabel}
+                </p>
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                    Ausdruck: {formatDate(new Date())}
+                </p>
+            </div>
+
+            <div className="print:hidden">
+                <PageHeader
+                    eyebrow="Finanzen"
+                    title="Kassenbuch"
+                    description="Einnahmen, Ausgaben, Barbestand, Bankbestand und Zahlungsbewegungen aus Supabase."
+                    action={
+                        <Button
+                            asChild
+                            className="rounded-2xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
+                        >
+                            <Link href="/dashboard/cashbook/new">
+                                <Plus className="mr-2 size-4" />
+                                Buchung erfassen
+                            </Link>
+                        </Button>
+                    }
+                />
+            </div>
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5 print:hidden">
                 <CashbookStatCard
                     label="Gesamtsaldo"
                     value={formatCurrency(totalBalance)}
@@ -144,17 +255,78 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                 />
                 <CashbookStatCard
                     label="Buchungen"
-                    value={entries.length}
-                    description="erfasste Bewegungen"
+                    value={filteredEntries.length}
+                    description={
+                        isDateFiltered ? "im gewählten Zeitraum" : "erfasste Bewegungen"
+                    }
                     icon={Wallet}
                     tone="success"
                 />
             </section>
 
-            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
-                <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] print:block">
+                <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm print:rounded-none print:border-0 print:shadow-none">
                     <CardContent className="p-0">
-                        <div className="border-b border-slate-200 bg-white p-5">
+                        <div className="border-b border-slate-200 bg-white p-5 print:hidden">
+                            <form
+                                action="/dashboard/cashbook"
+                                className="mb-5 grid gap-3 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[1fr_1fr_auto_auto] lg:items-end"
+                            >
+                                <div className="space-y-1.5">
+                                    <label
+                                        htmlFor="cashbook-date-from"
+                                        className="text-xs font-extrabold uppercase tracking-wide text-slate-400"
+                                    >
+                                        Von
+                                    </label>
+                                    <Input
+                                        id="cashbook-date-from"
+                                        name="from"
+                                        type="date"
+                                        defaultValue={dateFrom ?? ""}
+                                        className="h-11 rounded-2xl border-slate-200 bg-white font-semibold"
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label
+                                        htmlFor="cashbook-date-to"
+                                        className="text-xs font-extrabold uppercase tracking-wide text-slate-400"
+                                    >
+                                        Bis
+                                    </label>
+                                    <Input
+                                        id="cashbook-date-to"
+                                        name="to"
+                                        type="date"
+                                        defaultValue={dateTo ?? ""}
+                                        className="h-11 rounded-2xl border-slate-200 bg-white font-semibold"
+                                    />
+                                </div>
+
+                                <Button
+                                    type="submit"
+                                    className="h-11 rounded-2xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
+                                >
+                                    Anwenden
+                                </Button>
+
+                                <Button
+                                    asChild
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-2xl font-bold"
+                                >
+                                    <Link href="/dashboard/cashbook">Zurücksetzen</Link>
+                                </Button>
+
+                                {isDateFiltered ? (
+                                    <p className="text-sm font-bold text-cyan-700 lg:col-span-4">
+                                        Gefiltert: {periodLabel}
+                                    </p>
+                                ) : null}
+                            </form>
+
                             <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
                                 <div className="min-w-0">
                                     <h2 className="text-xl font-extrabold text-slate-950">
@@ -165,7 +337,7 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                                     </p>
                                 </div>
 
-                                <div className="grid w-full gap-3 sm:grid-cols-2 2xl:w-auto 2xl:min-w-[38rem] 2xl:grid-cols-[11rem_13rem_1fr]">
+                                <div className="grid w-full gap-3 sm:grid-cols-2 2xl:w-auto 2xl:min-w-[48rem] 2xl:grid-cols-[11rem_13rem_1fr_auto]">
                                     <div className="space-y-1.5">
                                         <label
                                             htmlFor="payment-filter"
@@ -226,12 +398,35 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                                             />
                                         </div>
                                     </div>
+
+                                    <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 2xl:col-span-1 2xl:flex 2xl:items-end">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={handlePrint}
+                                            className="h-11 rounded-2xl px-4 font-bold"
+                                            aria-label="Kassenbuch drucken"
+                                            title="Drucken"
+                                        >
+                                            <Printer className="size-4" />
+                                        </Button>
+
+                                        <Button
+                                            type="button"
+                                            onClick={handleCsvExport}
+                                            className="h-11 rounded-2xl bg-slate-950 px-4 font-bold text-white hover:bg-slate-800"
+                                            aria-label="Kassenbuch als CSV exportieren"
+                                            title="CSV exportieren"
+                                        >
+                                            <Download className="size-4" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         <div>
-                            <div className="grid gap-4 p-4 md:hidden">
+                            <div className="grid gap-4 p-4 md:hidden print:hidden">
                                 {filteredEntries.map((entry) => (
                                     <CashbookMobileCard key={entry.id} entry={entry} />
                                 ))}
@@ -239,18 +434,18 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
                                 {filteredEntries.length === 0 ? <EmptyCashbookState /> : null}
                             </div>
 
-                            <div className="hidden overflow-x-auto md:block">
-                                <table className="w-full min-w-[1120px] text-left">
+                            <div className="hidden overflow-x-auto md:block print:block print:overflow-visible">
+                                <table className="w-full min-w-[1120px] text-left print:min-w-0 print:text-[8px]">
                                     <thead className="bg-slate-50 text-xs font-extrabold uppercase tracking-wide text-slate-500">
                                     <tr>
-                                        <th className="px-5 py-4">Datum</th>
-                                        <th className="px-5 py-4">Typ</th>
-                                        <th className="px-5 py-4">Kategorie</th>
-                                        <th className="px-5 py-4">Beschreibung</th>
-                                        <th className="px-5 py-4">Bezug</th>
-                                        <th className="px-5 py-4">Zahlungsart</th>
-                                        <th className="px-5 py-4 text-right">Betrag</th>
-                                        <th className="px-5 py-4 text-right">Aktion</th>
+                                        <th className="px-5 py-4 print:px-1 print:py-1">Datum</th>
+                                        <th className="px-5 py-4 print:px-1 print:py-1">Typ</th>
+                                        <th className="px-5 py-4 print:px-1 print:py-1">Kategorie</th>
+                                        <th className="px-5 py-4 print:px-1 print:py-1">Beschreibung</th>
+                                        <th className="px-5 py-4 print:px-1 print:py-1">Bezug</th>
+                                        <th className="px-5 py-4 print:px-1 print:py-1">Zahlungsart</th>
+                                        <th className="px-5 py-4 text-right print:px-1 print:py-1">Betrag</th>
+                                        <th className="px-5 py-4 text-right print:hidden">Aktion</th>
                                     </tr>
                                     </thead>
 
@@ -263,16 +458,34 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
 
                                 {filteredEntries.length === 0 ? <EmptyCashbookState /> : null}
                             </div>
+
+                            <div className="hidden border-t border-slate-200 p-4 print:block">
+                                <h2 className="text-base font-black text-slate-950">
+                                    {isDateFiltered
+                                        ? "Zusammenfassung im gewählten Zeitraum"
+                                        : "Zusammenfassung gesamt"}
+                                </h2>
+                                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                    <PrintSummaryItem label="Einnahmen gesamt" value={formatCurrency(totalIncome)} />
+                                    <PrintSummaryItem label="Ausgaben gesamt" value={formatCurrency(totalExpenses)} />
+                                    <PrintSummaryItem label="Ankauf-Ausgaben" value={formatCurrency(purchaseExpenses)} />
+                                    <PrintSummaryItem label="Barbestand" value={formatCurrency(cashBalance)} />
+                                    <PrintSummaryItem label="Bankbestand" value={formatCurrency(bankBalance)} />
+                                    <PrintSummaryItem label="Gesamtsaldo" value={formatCurrency(totalBalance)} />
+                                </div>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                <div className="space-y-4 xl:max-w-[360px]">
+                <div className="space-y-4 xl:max-w-[360px] print:hidden">
                     <Card className="rounded-[1.5rem] border-slate-200 bg-slate-950 text-white shadow-xl shadow-slate-300/40">
                         <CardContent className="p-4">
                             <div>
                                 <p className="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] text-cyan-200">
-                                    Zusammenfassung
+                                    {isDateFiltered
+                                        ? "Zusammenfassung im gewählten Zeitraum"
+                                        : "Zusammenfassung gesamt"}
                                 </p>
                                 <h2 className="mt-1.5 text-xl font-extrabold">Kasse & Bank</h2>
                             </div>
@@ -296,7 +509,9 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
 
                             <div className="mt-4 rounded-2xl border border-white/10 bg-white/10 p-3">
                                 <p className="text-xs font-bold text-slate-200">
-                                    Aktueller Gesamtsaldo
+                                    {isDateFiltered
+                                        ? "Gesamtsaldo im Zeitraum"
+                                        : "Aktueller Gesamtsaldo"}
                                 </p>
                                 <p className="mt-1.5 break-words text-2xl font-extrabold text-cyan-200">
                                     {formatCurrency(totalBalance)}
@@ -307,6 +522,33 @@ export function CashbookOverview({ entries }: CashbookOverviewProps) {
 
                 </div>
             </section>
+
+            <style>{`
+                @media print {
+                    @page {
+                        size: A4 landscape;
+                        margin: 10mm;
+                    }
+
+                    body {
+                        background: #ffffff !important;
+                    }
+
+                    aside,
+                    header,
+                    nav {
+                        display: none !important;
+                    }
+
+                    main {
+                        padding: 0 !important;
+                    }
+
+                    .cashbook-print-area {
+                        color: #0f172a;
+                    }
+                }
+            `}</style>
         </div>
     );
 }
@@ -380,7 +622,7 @@ function CashbookDesktopRow({ entry }: { entry: CashbookEntryRow }) {
             </td>
 
             <td
-                className="px-5 py-5"
+                className="px-5 py-5 print:hidden"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex justify-end gap-2">
@@ -687,6 +929,15 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
             <p className="min-w-0 text-xs font-bold text-slate-300">{label}</p>
             <p className="shrink-0 text-sm font-extrabold text-white">{value}</p>
+        </div>
+    );
+}
+
+function PrintSummaryItem({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+            <span className="font-bold text-slate-600">{label}</span>
+            <span className="font-black text-slate-950">{value}</span>
         </div>
     );
 }

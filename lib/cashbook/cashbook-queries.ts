@@ -101,11 +101,22 @@ function getCustomerName(customer: CustomerRelation | null): string | null {
     return privateName.length > 0 ? privateName : "Unbekannte Privatperson";
 }
 
-export async function getCashbookEntries(): Promise<CashbookEntryRow[]> {
+export type CashbookEntryFilters = {
+    from?: string | null;
+    to?: string | null;
+};
+
+function isDateParam(value: string | null | undefined): value is string {
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export async function getCashbookEntries(
+    filters: CashbookEntryFilters = {},
+): Promise<CashbookEntryRow[]> {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
 
-    const { data, error } = await supabase
+    let query = supabase
         .from("cashbook_entries")
         .select(
             `
@@ -142,8 +153,19 @@ export async function getCashbookEntries(): Promise<CashbookEntryRow[]> {
       )
     `,
         )
-        .eq("company_id", companyId)
-        .order("booking_date", { ascending: false });
+        .eq("company_id", companyId);
+
+    if (isDateParam(filters.from)) {
+        query = query.gte("booking_date", filters.from);
+    }
+
+    if (isDateParam(filters.to)) {
+        query = query.lte("booking_date", filters.to);
+    }
+
+    const { data, error } = await query.order("booking_date", {
+        ascending: false,
+    });
 
     if (error) {
         throw new Error(`Kassenbuch konnte nicht geladen werden: ${error.message}`);
