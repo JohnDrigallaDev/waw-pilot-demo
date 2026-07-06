@@ -219,6 +219,19 @@ export function SaleForm({
                                     Lege zuerst einen Ankauf an oder prüfe reservierte Fahrzeuge.
                                 </p>
                             ) : null}
+
+                            {selectedVehicle?.sale_price_net ? (
+                                <div className="rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
+                                    <p className="font-extrabold text-cyan-950">
+                                        Geplanter Netto-VK:{" "}
+                                        {formatCurrency(selectedVehicle.sale_price_net)} netto
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold leading-6 text-cyan-800">
+                                        Dieser Wert dient als Orientierung und kann vom
+                                        tatsächlichen Verkaufspreis abweichen.
+                                    </p>
+                                </div>
+                            ) : null}
                         </div>
                     </CardContent>
                 </Card>
@@ -747,6 +760,27 @@ export function SaleForm({
                                     <p className="mt-1 text-sm font-medium leading-6 text-amber-900">
                                         Die beim Fahrzeug hinterlegten Schäden werden als Hinweis
                                         auf der Rechnung ausgegeben.
+                                    </p>
+                                </div>
+                            </label>
+                        ) : null}
+
+                        {selectedVehicle?.sale_price_net ? (
+                            <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                                <input
+                                    type="checkbox"
+                                    name="include_planned_net_sale_price_note"
+                                    value="yes"
+                                    defaultChecked
+                                    className="mt-1 size-4 rounded border-cyan-300 text-cyan-700"
+                                />
+                                <div>
+                                    <p className="font-extrabold text-slate-950">
+                                        Geplanten Netto-VK als Notiz übernehmen
+                                    </p>
+                                    <p className="mt-1 text-sm font-medium leading-6 text-slate-600">
+                                        Übernimmt den Planwert aus dem Fahrzeugbestand als
+                                        Rechnungsnotiz.
                                     </p>
                                 </div>
                             </label>

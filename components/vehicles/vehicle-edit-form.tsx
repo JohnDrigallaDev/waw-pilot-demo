@@ -219,7 +219,7 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                         />
                                     </FormField>
 
-                                    <FormField label="Verkauf netto" htmlFor="sale_price_net">
+                                    <FormField label="Geplanter Netto-VK" htmlFor="sale_price_net">
                                         <Input
                                             id="sale_price_net"
                                             name="sale_price_net"
@@ -230,6 +230,10 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                             className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
                                         />
                                     </FormField>
+                                    <p className="text-xs font-semibold leading-5 text-slate-500 md:col-span-2">
+                                        Interner Ziel-Verkaufspreis netto. Dieser Wert dient als
+                                        Orientierung beim späteren Verkauf.
+                                    </p>
                                 </div>
                             </CardContent>
                         </Card>

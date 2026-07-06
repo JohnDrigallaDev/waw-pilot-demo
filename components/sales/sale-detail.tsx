@@ -352,6 +352,8 @@ export function SaleDetail({
                                 includeDamageNotesOnInvoice={
                                     sale.include_damage_notes_on_invoice
                                 }
+                                plannedNetSalePrice={sale.vehicle.sale_price_net}
+                                invoiceNotes={sale.invoice_notes}
                             />
 
                             {sale.invoices.length > 0 ? (

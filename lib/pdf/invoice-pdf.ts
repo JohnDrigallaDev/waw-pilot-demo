@@ -49,6 +49,7 @@ export type InvoicePdfData = {
     };
 
     includeDamageNotesOnInvoice: boolean;
+    invoiceNotes: string | null;
 
     amounts: {
         netAmount: number;
@@ -490,10 +491,21 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
                   damageNotes,
               ]
             : [];
+    const invoiceNoteLines = data.invoiceNotes?.trim()
+        ? [
+              "",
+              "Hinweis / Notiz:",
+              ...data.invoiceNotes
+                  .split(/\r?\n/)
+                  .map((line) => line.trim())
+                  .filter((line) => line.length > 0),
+          ]
+        : [];
 
     if (data.saleType === "eu") {
         return [
             ...baseLines,
+            ...invoiceNoteLines,
             ...damageLines,
             "",
             "Steuerfreie innergemeinschaftliche Lieferung gemäß § 4 Nr. 1b UStG i.V.m. § 6a UStG. | Intra-Community supply exempt from VAT.",
@@ -503,13 +515,14 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
     if (data.saleType === "export_third_country") {
         return [
             ...baseLines,
+            ...invoiceNoteLines,
             ...damageLines,
             "",
             "Steuerfreie Ausfuhrlieferung gemäß § 4 Nr. 1a UStG. | Export delivery exempt from VAT according to § 4 No. 1a German VAT Act.",
         ];
     }
 
-    return [...baseLines, ...damageLines];
+    return [...baseLines, ...invoiceNoteLines, ...damageLines];
 }
 
 export async function generateInvoicePdf(

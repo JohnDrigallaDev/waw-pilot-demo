@@ -6,6 +6,7 @@ import { CheckCircle2, FileText, Loader2, Receipt } from "lucide-react";
 
 import { createSaleInvoiceAction } from "@/app/dashboard/sales/[saleId]/invoice-actions";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
+import { formatCurrency } from "@/lib/format/currency";
 import { Button } from "@/components/ui/button";
 
 type SaleInvoiceTypeActionsProps = {
@@ -13,6 +14,8 @@ type SaleInvoiceTypeActionsProps = {
     existingInvoiceTypes?: InvoiceType[];
     damageNotes?: string | null;
     includeDamageNotesOnInvoice?: boolean;
+    plannedNetSalePrice?: number | null;
+    invoiceNotes?: string | null;
 };
 
 export function SaleInvoiceTypeActions({
@@ -20,6 +23,8 @@ export function SaleInvoiceTypeActions({
                                            existingInvoiceTypes = [],
                                            damageNotes = null,
                                            includeDamageNotesOnInvoice = false,
+                                           plannedNetSalePrice = null,
+                                           invoiceNotes = null,
                                        }: SaleInvoiceTypeActionsProps) {
     const hasStandard = existingInvoiceTypes.includes("standard");
     const hasProforma = existingInvoiceTypes.includes("proforma");
@@ -27,7 +32,20 @@ export function SaleInvoiceTypeActions({
     const [includeDamageNotes, setIncludeDamageNotes] = useState(
         includeDamageNotesOnInvoice,
     );
+    const plannedNetSalePriceNote =
+        plannedNetSalePrice && plannedNetSalePrice > 0
+            ? `Geplanter Netto-VK laut Fahrzeugbestand: ${formatCurrency(plannedNetSalePrice)} netto`
+            : null;
+    const [includePlannedNetSalePriceNote, setIncludePlannedNetSalePriceNote] =
+        useState(
+            Boolean(
+                plannedNetSalePriceNote &&
+                    invoiceNotes?.includes(plannedNetSalePriceNote),
+            ),
+        );
     const hasDamageNotes = Boolean(damageNotes?.trim());
+    const hasPlannedNetSalePrice =
+        plannedNetSalePrice !== null && plannedNetSalePrice > 0;
 
     return (
         <div className="mt-5 space-y-3">
@@ -53,6 +71,29 @@ export function SaleInvoiceTypeActions({
                 </label>
             ) : null}
 
+            {hasPlannedNetSalePrice ? (
+                <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
+                    <input
+                        type="checkbox"
+                        checked={includePlannedNetSalePriceNote}
+                        onChange={(event) =>
+                            setIncludePlannedNetSalePriceNote(event.currentTarget.checked)
+                        }
+                        className="mt-1 size-4 rounded border-cyan-300 text-cyan-700"
+                    />
+                    <span>
+                        <span className="block font-extrabold text-cyan-950">
+                            Geplanten Netto-VK als Notiz übernehmen
+                        </span>
+                        <span className="mt-1 block text-sm font-medium leading-6 text-cyan-800">
+                            Geplanter Netto-VK:{" "}
+                            {formatCurrency(plannedNetSalePrice)} netto. Dieser Wert
+                            wird als Rechnungsnotiz übernommen.
+                        </span>
+                    </span>
+                </label>
+            ) : null}
+
             <div className="grid gap-3 lg:grid-cols-3">
                 <form action={createSaleInvoiceAction}>
                     <input type="hidden" name="sale_id" value={saleId} />
@@ -61,6 +102,11 @@ export function SaleInvoiceTypeActions({
                         type="hidden"
                         name="include_damage_notes_on_invoice"
                         value={includeDamageNotes ? "yes" : "no"}
+                    />
+                    <input
+                        type="hidden"
+                        name="include_planned_net_sale_price_note"
+                        value={includePlannedNetSalePriceNote ? "yes" : "no"}
                     />
 
                     <InvoiceSubmitButton
@@ -83,6 +129,11 @@ export function SaleInvoiceTypeActions({
                         type="hidden"
                         name="include_damage_notes_on_invoice"
                         value={includeDamageNotes ? "yes" : "no"}
+                    />
+                    <input
+                        type="hidden"
+                        name="include_planned_net_sale_price_note"
+                        value={includePlannedNetSalePriceNote ? "yes" : "no"}
                     />
 
                     <InvoiceSubmitButton
@@ -109,6 +160,11 @@ export function SaleInvoiceTypeActions({
                         type="hidden"
                         name="include_damage_notes_on_invoice"
                         value={includeDamageNotes ? "yes" : "no"}
+                    />
+                    <input
+                        type="hidden"
+                        name="include_planned_net_sale_price_note"
+                        value={includePlannedNetSalePriceNote ? "yes" : "no"}
                     />
 
                     <InvoiceSubmitButton

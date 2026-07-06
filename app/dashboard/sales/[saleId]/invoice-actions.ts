@@ -24,7 +24,16 @@ type SaleInvoiceSourceRow = {
     vat_rate: number | string;
     vat_amount: number | string;
     gross_amount: number | string;
+    invoice_notes: string | null;
     include_damage_notes_on_invoice: boolean | null;
+    vehicles:
+        | {
+        sale_price_net: number | string | null;
+    }
+        | {
+        sale_price_net: number | string | null;
+    }[]
+        | null;
 };
 
 function getStringValue(formData: FormData, key: string): string | null {
@@ -35,6 +44,16 @@ function getStringValue(formData: FormData, key: string): string | null {
     const trimmedValue = value.trim();
 
     return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function getSingleRelation<T>(relation: T | T[] | null): T | null {
+    if (!relation) return null;
+
+    if (Array.isArray(relation)) {
+        return relation[0] ?? null;
+    }
+
+    return relation;
 }
 
 function getInvoiceTypeValue(formData: FormData): InvoiceType {
@@ -75,6 +94,31 @@ function getPaymentMethodLabel(paymentMethod: string): string {
     return paymentMethod;
 }
 
+function formatCurrency(value: number): string {
+    return new Intl.NumberFormat("de-DE", {
+        style: "currency",
+        currency: "EUR",
+    }).format(value);
+}
+
+function getPlannedNetSalePriceNote(plannedNetSalePrice: number | null): string | null {
+    if (plannedNetSalePrice === null || plannedNetSalePrice <= 0) return null;
+
+    return `Geplanter Netto-VK laut Fahrzeugbestand: ${formatCurrency(plannedNetSalePrice)} netto`;
+}
+
+function appendUniqueNote(existingNotes: string | null, note: string | null): string | null {
+    if (!note) return existingNotes;
+
+    const trimmedExistingNotes = existingNotes?.trim() ?? "";
+
+    if (trimmedExistingNotes.includes(note)) {
+        return trimmedExistingNotes;
+    }
+
+    return [trimmedExistingNotes, note].filter(Boolean).join("\n\n");
+}
+
 function getInvoiceActivityLabel(invoiceType: InvoiceType): string {
     if (invoiceType === "standard") return "Rechnung";
     if (invoiceType === "proforma") return "Proforma-Rechnung";
@@ -91,6 +135,8 @@ export async function createSaleInvoiceAction(formData: FormData) {
     const invoiceType = getInvoiceTypeValue(formData);
     const includeDamageNotesOnInvoice =
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
+    const includePlannedNetSalePriceNote =
+        getStringValue(formData, "include_planned_net_sale_price_note") === "yes";
 
     if (!saleId) {
         throw new Error("Verkauf fehlt.");
@@ -109,7 +155,11 @@ export async function createSaleInvoiceAction(formData: FormData) {
       vat_rate,
       vat_amount,
       gross_amount,
-      include_damage_notes_on_invoice
+      invoice_notes,
+      include_damage_notes_on_invoice,
+      vehicles (
+        sale_price_net
+      )
     `,
         )
         .eq("id", saleId)
@@ -125,15 +175,34 @@ export async function createSaleInvoiceAction(formData: FormData) {
     }
 
     const sale = saleData as SaleInvoiceSourceRow;
+    const saleVehicle = getSingleRelation(sale.vehicles);
+
+    const plannedNetSalePrice =
+        saleVehicle?.sale_price_net === null ||
+        saleVehicle?.sale_price_net === undefined
+            ? null
+            : Number(saleVehicle.sale_price_net);
+    const validPlannedNetSalePrice =
+        plannedNetSalePrice !== null && Number.isFinite(plannedNetSalePrice)
+            ? plannedNetSalePrice
+            : null;
+    const nextInvoiceNotes = includePlannedNetSalePriceNote
+        ? appendUniqueNote(
+              sale.invoice_notes,
+              getPlannedNetSalePriceNote(validPlannedNetSalePrice),
+          )
+        : sale.invoice_notes;
 
     if (
         Boolean(sale.include_damage_notes_on_invoice) !==
-        includeDamageNotesOnInvoice
+        includeDamageNotesOnInvoice ||
+        (nextInvoiceNotes ?? null) !== (sale.invoice_notes ?? null)
     ) {
         const { error: saleUpdateError } = await supabase
             .from("sales")
             .update({
                 include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
+                invoice_notes: nextInvoiceNotes,
             })
             .eq("id", saleId)
             .eq("company_id", companyId);

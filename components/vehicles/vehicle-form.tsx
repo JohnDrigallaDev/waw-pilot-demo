@@ -155,11 +155,15 @@ export function VehicleForm({
                                 required
                             />
                             <FormField
-                                label="Geplanter Verkaufspreis netto"
+                                label="Geplanter Netto-VK"
                                 name="sale_price_net"
                                 type="number"
                                 step="0.01"
                             />
+                            <p className="text-xs font-semibold leading-5 text-slate-500 md:col-span-2 xl:col-span-3">
+                                Interner Ziel-Verkaufspreis netto. Dieser Wert dient als
+                                Orientierung beim späteren Verkauf.
+                            </p>
                             <div className="space-y-2 md:col-span-2 xl:col-span-3">
                                 <Label
                                     htmlFor="seller_customer_id"

@@ -97,13 +97,13 @@ export function VehicleDetail({
                     tone="neutral"
                 />
                 <VehicleStatCard
-                    label="Verkauf netto"
+                    label="Geplanter Netto-VK"
                     value={
                         vehicle.sale_price_net === null
                             ? "—"
                             : formatCurrency(vehicle.sale_price_net)
                     }
-                    description="geplant oder verkauft"
+                    description="interner Zielpreis netto"
                     icon={Receipt}
                     tone={vehicle.sale_price_net ? "success" : "warning"}
                 />
@@ -182,7 +182,7 @@ export function VehicleDetail({
                                     value={formatCurrency(vehicle.purchase_price_net)}
                                 />
                                 <InfoRow
-                                    label="Verkauf netto"
+                                    label="Geplanter Netto-VK"
                                     value={
                                         vehicle.sale_price_net === null
                                             ? "—"

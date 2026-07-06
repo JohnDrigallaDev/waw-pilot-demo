@@ -41,6 +41,7 @@ type VehicleRelation = {
 
 type SaleRelation = {
     sale_type: SaleType | null;
+    invoice_notes: string | null;
     include_damage_notes_on_invoice: boolean | null;
 };
 
@@ -150,6 +151,7 @@ export async function getInvoicePdfData(
       ),
       sales (
         sale_type,
+        invoice_notes,
         include_damage_notes_on_invoice
       )
     `,
@@ -216,6 +218,7 @@ export async function getInvoicePdfData(
         includeDamageNotesOnInvoice: Boolean(
             sale?.include_damage_notes_on_invoice,
         ),
+        invoiceNotes: sale?.invoice_notes ?? null,
         amounts: {
             netAmount: Number(invoice.net_amount),
             vatRate: Number(invoice.vat_rate),

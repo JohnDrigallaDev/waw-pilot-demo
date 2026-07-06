@@ -55,6 +55,7 @@ type SaleDetailQueryRow = {
     payment_status: PaymentStatus;
     datev_status: DatevStatus;
     notes: string | null;
+    invoice_notes: string | null;
     include_damage_notes_on_invoice: boolean | null;
     created_at: string;
 
@@ -68,6 +69,7 @@ type SaleDetailQueryRow = {
         construction_year: number | null;
         first_registration: string | null;
         purchase_price_net: number | string;
+        sale_price_net: number | string | null;
         additional_costs_net: number | string;
         damage_notes: string | null;
     } | null;
@@ -129,6 +131,7 @@ export type SaleDetail = {
     payment_status: PaymentStatus;
     datev_status: DatevStatus;
     notes: string | null;
+    invoice_notes: string | null;
     include_damage_notes_on_invoice: boolean;
 
     net_amount: number;
@@ -161,6 +164,7 @@ export type SaleDetail = {
         construction_year: number | null;
         first_registration: string | null;
         purchase_price_net: number;
+        sale_price_net: number | null;
         additional_costs_net: number;
         damage_notes: string | null;
     };
@@ -233,6 +237,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
       payment_status,
       datev_status,
       notes,
+      invoice_notes,
       include_damage_notes_on_invoice,
       created_at,
       vehicles (
@@ -245,6 +250,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         construction_year,
         first_registration,
         purchase_price_net,
+        sale_price_net,
         additional_costs_net,
         damage_notes
       ),
@@ -396,6 +402,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         payment_status: sale.payment_status,
         datev_status: sale.datev_status,
         notes: sale.notes,
+        invoice_notes: sale.invoice_notes,
         include_damage_notes_on_invoice: Boolean(
             sale.include_damage_notes_on_invoice,
         ),
@@ -430,6 +437,10 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             construction_year: sale.vehicles.construction_year,
             first_registration: sale.vehicles.first_registration,
             purchase_price_net: purchasePriceNet,
+            sale_price_net:
+                sale.vehicles.sale_price_net === null
+                    ? null
+                    : Number(sale.vehicles.sale_price_net),
             additional_costs_net: additionalCostsNet,
             damage_notes: sale.vehicles.damage_notes,
         },
