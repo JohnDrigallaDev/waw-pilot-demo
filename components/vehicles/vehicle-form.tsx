@@ -36,8 +36,8 @@ export function VehicleForm({
     return (
         <div className="space-y-6">
             <PageHeader
-                eyebrow="Neuer Ankauf"
-                title="Fahrzeug / Ankauf erfassen"
+                eyebrow="Neuer Fahrzeugankauf"
+                title="Fahrzeug ankaufen / erfassen"
                 description="Fahrzeugdaten, Einkaufspreis, geplanten Verkaufspreis und optional Verkäufer-Kunde speichern."
                 action={
                     <Button

@@ -42,7 +42,7 @@ const integrations = [
         status: "planned",
         statusLabel: "Geplant",
         icon: ReceiptText,
-        href: "/dashboard/invoices",
+        href: "/dashboard/reports",
     },
     {
         title: "E-Mail Versand",

@@ -75,9 +75,9 @@ export function PurchaseDetail({ purchase }: PurchaseDetailProps) {
     return (
         <div className="space-y-6">
             <PageHeader
-                eyebrow="Ankaufsakte"
+                eyebrow="Fahrzeugankauf"
                 title={purchase.purchase_number ?? "Ankauf ohne Nummer"}
-                description="Detailansicht mit Verkäufer, Fahrzeug, Beträgen, Zahlung und Ankaufsdokumenten."
+                description="Gekauftes Fahrzeug mit Verkäufer, Einkaufspreis, Zahlung und Ankaufsdokumenten."
                 action={
                     <div className="flex flex-wrap gap-2">
                         <Button

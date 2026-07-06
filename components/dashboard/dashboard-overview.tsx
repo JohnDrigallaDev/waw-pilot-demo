@@ -6,7 +6,6 @@ import {
     Car,
     FileArchive,
     FileWarning,
-    Receipt,
     TrendingUp,
     Truck,
     Users,
@@ -36,7 +35,7 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
             <PageHeader
                 eyebrow="Automatisierungs-Cockpit"
                 title="Dashboard"
-                description="Live-Kennzahlen aus Supabase: Bestand, Kunden, Verkäufe, Rechnungen, Dokumente, Kennzeichen und Kassenbuch."
+                description="Live-Kennzahlen aus Supabase: Bestand, Kunden, Verkäufe, Dokumente, Kennzeichen und Kassenbuch."
                 action={
                     <Button
                         asChild
@@ -81,15 +80,7 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
                 />
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <DashboardStatCard
-                    label="Rechnungen"
-                    value={data.invoicesCount}
-                    description={`${data.openInvoicesCount} offen`}
-                    icon={Receipt}
-                    href="/dashboard/invoices"
-                    danger={data.openInvoicesCount > 0}
-                />
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <DashboardStatCard
                     label="Dokumente"
                     value={data.documentsCount}
@@ -107,7 +98,7 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
                     danger={activeLicensePlateCases > 0}
                 />
                 <DashboardStatCard
-                    label="Ankauf"
+                    label="Fahrzeugankäufe"
                     value={data.purchaseCasesCount}
                     description={`${data.openPurchasePaymentsCount} Zahlungen offen · ${data.incompletePurchaseDocumentsCount} Dokumente prüfen`}
                     icon={ShoppingCart}
@@ -135,7 +126,7 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
                                 Nächste Aktionen
                             </h2>
                             <p className="mt-1 text-sm font-medium text-slate-500">
-                                Automatisch aus Rechnungen, Fahrzeugakten, Kennzeichen und Dokumenten erkannt.
+                                Automatisch aus Fahrzeugakten, Kennzeichen, Dokumenten und Zahlungen erkannt.
                             </p>
                         </div>
 
@@ -204,7 +195,7 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
                                 value={formatCurrency(data.cashbookBalance)}
                             />
                             <SummaryRow
-                                label="Offene Rechnungen"
+                                label="Offene Zahlungen"
                                 value={String(data.openInvoicesCount)}
                             />
                             <SummaryRow

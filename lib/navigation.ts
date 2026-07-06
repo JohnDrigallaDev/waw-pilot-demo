@@ -9,7 +9,6 @@ import {
     FileArchive,
     FileText,
     LayoutDashboard,
-    Receipt,
     Route,
     Settings,
     ShoppingCart,
@@ -24,7 +23,7 @@ export const mainNavigation = [
         icon: LayoutDashboard,
     },
     {
-        title: "Ankauf",
+        title: "Fahrzeug ankaufen",
         href: "/dashboard/ankauf",
         icon: ShoppingCart,
     },
@@ -42,11 +41,6 @@ export const mainNavigation = [
         title: "Verkäufe",
         href: "/dashboard/sales",
         icon: BookOpen,
-    },
-    {
-        title: "Rechnungen",
-        href: "/dashboard/invoices",
-        icon: Receipt,
     },
     {
         title: "Dokumente",

@@ -100,9 +100,9 @@ export function PurchasesOverview({ purchases }: PurchasesOverviewProps) {
     return (
         <div className="space-y-6">
             <PageHeader
-                eyebrow="Ankauf"
-                title="Ankaufsakten"
-                description="Fahrzeugeinkäufe, Verkäufer, Einkaufspreise, Zahlungsstatus und Ankaufsdokumente zentral verwalten."
+                eyebrow="Fahrzeug ankaufen"
+                title="Fahrzeugankäufe"
+                description="Erfasse gekaufte Fahrzeuge inklusive Verkäuferdaten, Einkaufspreis, Zahlung und Dokumenten. Das Fahrzeug wird anschließend im Bestand geführt."
                 action={
                     <Button
                         asChild
@@ -110,7 +110,7 @@ export function PurchasesOverview({ purchases }: PurchasesOverviewProps) {
                     >
                         <Link href="/dashboard/ankauf/new">
                             <Plus className="mr-2 size-4" />
-                            Ankauf anlegen
+                            Neuen Ankauf erfassen
                         </Link>
                     </Button>
                 }
@@ -118,7 +118,7 @@ export function PurchasesOverview({ purchases }: PurchasesOverviewProps) {
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <PurchaseStatCard
-                    label="Ankäufe"
+                    label="Fahrzeugankäufe"
                     value={purchases.length}
                     description="gesamt erfasst"
                     icon={ShoppingCart}
@@ -151,7 +151,7 @@ export function PurchasesOverview({ purchases }: PurchasesOverviewProps) {
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                             <div>
                                 <h2 className="text-xl font-extrabold text-slate-950">
-                                    Ankaufsübersicht
+                                    Fahrzeugankäufe
                                 </h2>
                                 <p className="mt-1 text-sm font-medium text-slate-500">
                                     Suche nach Verkäufer, Fahrzeug, VIN, Ankaufsnummer oder Status.
@@ -174,7 +174,7 @@ export function PurchasesOverview({ purchases }: PurchasesOverviewProps) {
                                 <PurchaseFilterButton
                                     active={filter === "all"}
                                     onClick={() => setFilter("all")}
-                                    label="Alle"
+                                    label="Alle Ankäufe"
                                     count={purchases.length}
                                 />
                                 <PurchaseFilterButton
@@ -494,10 +494,11 @@ function EmptyPurchasesState() {
                 <ShoppingCart className="size-6" />
             </div>
             <h3 className="mt-4 text-lg font-extrabold text-slate-950">
-                Keine Ankaufsakten gefunden
+                Noch keine Ankäufe erfasst.
             </h3>
             <p className="mt-2 max-w-md text-sm font-medium text-slate-500">
-                Lege eine neue Ankaufsakte an, sobald ein Fahrzeug eingekauft wird.
+                Lege einen Ankauf an, um ein gekauftes Fahrzeug in den Bestand
+                aufzunehmen.
             </p>
         </div>
     );

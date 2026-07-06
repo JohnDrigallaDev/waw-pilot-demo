@@ -232,7 +232,7 @@ export function ReportsOverview({ data }: ReportsOverviewProps) {
                     description={`${data.openInvoicesCount} Rechnung(en) offen`}
                     icon={Receipt}
                     tone={data.openInvoicesGross > 0 ? "danger" : "success"}
-                    href="/dashboard/invoices"
+                    href="/dashboard/sales?paymentStatus=open"
                 />
                 <ReportStatCard
                     label="Offene Ankäufe"
@@ -345,7 +345,7 @@ export function ReportsOverview({ data }: ReportsOverviewProps) {
 
                 <ReportListCard
                     title="Teuerste Ankäufe"
-                    description="Die größten Ankaufsakten nach Brutto-Betrag im gewählten Zeitraum."
+                    description="Die größten Fahrzeugankäufe nach Brutto-Betrag im gewählten Zeitraum."
                     href="/dashboard/ankauf"
                     emptyText="Keine Ankäufe im Zeitraum vorhanden."
                 >

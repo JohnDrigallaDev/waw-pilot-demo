@@ -82,7 +82,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     danger={data.openLicensePlateCasesCount > 0}
                 />
                 <CheckStatCard
-                    label="Ankäufe prüfen"
+                    label="Fahrzeugankäufe prüfen"
                     value={data.purchaseCasesToCheckCount}
                     description="Dokumente offen"
                     icon={ShoppingCart}
@@ -204,9 +204,9 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
 
                     <CheckListCard
                         id="purchase-checks"
-                        title="Ankaufsakten prüfen"
-                        description="Ankäufe mit fehlenden Pflichtdokumenten."
-                        emptyText="Keine Ankaufsakten mit offener Prüfung."
+                        title="Fahrzeugankäufe prüfen"
+                        description="Gekaufte Fahrzeuge mit fehlenden Pflichtdokumenten."
+                        emptyText="Keine Fahrzeugankäufe mit offener Prüfung."
                         href="/dashboard/ankauf"
                     >
                         {data.purchaseCasesToCheck.map((purchase) => (

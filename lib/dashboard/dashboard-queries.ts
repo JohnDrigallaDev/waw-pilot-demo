@@ -151,9 +151,9 @@ export async function getDashboardData(): Promise<DashboardData> {
 
     if (openInvoices.length > 0) {
         openActions.push({
-            label: `${openInvoices.length} offene Rechnung(en)`,
-            description: "Zahlungsstatus prüfen oder Kassenbuch aktualisieren.",
-            href: "/dashboard/invoices",
+            label: `${openInvoices.length} offene Zahlung(en)`,
+            description: "Offene Verkaufszahlungen prüfen oder Kassenbuch aktualisieren.",
+            href: "/dashboard/sales?paymentStatus=open",
             tone: "warning",
         });
     }

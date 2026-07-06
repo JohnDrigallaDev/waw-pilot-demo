@@ -144,7 +144,7 @@ function getExternalAction(
 > {
     if (type === "invoice_pdf" || type === "proforma_invoice") {
         return {
-            externalActionLabel: "Rechnungsbereich öffnen",
+            externalActionLabel: "Rechnungen & Zahlung öffnen",
             externalActionHref: "#invoice-payments",
         };
     }

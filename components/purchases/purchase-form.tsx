@@ -65,16 +65,16 @@ export function PurchaseForm({
     return (
         <div className="space-y-6">
             <PageHeader
-                eyebrow="Ankauf"
+                eyebrow="Fahrzeug ankaufen"
                 title={
                     mode === "edit"
-                        ? "Ankaufsakte bearbeiten"
-                        : "Ankaufsakte anlegen"
+                        ? "Fahrzeugankauf bearbeiten"
+                        : "Fahrzeug ankaufen"
                 }
                 description={
                     mode === "edit"
                         ? "Bearbeite Verkäufer, Fahrzeug, Einkaufspreis, Zahlungsstatus und Notizen."
-                        : "Erfasse Verkäufer, Fahrzeug, Einkaufspreis, Zahlungsstatus und interne Notizen."
+                        : "Erfasse ein gekauftes Fahrzeug mit Verkäuferdaten, Einkaufspreis und Zahlungsstatus."
                 }
                 action={
                     <Button
@@ -105,8 +105,8 @@ export function PurchaseForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={ShoppingCart}
-                            title="Ankaufsbezug"
-                            description="Wähle Fahrzeug und Verkäufer aus."
+                            title="Fahrzeug & Verkäufer"
+                            description="Wähle das gekaufte Fahrzeug und den Verkäufer aus."
                         />
 
                         <div className="grid gap-4 md:grid-cols-2">
@@ -248,7 +248,7 @@ export function PurchaseForm({
                                 ? "Speichert..."
                                 : mode === "edit"
                                     ? "Änderungen speichern"
-                                    : "Ankauf speichern"}
+                                    : "Fahrzeug ankaufen"}
                         </Button>
                     </div>
                 </div>
