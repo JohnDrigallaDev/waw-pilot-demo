@@ -7,6 +7,7 @@ import {
     getInvoiceTypeDocumentType,
     getNextInvoiceNumber,
 } from "@/lib/invoices/invoice-numbering";
+import { assertCompanySignatureStampConfigured } from "@/lib/pdf/company-signature-assets";
 import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { SaleType } from "@/lib/sales/sale-queries";
@@ -322,6 +323,8 @@ export async function createSaleAction(
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
     const includePlannedNetSalePriceNote =
         getStringValue(formData, "include_planned_net_sale_price_note") === "yes";
+    const includeSignatureStamp =
+        getStringValue(formData, "include_signature_stamp") === "yes";
 
     const exportDestinationCity = getStringValue(
         formData,
@@ -339,6 +342,20 @@ export async function createSaleAction(
 
     const shouldCreateInvoice =
         getStringValue(formData, "create_invoice") === "yes";
+
+    if (shouldCreateInvoice && includeSignatureStamp) {
+        try {
+            await assertCompanySignatureStampConfigured();
+        } catch (error) {
+            return {
+                success: false,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Bitte hinterlege zuerst Unterschrift und Firmenstempel in den Einstellungen.",
+            };
+        }
+    }
 
     const shouldCreateCashbookEntry =
         getStringValue(formData, "create_cashbook_entry") === "yes";
@@ -613,6 +630,7 @@ export async function createSaleAction(
                 status: shouldCreateCashbookEntry ? "paid" : "created",
                 payment_status: shouldCreateCashbookEntry ? "paid" : "open",
                 datev_status: "not_sent",
+                include_signature_stamp: includeSignatureStamp,
                 paid_at: shouldCreateCashbookEntry ? new Date().toISOString() : null,
             })
             .select("id")

@@ -10,6 +10,10 @@ import {
 import { pdfTheme } from "@/lib/pdf/core/pdf-theme";
 import { formatPdfDate } from "@/lib/pdf/core/pdf-format";
 import type { SaleGeneratedDocumentData } from "@/lib/pdf/generated-documents/sale-document-data";
+import {
+    embedCompanyPdfImage,
+    type CompanySignatureStampAssets,
+} from "@/lib/pdf/company-signature-assets";
 
 function requireValue(value: string | number | null | undefined): string {
     if (value === null || value === undefined) return "—";
@@ -110,6 +114,48 @@ async function drawLogo(ctx: Awaited<ReturnType<typeof createPdfLayout>>) {
     }
 }
 
+async function drawSignatureStampImages(
+    ctx: Awaited<ReturnType<typeof createPdfLayout>>,
+    signatureY: number,
+    assets?: CompanySignatureStampAssets & { include: boolean },
+) {
+    if (!assets?.include) return;
+
+    const signatureImage = assets.signatureImage
+        ? await embedCompanyPdfImage(ctx.pdfDoc, assets.signatureImage)
+        : null;
+    const stampImage = assets.stampImage
+        ? await embedCompanyPdfImage(ctx.pdfDoc, assets.stampImage)
+        : null;
+
+    if (signatureImage) {
+        const width = 165;
+        const height = Math.min(
+            58,
+            (signatureImage.height / signatureImage.width) * width,
+        );
+
+        ctx.page.drawImage(signatureImage, {
+            x: ctx.margin + 8,
+            y: signatureY + 4,
+            width,
+            height,
+        });
+    }
+
+    if (stampImage) {
+        const width = 105;
+        const height = Math.min(76, (stampImage.height / stampImage.width) * width);
+
+        ctx.page.drawImage(stampImage, {
+            x: ctx.margin + 162,
+            y: signatureY + 2,
+            width,
+            height,
+        });
+    }
+}
+
 function drawFormRow(
     ctx: Awaited<ReturnType<typeof createPdfLayout>>,
     params: {
@@ -159,6 +205,9 @@ function drawSimpleLine(
 
 export async function generateHandoverProtocolPdf(
     data: SaleGeneratedDocumentData,
+    options: {
+        signatureStamp?: CompanySignatureStampAssets & { include: boolean };
+    } = {},
 ): Promise<Uint8Array> {
     if (!data.company || !data.customer || !data.vehicle || !data.sale) {
         throw new Error(
@@ -292,6 +341,8 @@ export async function generateHandoverProtocolPdf(
         ctx.margin + signatureLineWidth,
         signatureY,
     );
+
+    await drawSignatureStampImages(ctx, signatureY, options.signatureStamp);
 
     const dateX = ctx.margin + 310;
 

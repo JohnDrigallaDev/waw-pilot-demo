@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import {
+    getDocumentUploadFailedMessage,
+    getImageAssetTooLargeMessage,
+    getUnsupportedImageAssetTypeMessage,
+    isAllowedImageAssetFile,
+    maxImageAssetFileSizeBytes,
+} from "@/lib/documents/upload-validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type UpdateCompanySettingsState = {
@@ -20,6 +27,11 @@ export type UpdateCompanySettingsState = {
         vat_id: string;
         tax_number: string;
     };
+};
+
+type CompanyAssetPathRow = {
+    signature_image_path: string | null;
+    stamp_image_path: string | null;
 };
 
 function getStringValue(formData: FormData, key: string): string {
@@ -42,6 +54,49 @@ function getFormValues(formData: FormData): UpdateCompanySettingsState["values"]
         vat_id: getStringValue(formData, "vat_id"),
         tax_number: getStringValue(formData, "tax_number"),
     };
+}
+
+function sanitizeFileName(fileName: string): string {
+    return fileName
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/ä/g, "ae")
+        .replace(/ö/g, "oe")
+        .replace(/ü/g, "ue")
+        .replace(/ß/g, "ss")
+        .replace(/[^a-z0-9.\-_]/g, "");
+}
+
+function getFileExtension(fileName: string): string {
+    const parts = fileName.split(".");
+    const extension = parts.length > 1 ? parts.pop() : null;
+
+    return extension ? `.${extension}` : "";
+}
+
+function getAssetField(assetType: string | null) {
+    if (assetType === "signature") {
+        return {
+            fieldName: "signature_image_path",
+            folderName: "signature",
+            redirectFlag: "signatureUploaded",
+        } as const;
+    }
+
+    if (assetType === "stamp") {
+        return {
+            fieldName: "stamp_image_path",
+            folderName: "stamp",
+            redirectFlag: "stampUploaded",
+        } as const;
+    }
+
+    return null;
+}
+
+function redirectWithAssetUploadError(errorCode: string): never {
+    redirect(`/dashboard/settings?assetUploadError=${encodeURIComponent(errorCode)}`);
 }
 
 export async function updateCompanySettingsAction(
@@ -127,4 +182,150 @@ export async function updateCompanySettingsAction(
     revalidatePath("/dashboard/reports");
 
     redirect("/dashboard/settings");
+}
+
+export async function uploadCompanySignatureAssetAction(formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const asset = getAssetField(getStringValue(formData, "asset_type"));
+    const fileValue = formData.get("file");
+
+    if (!asset) {
+        throw new Error("Ungültiger Upload-Typ.");
+    }
+
+    if (!(fileValue instanceof File) || fileValue.size <= 0) {
+        redirectWithAssetUploadError("missingFile");
+    }
+
+    if (fileValue.size > maxImageAssetFileSizeBytes) {
+        redirectWithAssetUploadError("fileTooLarge");
+    }
+
+    if (!isAllowedImageAssetFile(fileValue)) {
+        redirectWithAssetUploadError("unsupportedType");
+    }
+
+    const { data: companyData, error: companyError } = await supabase
+        .from("companies")
+        .select(asset.fieldName)
+        .eq("id", companyId)
+        .single();
+
+    if (companyError || !companyData) {
+        throw new Error(
+            `Firmendaten konnten nicht geladen werden: ${
+                companyError?.message ?? "Nicht gefunden"
+            }`,
+        );
+    }
+
+    const companyAssetPaths = companyData as CompanyAssetPathRow;
+    const oldPath = companyAssetPaths[asset.fieldName];
+    const originalFileName = sanitizeFileName(fileValue.name);
+    const filePath = `company-assets/${companyId}/${asset.folderName}/${Date.now()}${getFileExtension(
+        originalFileName,
+    )}`;
+    const fileBuffer = Buffer.from(await fileValue.arrayBuffer());
+
+    const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, fileBuffer, {
+            contentType: fileValue.type || "application/octet-stream",
+            upsert: false,
+        });
+
+    if (uploadError) {
+        console.error("[settings] company signature/stamp upload failed", uploadError);
+        const message = getDocumentUploadFailedMessage(uploadError);
+
+        if (message === getUnsupportedImageAssetTypeMessage()) {
+            redirectWithAssetUploadError("unsupportedType");
+        }
+
+        if (message === getImageAssetTooLargeMessage()) {
+            redirectWithAssetUploadError("fileTooLarge");
+        }
+
+        redirectWithAssetUploadError("uploadFailed");
+    }
+
+    const { error: updateError } = await supabase
+        .from("companies")
+        .update({
+            [asset.fieldName]: filePath,
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", companyId);
+
+    if (updateError) {
+        await supabase.storage.from("documents").remove([filePath]);
+        console.error("[settings] company signature/stamp path update failed", updateError);
+        throw new Error(
+            "Unterschrift oder Stempel konnte nicht gespeichert werden. Bitte versuche es erneut.",
+        );
+    }
+
+    if (oldPath && oldPath !== filePath) {
+        await supabase.storage.from("documents").remove([oldPath]);
+    }
+
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/sales");
+    revalidatePath("/dashboard/invoices");
+
+    redirect(`/dashboard/settings?${asset.redirectFlag}=1`);
+}
+
+export async function removeCompanySignatureAssetAction(formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const asset = getAssetField(getStringValue(formData, "asset_type"));
+
+    if (!asset) {
+        throw new Error("Ungültiger Upload-Typ.");
+    }
+
+    const { data: companyData, error: companyError } = await supabase
+        .from("companies")
+        .select(asset.fieldName)
+        .eq("id", companyId)
+        .single();
+
+    if (companyError || !companyData) {
+        throw new Error(
+            `Firmendaten konnten nicht geladen werden: ${
+                companyError?.message ?? "Nicht gefunden"
+            }`,
+        );
+    }
+
+    const companyAssetPaths = companyData as CompanyAssetPathRow;
+    const oldPath = companyAssetPaths[asset.fieldName];
+
+    const { error: updateError } = await supabase
+        .from("companies")
+        .update({
+            [asset.fieldName]: null,
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", companyId);
+
+    if (updateError) {
+        throw new Error(
+            "Unterschrift oder Stempel konnte nicht entfernt werden. Bitte versuche es erneut.",
+        );
+    }
+
+    if (oldPath) {
+        await supabase.storage.from("documents").remove([oldPath]);
+    }
+
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/sales");
+    revalidatePath("/dashboard/invoices");
+
+    redirect("/dashboard/settings?assetRemoved=1");
 }

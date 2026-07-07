@@ -7,7 +7,6 @@ import {
     FileText,
     FileWarning,
     Receipt,
-    RefreshCcw,
     Route,
     Truck,
     UserRound,
@@ -49,6 +48,7 @@ import type { SaleExportDetails } from "@/lib/sales/sale-export-details-queries"
 import { FlashMessage } from "@/components/shared/flash-message";
 import { DeleteSaleDocumentForm } from "@/components/sales/delete-sale-document-form";
 import { TemporaryHighlight } from "@/components/shared/temporary-highlight";
+import { RegenerateInvoicePdfForm } from "@/components/sales/regenerate-invoice-pdf-form";
 
 type SaleDetailProps = {
     sale: SaleDetailType;
@@ -354,6 +354,10 @@ export function SaleDetail({
                                 }
                                 plannedNetSalePrice={sale.vehicle.sale_price_net}
                                 invoiceNotes={sale.invoice_notes}
+                                hasSignatureStampAssets={sale.has_signature_stamp_assets}
+                                initialIncludeSignatureStamp={sale.invoices.some(
+                                    (invoice) => invoice.include_signature_stamp,
+                                )}
                             />
 
                             {sale.invoices.length > 0 ? (
@@ -382,6 +386,7 @@ export function SaleDetail({
                         saleId={sale.id}
                         documents={generatedDocuments}
                         generatedDocumentType={generatedDocumentType}
+                        hasSignatureStampAssets={sale.has_signature_stamp_assets}
                     />
 
                     <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
@@ -706,19 +711,7 @@ function InvoiceCard({
                     </Link>
                 </Button>
 
-                <form action={regenerateSaleInvoicePdfAction}>
-                    <input type="hidden" name="sale_id" value={saleId} />
-                    <input type="hidden" name="invoice_id" value={invoice.id} />
-
-                    <Button
-                        type="submit"
-                        variant="outline"
-                        className="rounded-2xl bg-white font-bold"
-                    >
-                        <RefreshCcw className="mr-2 size-4" />
-                        PDF neu generieren
-                    </Button>
-                </form>
+                <RegenerateInvoicePdfForm saleId={saleId} invoiceId={invoice.id} />
             </div>
         </div>
         </TemporaryHighlight>

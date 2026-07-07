@@ -11,6 +11,7 @@ import {
     getNextInvoiceNumber,
     type InvoiceType,
 } from "@/lib/invoices/invoice-numbering";
+import { assertCompanySignatureStampConfigured } from "@/lib/pdf/company-signature-assets";
 import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -137,9 +138,15 @@ export async function createSaleInvoiceAction(formData: FormData) {
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
     const includePlannedNetSalePriceNote =
         getStringValue(formData, "include_planned_net_sale_price_note") === "yes";
+    const includeSignatureStamp =
+        getStringValue(formData, "include_signature_stamp") === "yes";
 
     if (!saleId) {
         throw new Error("Verkauf fehlt.");
+    }
+
+    if (includeSignatureStamp) {
+        await assertCompanySignatureStampConfigured();
     }
 
     const { data: saleData, error: saleError } = await supabase
@@ -262,6 +269,7 @@ export async function createSaleInvoiceAction(formData: FormData) {
             status: "created",
             payment_status: "open",
             datev_status: "not_sent",
+            include_signature_stamp: includeSignatureStamp,
             paid_at: null,
         })
         .select("id")
@@ -378,6 +386,10 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
 
     const saleId = getStringValue(formData, "sale_id");
     const invoiceId = getStringValue(formData, "invoice_id");
+    const includeSignatureStamp =
+        getStringValue(formData, "include_signature_stamp") === "yes";
+    const includeDamageNotesOnInvoice =
+        getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
 
     if (!saleId) {
         throw new Error("Verkauf fehlt.");
@@ -385,6 +397,10 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
 
     if (!invoiceId) {
         throw new Error("Rechnung fehlt.");
+    }
+
+    if (includeSignatureStamp) {
+        await assertCompanySignatureStampConfigured();
     }
 
     const { data: invoiceData, error: invoiceError } = await supabase
@@ -395,6 +411,7 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
       sale_id,
       invoice_type,
       invoice_number,
+      include_signature_stamp,
       pdf_document_id
     `,
         )
@@ -407,6 +424,36 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
             `Rechnung konnte nicht geladen werden: ${
                 invoiceError?.message ?? "Nicht gefunden"
             }`,
+        );
+    }
+
+    if (Boolean(invoiceData.include_signature_stamp) !== includeSignatureStamp) {
+        const { error: invoiceUpdateError } = await supabase
+            .from("invoices")
+            .update({
+                include_signature_stamp: includeSignatureStamp,
+            })
+            .eq("id", invoiceId)
+            .eq("company_id", companyId);
+
+        if (invoiceUpdateError) {
+            throw new Error(
+                `Rechnungsoption konnte nicht gespeichert werden: ${invoiceUpdateError.message}`,
+            );
+        }
+    }
+
+    const { error: saleOptionUpdateError } = await supabase
+        .from("sales")
+        .update({
+            include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
+        })
+        .eq("id", saleId)
+        .eq("company_id", companyId);
+
+    if (saleOptionUpdateError) {
+        throw new Error(
+            `Rechnungsoption konnte nicht gespeichert werden: ${saleOptionUpdateError.message}`,
         );
     }
 

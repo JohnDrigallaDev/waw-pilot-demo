@@ -786,6 +786,25 @@ export function SaleForm({
                             </label>
                         ) : null}
 
+                        <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-slate-200 bg-white p-4">
+                            <input
+                                type="checkbox"
+                                name="include_signature_stamp"
+                                value="yes"
+                                className="mt-1 size-4 rounded border-slate-300 text-cyan-700"
+                            />
+                            <div>
+                                <p className="font-extrabold text-slate-950">
+                                    Unterschrift & Stempel einfügen
+                                </p>
+                                <p className="mt-1 text-sm font-medium leading-6 text-slate-600">
+                                    Fügt die in den Einstellungen hinterlegte digitale
+                                    Unterschrift und den Firmenstempel in die automatisch
+                                    erzeugte Rechnung ein.
+                                </p>
+                            </div>
+                        </label>
+
                         <div className="grid gap-4 md:grid-cols-[1fr_0.6fr]">
                             <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
                                 <input

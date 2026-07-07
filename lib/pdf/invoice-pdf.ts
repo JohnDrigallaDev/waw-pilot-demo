@@ -3,6 +3,10 @@ import path from "path";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 import type { SaleType } from "@/lib/sales/sale-queries";
 import {
+    embedCompanyPdfImage,
+    type CompanySignatureStampAssets,
+} from "@/lib/pdf/company-signature-assets";
+import {
     PDFDocument,
     StandardFonts,
     rgb,
@@ -15,6 +19,9 @@ export type InvoicePdfData = {
     saleType: SaleType;
     invoiceNumber: string;
     invoiceDate: string;
+    signatureStamp?: CompanySignatureStampAssets & {
+        include: boolean;
+    };
 
     company: {
         legalName: string;
@@ -192,6 +199,50 @@ function drawRightAlignedText(
         font,
         color: black,
     });
+}
+
+async function drawSignatureStampImages(
+    page: PDFPage,
+    pdfDoc: PDFDocument,
+    assets: InvoicePdfData["signatureStamp"],
+) {
+    if (!assets?.include) return;
+
+    const signatureImage = assets.signatureImage
+        ? await embedCompanyPdfImage(pdfDoc, assets.signatureImage)
+        : null;
+    const stampImage = assets.stampImage
+        ? await embedCompanyPdfImage(pdfDoc, assets.stampImage)
+        : null;
+
+    if (!signatureImage && !stampImage) return;
+
+    if (signatureImage) {
+        const width = 112;
+        const height = Math.min(
+            34,
+            (signatureImage.height / signatureImage.width) * width,
+        );
+
+        page.drawImage(signatureImage, {
+            x: 360,
+            y: 72,
+            width,
+            height,
+        });
+    }
+
+    if (stampImage) {
+        const width = 68;
+        const height = Math.min(50, (stampImage.height / stampImage.width) * width);
+
+        page.drawImage(stampImage, {
+            x: 476,
+            y: 66,
+            width,
+            height,
+        });
+    }
 }
 
 function splitLongWord(word: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -955,6 +1006,8 @@ export async function generateInvoicePdf(
         helveticaBold,
         5.8,
     );
+
+    await drawSignatureStampImages(page, pdfDoc, data.signatureStamp);
 
     /**
      * Footer - ohne "Automatisch erzeugt mit KFZ Pilot"

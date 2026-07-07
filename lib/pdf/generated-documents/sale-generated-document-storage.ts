@@ -10,6 +10,7 @@ import { generateHandoverProtocolPdf } from "@/lib/pdf/templates/handover-protoc
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { generateEntryCertificatePdf } from "@/lib/pdf/templates/entry-certificate-pdf";
 import { generateTransportProofPdf } from "@/lib/pdf/templates/transport-proof-pdf";
+import { getCompanySignatureStampAssets } from "@/lib/pdf/company-signature-assets";
 
 export type GenerateSaleDocumentResult = {
     documentId: string;
@@ -50,6 +51,7 @@ function getSaleGeneratedDocumentFileBaseName(
 async function generatePdfBytesForSaleDocument(
     documentType: GeneratedDocumentType,
     saleId: string,
+    includeSignatureStamp: boolean,
 ) {
     const documentData = await getSaleGeneratedDocumentData(saleId);
     const validation = validateGeneratedDocumentData(documentType, documentData);
@@ -66,7 +68,12 @@ async function generatePdfBytesForSaleDocument(
 
     if (documentType === "handover_protocol") {
         return {
-            pdfBytes: await generateHandoverProtocolPdf(documentData),
+            pdfBytes: await generateHandoverProtocolPdf(documentData, {
+                signatureStamp: {
+                    include: includeSignatureStamp,
+                    ...(await getCompanySignatureStampAssets(includeSignatureStamp)),
+                },
+            }),
             documentData,
         };
     }
@@ -93,6 +100,7 @@ async function generatePdfBytesForSaleDocument(
 export async function generateAndStoreSaleGeneratedDocument(params: {
     saleId: string;
     documentType: GeneratedDocumentType;
+    includeSignatureStamp?: boolean;
 }): Promise<GenerateSaleDocumentResult> {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -108,6 +116,7 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
     const { pdfBytes, documentData } = await generatePdfBytesForSaleDocument(
         params.documentType,
         params.saleId,
+        Boolean(params.includeSignatureStamp),
     );
 
     const fileBaseName = getSaleGeneratedDocumentFileBaseName(params.documentType);

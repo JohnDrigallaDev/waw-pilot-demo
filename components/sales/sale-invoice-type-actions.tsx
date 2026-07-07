@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, FileText, Loader2, Receipt } from "lucide-react";
+import { CheckCircle2, FileSignature, FileText, Loader2, Receipt } from "lucide-react";
 
 import { createSaleInvoiceAction } from "@/app/dashboard/sales/[saleId]/invoice-actions";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
@@ -16,6 +16,8 @@ type SaleInvoiceTypeActionsProps = {
     includeDamageNotesOnInvoice?: boolean;
     plannedNetSalePrice?: number | null;
     invoiceNotes?: string | null;
+    hasSignatureStampAssets?: boolean;
+    initialIncludeSignatureStamp?: boolean;
 };
 
 export function SaleInvoiceTypeActions({
@@ -25,6 +27,8 @@ export function SaleInvoiceTypeActions({
                                            includeDamageNotesOnInvoice = false,
                                            plannedNetSalePrice = null,
                                            invoiceNotes = null,
+                                           hasSignatureStampAssets = false,
+                                           initialIncludeSignatureStamp = false,
                                        }: SaleInvoiceTypeActionsProps) {
     const hasStandard = existingInvoiceTypes.includes("standard");
     const hasProforma = existingInvoiceTypes.includes("proforma");
@@ -43,6 +47,9 @@ export function SaleInvoiceTypeActions({
                     invoiceNotes?.includes(plannedNetSalePriceNote),
             ),
         );
+    const [includeSignatureStamp, setIncludeSignatureStamp] = useState(
+        hasSignatureStampAssets && initialIncludeSignatureStamp,
+    );
     const hasDamageNotes = Boolean(damageNotes?.trim());
     const hasPlannedNetSalePrice =
         plannedNetSalePrice !== null && plannedNetSalePrice > 0;
@@ -52,6 +59,7 @@ export function SaleInvoiceTypeActions({
             {hasDamageNotes ? (
                 <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4">
                     <input
+                        id={`sale-${saleId}-include-damage-notes`}
                         type="checkbox"
                         checked={includeDamageNotes}
                         onChange={(event) =>
@@ -94,6 +102,34 @@ export function SaleInvoiceTypeActions({
                 </label>
             ) : null}
 
+            <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-slate-200 bg-white p-4">
+                <input
+                    id={`sale-${saleId}-include-signature-stamp`}
+                    type="checkbox"
+                    checked={includeSignatureStamp}
+                    disabled={!hasSignatureStampAssets}
+                    onChange={(event) =>
+                        setIncludeSignatureStamp(event.currentTarget.checked)
+                    }
+                    className="mt-1 size-4 rounded border-slate-300 text-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <span>
+                    <span className="flex items-center gap-2 font-extrabold text-slate-950">
+                        <FileSignature className="size-4 text-cyan-700" />
+                        Unterschrift & Stempel einfügen
+                    </span>
+                    <span className="mt-1 block text-sm font-medium leading-6 text-slate-600">
+                        Fügt die hinterlegte digitale Unterschrift und den Firmenstempel
+                        in die Rechnung ein.
+                    </span>
+                    {!hasSignatureStampAssets ? (
+                        <span className="mt-1 block text-xs font-bold leading-5 text-amber-700">
+                            Bitte hinterlege zuerst Unterschrift und Firmenstempel in den Einstellungen.
+                        </span>
+                    ) : null}
+                </span>
+            </label>
+
             <div className="grid gap-3 lg:grid-cols-3">
                 <form action={createSaleInvoiceAction}>
                     <input type="hidden" name="sale_id" value={saleId} />
@@ -107,6 +143,11 @@ export function SaleInvoiceTypeActions({
                         type="hidden"
                         name="include_planned_net_sale_price_note"
                         value={includePlannedNetSalePriceNote ? "yes" : "no"}
+                    />
+                    <input
+                        type="hidden"
+                        name="include_signature_stamp"
+                        value={includeSignatureStamp ? "yes" : "no"}
                     />
 
                     <InvoiceSubmitButton
@@ -134,6 +175,11 @@ export function SaleInvoiceTypeActions({
                         type="hidden"
                         name="include_planned_net_sale_price_note"
                         value={includePlannedNetSalePriceNote ? "yes" : "no"}
+                    />
+                    <input
+                        type="hidden"
+                        name="include_signature_stamp"
+                        value={includeSignatureStamp ? "yes" : "no"}
                     />
 
                     <InvoiceSubmitButton
@@ -165,6 +211,11 @@ export function SaleInvoiceTypeActions({
                         type="hidden"
                         name="include_planned_net_sale_price_note"
                         value={includePlannedNetSalePriceNote ? "yes" : "no"}
+                    />
+                    <input
+                        type="hidden"
+                        name="include_signature_stamp"
+                        value={includeSignatureStamp ? "yes" : "no"}
                     />
 
                     <InvoiceSubmitButton

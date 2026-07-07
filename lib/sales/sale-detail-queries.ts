@@ -25,6 +25,7 @@ type InvoiceRelation = {
     vat_amount: number | string;
     gross_amount: number | string;
     payment_status: PaymentStatus;
+    include_signature_stamp: boolean | null;
     pdf_document_id: string | null;
     created_at: string;
 };
@@ -58,6 +59,11 @@ type SaleDetailQueryRow = {
     invoice_notes: string | null;
     include_damage_notes_on_invoice: boolean | null;
     created_at: string;
+
+    companies: {
+        signature_image_path: string | null;
+        stamp_image_path: string | null;
+    } | null;
 
     vehicles: {
         internal_number: string;
@@ -114,6 +120,7 @@ export type SaleDetailInvoice = {
     vat_amount: number;
     gross_amount: number;
     payment_status: PaymentStatus;
+    include_signature_stamp: boolean;
     pdf_document_id: string | null;
     created_at: string;
 };
@@ -133,6 +140,7 @@ export type SaleDetail = {
     notes: string | null;
     invoice_notes: string | null;
     include_damage_notes_on_invoice: boolean;
+    has_signature_stamp_assets: boolean;
 
     net_amount: number;
     vat_rate: number;
@@ -240,6 +248,10 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
       invoice_notes,
       include_damage_notes_on_invoice,
       created_at,
+      companies (
+        signature_image_path,
+        stamp_image_path
+      ),
       vehicles (
         internal_number,
         manufacturer,
@@ -277,6 +289,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         vat_amount,
         gross_amount,
         payment_status,
+        include_signature_stamp,
         pdf_document_id,
         created_at
       ),
@@ -317,6 +330,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             vat_amount: Number(invoice.vat_amount),
             gross_amount: Number(invoice.gross_amount),
             payment_status: invoice.payment_status,
+            include_signature_stamp: Boolean(invoice.include_signature_stamp),
             pdf_document_id: invoice.pdf_document_id,
             created_at: invoice.created_at,
         }))
@@ -405,6 +419,9 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         invoice_notes: sale.invoice_notes,
         include_damage_notes_on_invoice: Boolean(
             sale.include_damage_notes_on_invoice,
+        ),
+        has_signature_stamp_assets: Boolean(
+            sale.companies?.signature_image_path && sale.companies?.stamp_image_path,
         ),
 
         net_amount: netAmount,

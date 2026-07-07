@@ -1,5 +1,6 @@
 import { getCurrentCompanyId } from "@/lib/company";
 import type { InvoicePdfData } from "@/lib/pdf/invoice-pdf";
+import { getCompanySignatureStampAssets } from "@/lib/pdf/company-signature-assets";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 import type { SaleType } from "@/lib/sales/sale-queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -56,6 +57,7 @@ type InvoiceQueryResult = {
     vat_rate: number | string;
     vat_amount: number | string;
     gross_amount: number | string;
+    include_signature_stamp: boolean | null;
     companies: SupabaseRelation<CompanyRelation>;
     customers: SupabaseRelation<CustomerRelation>;
     vehicles: SupabaseRelation<VehicleRelation>;
@@ -117,6 +119,7 @@ export async function getInvoicePdfData(
       vat_rate,
       vat_amount,
       gross_amount,
+      include_signature_stamp,
       companies (
         legal_name,
         street,
@@ -186,6 +189,12 @@ export async function getInvoicePdfData(
         saleType: getSaleTypeValue(sale),
         invoiceNumber: invoice.invoice_number,
         invoiceDate: invoice.invoice_date,
+        signatureStamp: {
+            include: Boolean(invoice.include_signature_stamp),
+            ...(await getCompanySignatureStampAssets(
+                Boolean(invoice.include_signature_stamp),
+            )),
+        },
         company: {
             legalName: company.legal_name,
             street: company.street,
