@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
+import {
+    getDocumentUploadFailedMessage,
+    getUnsupportedDocumentTypeMessage,
+    isAllowedDocumentFile,
+} from "@/lib/documents/upload-validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CreateCashbookEntryState = {
@@ -108,7 +113,8 @@ async function createCashbookReceiptDocument({
         });
 
     if (uploadError) {
-        throw new Error(`Beleg konnte nicht hochgeladen werden: ${uploadError.message}`);
+        console.error("[upload] cashbook receipt storage upload failed", uploadError);
+        throw new Error(getDocumentUploadFailedMessage(uploadError));
     }
 
     const { data: documentData, error: documentError } = await supabase
@@ -133,11 +139,10 @@ async function createCashbookReceiptDocument({
 
     if (documentError || !documentData) {
         await supabase.storage.from("documents").remove([filePath]);
+        console.error("[upload] cashbook receipt document insert failed", documentError);
 
         throw new Error(
-            `Beleg wurde hochgeladen, aber nicht gespeichert: ${
-                documentError?.message ?? "Keine Dokument-ID erhalten"
-            }`,
+            "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
         );
     }
 
@@ -205,6 +210,13 @@ export async function createCashbookEntryAction(
 
     try {
         if (fileValue instanceof File && fileValue.size > 0) {
+            if (!isAllowedDocumentFile(fileValue)) {
+                return {
+                    success: false,
+                    message: getUnsupportedDocumentTypeMessage(),
+                };
+            }
+
             documentId = await createCashbookReceiptDocument({
                 companyId,
                 file: fileValue,

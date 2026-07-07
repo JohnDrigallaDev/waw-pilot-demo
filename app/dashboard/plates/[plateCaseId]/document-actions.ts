@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import {
+    getDocumentUploadFailedMessage,
+    getUnsupportedDocumentTypeMessage,
+    isAllowedDocumentFile,
+} from "@/lib/documents/upload-validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type UploadLicensePlateDocumentState = {
@@ -82,6 +87,13 @@ export async function uploadLicensePlateDocumentAction(
         };
     }
 
+    if (!isAllowedDocumentFile(fileValue)) {
+        return {
+            success: false,
+            message: getUnsupportedDocumentTypeMessage(),
+        };
+    }
+
     const { data: plateCase, error: plateCaseError } = await supabase
         .from("license_plate_cases")
         .select("id, vehicle_id, customer_id, sale_id")
@@ -127,9 +139,10 @@ export async function uploadLicensePlateDocumentAction(
         });
 
     if (uploadError) {
+        console.error("[upload] license plate document storage upload failed", uploadError);
         return {
             success: false,
-            message: `Datei konnte nicht hochgeladen werden: ${uploadError.message}`,
+            message: getDocumentUploadFailedMessage(uploadError),
         };
     }
 
@@ -156,10 +169,12 @@ export async function uploadLicensePlateDocumentAction(
 
         if (updateError) {
             await supabase.storage.from("documents").remove([filePath]);
+            console.error("[upload] license plate document update failed", updateError);
 
             return {
                 success: false,
-                message: `Dokument konnte nicht aktualisiert werden: ${updateError.message}`,
+                message:
+                    "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
             };
         }
 
@@ -186,10 +201,12 @@ export async function uploadLicensePlateDocumentAction(
 
         if (insertError) {
             await supabase.storage.from("documents").remove([filePath]);
+            console.error("[upload] license plate document insert failed", insertError);
 
             return {
                 success: false,
-                message: `Dokument konnte nicht gespeichert werden: ${insertError.message}`,
+                message:
+                    "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
             };
         }
     }

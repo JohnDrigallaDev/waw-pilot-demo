@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
+import {
+    getDocumentUploadFailedMessage,
+    getUnsupportedDocumentTypeMessage,
+    isAllowedDocumentFile,
+} from "@/lib/documents/upload-validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type UploadPurchaseDocumentState = {
@@ -98,6 +103,13 @@ export async function uploadPurchaseDocumentAction(
         };
     }
 
+    if (!isAllowedDocumentFile(fileValue)) {
+        return {
+            success: false,
+            message: getUnsupportedDocumentTypeMessage(),
+        };
+    }
+
     const { data: purchaseCase, error: purchaseCaseError } = await supabase
         .from("purchase_cases")
         .select("id, vehicle_id, seller_customer_id, purchase_number")
@@ -147,9 +159,10 @@ export async function uploadPurchaseDocumentAction(
         });
 
     if (uploadError) {
+        console.error("[upload] purchase document storage upload failed", uploadError);
         return {
             success: false,
-            message: `Datei konnte nicht hochgeladen werden: ${uploadError.message}`,
+            message: getDocumentUploadFailedMessage(uploadError),
         };
     }
 
@@ -176,10 +189,12 @@ export async function uploadPurchaseDocumentAction(
 
         if (updateError) {
             await supabase.storage.from("documents").remove([filePath]);
+            console.error("[upload] purchase document update failed", updateError);
 
             return {
                 success: false,
-                message: `Dokument konnte nicht aktualisiert werden: ${updateError.message}`,
+                message:
+                    "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
             };
         }
 
@@ -216,12 +231,12 @@ export async function uploadPurchaseDocumentAction(
 
         if (insertError || !insertedDocument) {
             await supabase.storage.from("documents").remove([filePath]);
+            console.error("[upload] purchase document insert failed", insertError);
 
             return {
                 success: false,
-                message: `Dokument konnte nicht gespeichert werden: ${
-                    insertError?.message ?? "Keine Dokument-ID erhalten"
-                }`,
+                message:
+                    "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
             };
         }
 

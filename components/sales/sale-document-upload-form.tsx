@@ -6,6 +6,11 @@ import { CheckCircle2, FileUp, Loader2, ScanLine } from "lucide-react";
 import { uploadSaleDocumentAction } from "@/app/dashboard/sales/[saleId]/actions";
 import { DocumentScannerDialog } from "@/components/documents/document-scanner-dialog";
 import { Button } from "@/components/ui/button";
+import {
+    documentAcceptMimeTypes,
+    getUnsupportedDocumentTypeMessage,
+    isAllowedDocumentFile,
+} from "@/lib/documents/upload-validation";
 
 type SaleDocumentUploadFormProps = {
     saleId: string;
@@ -39,6 +44,7 @@ export function SaleDocumentUploadForm({
                                        }: SaleDocumentUploadFormProps) {
     const inputId = useId();
     const formRef = useRef<HTMLFormElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [scannerOpen, setScannerOpen] = useState(false);
@@ -56,6 +62,12 @@ export function SaleDocumentUploadForm({
         const formElement = formRef.current;
 
         if (!formElement) return;
+
+        if (!isAllowedDocumentFile(file)) {
+            setErrorMessage(getUnsupportedDocumentTypeMessage());
+            setSelectedFileName(null);
+            return;
+        }
 
         const formData = new FormData(formElement);
         formData.set("file", file);
@@ -82,14 +94,12 @@ export function SaleDocumentUploadForm({
     }
 
     function handleFileChange() {
-        const formElement = formRef.current;
+        const file = fileInputRef.current?.files?.[0] ?? null;
 
-        if (!formElement) return;
-
-        const formData = new FormData(formElement);
-        const file = formData.get("file");
-
-        if (!(file instanceof File) || file.size === 0) return;
+        if (!(file instanceof File) || file.size === 0) {
+            setErrorMessage("Bitte wähle eine Datei aus.");
+            return;
+        }
 
         uploadFile(file);
     }
@@ -119,8 +129,7 @@ export function SaleDocumentUploadForm({
                 {documentLabel}
             </p>
 
-            <label
-                htmlFor={inputId}
+            <div
                 className={
                     hasExistingDocument
                         ? "group flex cursor-pointer items-center gap-4 rounded-2xl border border-emerald-200 bg-white px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
@@ -165,27 +174,30 @@ export function SaleDocumentUploadForm({
                     </span>
                 </span>
 
-                <span
+                <Button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => fileInputRef.current?.click()}
                     className={
                         hasExistingDocument
-                            ? "hidden rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white transition group-hover:bg-emerald-800 sm:inline-flex"
-                            : "hidden rounded-xl bg-slate-950 px-3 py-2 text-xs font-extrabold text-white transition group-hover:bg-slate-800 sm:inline-flex"
+                            ? "h-10 shrink-0 rounded-xl bg-emerald-700 px-3 text-xs font-extrabold text-white transition hover:bg-emerald-800"
+                            : "h-10 shrink-0 rounded-xl bg-slate-950 px-3 text-xs font-extrabold text-white transition hover:bg-slate-800"
                     }
                 >
                     {hasExistingDocument ? "Ersetzen" : "Hochladen"}
-                </span>
+                </Button>
 
                 <input
+                    ref={fileInputRef}
                     id={inputId}
                     name="file"
                     type="file"
-                    required
-                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    accept={documentAcceptMimeTypes}
                     className="sr-only"
                     disabled={isPending}
                     onChange={handleFileChange}
                 />
-            </label>
+            </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
                 {cameraAvailable ? (

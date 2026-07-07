@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import {
+    getDocumentUploadFailedMessage,
+    getUnsupportedDocumentTypeMessage,
+    isAllowedDocumentFile,
+} from "@/lib/documents/upload-validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type SaleUploadQueryResult = {
@@ -81,6 +86,10 @@ export async function uploadSaleDocumentAction(formData: FormData) {
         throw new Error("Bitte wähle eine Datei aus.");
     }
 
+    if (!isAllowedDocumentFile(fileValue)) {
+        throw new Error(getUnsupportedDocumentTypeMessage());
+    }
+
     const { data: saleData, error: saleError } = await supabase
         .from("sales")
         .select("id, vehicle_id, buyer_customer_id")
@@ -137,7 +146,8 @@ export async function uploadSaleDocumentAction(formData: FormData) {
         });
 
     if (uploadError) {
-        throw new Error(`Datei konnte nicht hochgeladen werden: ${uploadError.message}`);
+        console.error("[upload] storage upload failed", uploadError);
+        throw new Error(getDocumentUploadFailedMessage(uploadError));
     }
 
     const displayFileName = documentLabel
@@ -165,8 +175,9 @@ export async function uploadSaleDocumentAction(formData: FormData) {
         if (documentUpdateError) {
             await supabase.storage.from("documents").remove([filePath]);
 
+            console.error("[upload] document update failed", documentUpdateError);
             throw new Error(
-                `Neue Datei wurde hochgeladen, aber Dokument konnte nicht aktualisiert werden: ${documentUpdateError.message}`,
+                "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
             );
         }
 
@@ -193,8 +204,9 @@ export async function uploadSaleDocumentAction(formData: FormData) {
         if (documentError) {
             await supabase.storage.from("documents").remove([filePath]);
 
+            console.error("[upload] document insert failed", documentError);
             throw new Error(
-                `Dokument wurde hochgeladen, aber nicht gespeichert: ${documentError.message}`,
+                "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
             );
         }
     }

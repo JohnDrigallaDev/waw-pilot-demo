@@ -4,6 +4,12 @@ import { useActionState, useRef, useState } from "react";
 import { CheckCircle2, FileUp, Loader2 } from "lucide-react";
 
 import { uploadLicensePlateDocumentAction } from "@/app/dashboard/plates/[plateCaseId]/document-actions";
+import { Button } from "@/components/ui/button";
+import {
+    documentAcceptMimeTypes,
+    getUnsupportedDocumentTypeMessage,
+    isAllowedDocumentFile,
+} from "@/lib/documents/upload-validation";
 
 const initialState = {
     success: false,
@@ -31,9 +37,40 @@ export function LicensePlateDocumentUploadForm({
     );
 
     const formRef = useRef<HTMLFormElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+    const [clientErrorMessage, setClientErrorMessage] = useState<string | null>(
+        null,
+    );
 
     const displayFileName = selectedFileName ?? existingFileName;
+    const displayMessage = clientErrorMessage ?? state.message;
+
+    function handleFileChange() {
+        const file = fileInputRef.current?.files?.[0] ?? null;
+
+        if (!file || file.size <= 0) {
+            setClientErrorMessage("Bitte wähle eine Datei aus.");
+            setSelectedFileName(null);
+            return;
+        }
+
+        if (!isAllowedDocumentFile(file)) {
+            setClientErrorMessage(getUnsupportedDocumentTypeMessage());
+            setSelectedFileName(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+            return;
+        }
+
+        setClientErrorMessage(null);
+        setSelectedFileName(file.name);
+
+        window.setTimeout(() => {
+            formRef.current?.requestSubmit();
+        }, 0);
+    }
 
     return (
         <form ref={formRef} action={formAction} className="mt-4 space-y-3">
@@ -45,7 +82,7 @@ export function LicensePlateDocumentUploadForm({
                 value={existingDocumentId ?? ""}
             />
 
-            <label
+            <div
                 className={
                     displayFileName
                         ? "group flex cursor-pointer items-center gap-4 rounded-3xl border border-emerald-200 bg-emerald-50/60 px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
@@ -81,33 +118,29 @@ export function LicensePlateDocumentUploadForm({
                     </span>
                 </span>
 
-                <span className="hidden rounded-xl bg-slate-950 px-3 py-2 text-xs font-extrabold text-white transition group-hover:bg-slate-800 sm:inline-flex">
+                <Button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-10 shrink-0 rounded-xl bg-slate-950 px-3 text-xs font-extrabold text-white transition hover:bg-slate-800"
+                >
                     Hochladen
-                </span>
+                </Button>
 
                 <input
+                    ref={fileInputRef}
                     name="file"
                     type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    accept={documentAcceptMimeTypes}
                     className="sr-only"
                     disabled={isPending}
-                    onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-
-                        if (!file) return;
-
-                        setSelectedFileName(file.name);
-
-                        window.setTimeout(() => {
-                            formRef.current?.requestSubmit();
-                        }, 0);
-                    }}
+                    onChange={handleFileChange}
                 />
-            </label>
+            </div>
 
-            {state.message ? (
+            {displayMessage ? (
                 <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
-                    {state.message}
+                    {displayMessage}
                 </div>
             ) : null}
         </form>

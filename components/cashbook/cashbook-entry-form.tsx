@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import {
     ArrowLeft,
     Banknote,
@@ -21,6 +21,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+    documentAcceptMimeTypes,
+    getUnsupportedDocumentTypeMessage,
+    isAllowedDocumentFile,
+} from "@/lib/documents/upload-validation";
 
 const initialState = {
     success: false,
@@ -45,9 +50,35 @@ export function CashbookEntryForm() {
         initialState,
     );
 
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+    const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(
+        null,
+    );
 
     const today = new Date().toISOString().slice(0, 10);
+
+    function handleReceiptFileChange() {
+        const file = fileInputRef.current?.files?.[0] ?? null;
+
+        if (!file || file.size <= 0) {
+            setSelectedFileName(null);
+            setUploadErrorMessage("Bitte wähle eine Datei aus.");
+            return;
+        }
+
+        if (!isAllowedDocumentFile(file)) {
+            setSelectedFileName(null);
+            setUploadErrorMessage(getUnsupportedDocumentTypeMessage());
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+            return;
+        }
+
+        setUploadErrorMessage(null);
+        setSelectedFileName(file.name);
+    }
 
     return (
         <div className="space-y-6">
@@ -206,7 +237,7 @@ export function CashbookEntryForm() {
                             description="Optional PDF oder Bild hochladen, z. B. Rechnung, Quittung oder Zahlungsnachweis."
                         />
 
-                        <label
+                        <div
                             className={
                                 selectedFileName
                                     ? "group flex cursor-pointer items-center gap-4 rounded-3xl border border-emerald-200 bg-emerald-50/60 px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
@@ -236,21 +267,29 @@ export function CashbookEntryForm() {
                 </span>
               </span>
 
-                            <span className="hidden rounded-xl bg-slate-950 px-3 py-2 text-xs font-extrabold text-white transition group-hover:bg-slate-800 sm:inline-flex">
+                            <Button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="h-10 shrink-0 rounded-xl bg-slate-950 px-3 text-xs font-extrabold text-white transition hover:bg-slate-800"
+                            >
                 Hochladen
-              </span>
+              </Button>
 
                             <input
+                                ref={fileInputRef}
                                 name="receipt_file"
                                 type="file"
-                                accept=".pdf,.png,.jpg,.jpeg,.webp"
+                                accept={documentAcceptMimeTypes}
                                 className="sr-only"
-                                onChange={(event) => {
-                                    const file = event.target.files?.[0] ?? null;
-                                    setSelectedFileName(file?.name ?? null);
-                                }}
+                                onChange={handleReceiptFileChange}
                             />
-                        </label>
+                        </div>
+
+                        {uploadErrorMessage ? (
+                            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                                {uploadErrorMessage}
+                            </p>
+                        ) : null}
                     </CardContent>
                 </Card>
 
