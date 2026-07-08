@@ -748,7 +748,7 @@ export function DocumentScannerDialog({
         "Dokument vollständig ins Bild halten oder Foto übernehmen",
     );
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const [debugState, setDebugState] =
+    const [, setDebugState] =
         useState<ScannerDebugState>(getInitialDebugState);
 
     const updateDebug = useCallback((partialState: Partial<ScannerDebugState>) => {
@@ -1251,18 +1251,6 @@ export function DocumentScannerDialog({
         await handlePhotoCapture();
     }
 
-    function handleScannerTest() {
-        if (!scannerRef.current) {
-            updateDebug({
-                lastDetection: "Fehler",
-                lastError: "Scanner Instanz ist nicht verfügbar.",
-            });
-            return;
-        }
-
-        analyzeFrame();
-    }
-
     const hasCameraError = Boolean(errorMessage && !isVideoReady);
     const showCameraLoading = open && isOpeningCamera && !isVideoReady && !hasCameraError;
     const showVideoPreparing =
@@ -1378,38 +1366,6 @@ export function DocumentScannerDialog({
                 {errorMessage && isVideoReady ? (
                     <div className="rounded-2xl border border-red-700 bg-red-950/70 px-4 py-3 text-sm font-bold text-red-200">
                         {errorMessage}
-                    </div>
-                ) : null}
-
-                {IS_DEVELOPMENT ? (
-                    <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 text-xs text-slate-200">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <p className="font-extrabold uppercase tracking-wide text-cyan-300">
-                                Scanner Debug
-                            </p>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="h-8 border-slate-600 bg-slate-950 px-3 text-xs text-white hover:bg-slate-800"
-                                onClick={handleScannerTest}
-                            >
-                                Scanner-Test aus aktuellem Frame
-                            </Button>
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                            <p>Kamera: {debugState.camera}</p>
-                            <p>Video: {debugState.videoSize}</p>
-                            <p>OpenCV Script: {debugState.openCvScript}</p>
-                            <p>OpenCV Runtime: {debugState.openCvRuntime}</p>
-                            <p>jscanify Script: {debugState.jscanifyScript}</p>
-                            <p>jscanify Constructor: {debugState.jscanifyConstructor}</p>
-                            <p>Scanner Instanz: {debugState.scannerInstance}</p>
-                            <p>Letzte Erkennung: {debugState.lastDetection}</p>
-                            <p>Analyse-Canvas: {debugState.analysisSize}</p>
-                            <p>Analyse-Versuche: {debugState.analysisAttempts}</p>
-                            <p>Letzte Analyse: {debugState.lastAnalysisAt}</p>
-                            <p>Letzter Fehler: {debugState.lastError}</p>
-                        </div>
                     </div>
                 ) : null}
 
