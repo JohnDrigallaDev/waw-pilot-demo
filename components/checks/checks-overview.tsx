@@ -68,7 +68,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                 <CheckStatCard
                     label="Dokumente prüfen"
                     value={data.documentsToCheckCount}
-                    description="fehlend oder needs_review"
+                    description="Dokumente mit Prüfbedarf"
                     icon={FileWarning}
                     href="/dashboard/documents?status=open"
                     danger={data.documentsToCheckCount > 0}
@@ -121,7 +121,7 @@ export function ChecksOverview({ data }: ChecksOverviewProps) {
                     <CheckListCard
                         id="document-checks"
                         title="Dokumente mit Handlungsbedarf"
-                        description="Dokumente, die fehlen oder geprüft werden müssen."
+                        description="Vorhandene Dokumente, die noch geprüft werden müssen."
                         emptyText="Keine Dokumente mit Handlungsbedarf."
                         href="/dashboard/documents?status=open"
                     >

@@ -360,11 +360,5 @@ export async function generateHandoverProtocolPdf(
         signatureY,
     );
 
-    drawText(ctx, "WAW NUTZFAHRZEUGE", 215, 44, {
-        size: 14,
-        bold: true,
-        color: "#8c8c8c",
-    });
-
     return ctx.pdfDoc.save();
 }

@@ -1009,14 +1009,5 @@ export async function generateInvoicePdf(
 
     await drawSignatureStampImages(page, pdfDoc, data.signatureStamp);
 
-    /**
-     * Footer - ohne "Automatisch erzeugt mit KFZ Pilot"
-     */
-    drawText(page, "WAW NUTZFAHRZEUGE", 190, 42, {
-        font: helveticaBold,
-        size: 20,
-        color: gray,
-    });
-
     return pdfDoc.save();
 }

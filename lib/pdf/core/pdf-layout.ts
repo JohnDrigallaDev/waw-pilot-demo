@@ -368,12 +368,5 @@ export function drawSignatureLine(
 }
 
 export function drawPdfFooter(ctx: PdfLayoutContext) {
-    drawHorizontalLine(ctx, 42, {
-        color: pdfTheme.colors.lightBorder,
-    });
-
-    drawText(ctx, "Automatisch erzeugt mit WAW Pilot", ctx.margin, 26, {
-        size: pdfTheme.fontSize.tiny,
-        color: pdfTheme.colors.lightText,
-    });
+    void ctx;
 }

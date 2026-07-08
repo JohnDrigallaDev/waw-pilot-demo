@@ -120,6 +120,43 @@ function appendUniqueNote(existingNotes: string | null, note: string | null): st
     return [trimmedExistingNotes, note].filter(Boolean).join("\n\n");
 }
 
+function removePlannedNetSalePriceNote(existingNotes: string | null): string | null {
+    if (!existingNotes?.trim()) return existingNotes;
+
+    const nextNotes = existingNotes
+        .split(/\n{2,}/)
+        .map((part) => part.trim())
+        .filter(
+            (part) =>
+                !/^Geplanter Netto-VK laut Fahrzeugbestand: .+ netto$/i.test(part),
+        )
+        .join("\n\n")
+        .trim();
+
+    return nextNotes.length > 0 ? nextNotes : null;
+}
+
+function resolvePlannedNetSalePriceNote({
+                                            existingNotes,
+                                            plannedNetSalePrice,
+                                            includeNote,
+                                        }: {
+    existingNotes: string | null;
+    plannedNetSalePrice: number | null;
+    includeNote: boolean;
+}): string | null {
+    const notesWithoutPlannedPrice = removePlannedNetSalePriceNote(existingNotes);
+
+    if (!includeNote) {
+        return notesWithoutPlannedPrice;
+    }
+
+    return appendUniqueNote(
+        notesWithoutPlannedPrice,
+        getPlannedNetSalePriceNote(plannedNetSalePrice),
+    );
+}
+
 function getInvoiceActivityLabel(invoiceType: InvoiceType): string {
     if (invoiceType === "standard") return "Rechnung";
     if (invoiceType === "proforma") return "Proforma-Rechnung";
@@ -193,12 +230,11 @@ export async function createSaleInvoiceAction(formData: FormData) {
         plannedNetSalePrice !== null && Number.isFinite(plannedNetSalePrice)
             ? plannedNetSalePrice
             : null;
-    const nextInvoiceNotes = includePlannedNetSalePriceNote
-        ? appendUniqueNote(
-              sale.invoice_notes,
-              getPlannedNetSalePriceNote(validPlannedNetSalePrice),
-          )
-        : sale.invoice_notes;
+    const nextInvoiceNotes = resolvePlannedNetSalePriceNote({
+        existingNotes: sale.invoice_notes,
+        plannedNetSalePrice: validPlannedNetSalePrice,
+        includeNote: includePlannedNetSalePriceNote,
+    });
 
     if (
         Boolean(sale.include_damage_notes_on_invoice) !==
@@ -390,6 +426,8 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
         getStringValue(formData, "include_signature_stamp") === "yes";
     const includeDamageNotesOnInvoice =
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
+    const includePlannedNetSalePriceNote =
+        getStringValue(formData, "include_planned_net_sale_price_note") === "yes";
 
     if (!saleId) {
         throw new Error("Verkauf fehlt.");
@@ -455,6 +493,61 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
         throw new Error(
             `Rechnungsoption konnte nicht gespeichert werden: ${saleOptionUpdateError.message}`,
         );
+    }
+
+    const { data: saleData, error: saleError } = await supabase
+        .from("sales")
+        .select(
+            `
+      invoice_notes,
+      vehicles (
+        sale_price_net
+      )
+    `,
+        )
+        .eq("id", saleId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (saleError || !saleData) {
+        throw new Error(
+            `Verkauf konnte nicht geladen werden: ${
+                saleError?.message ?? "Nicht gefunden"
+            }`,
+        );
+    }
+
+    const sale = saleData as Pick<SaleInvoiceSourceRow, "invoice_notes" | "vehicles">;
+    const saleVehicle = getSingleRelation(sale.vehicles);
+    const plannedNetSalePrice =
+        saleVehicle?.sale_price_net === null ||
+        saleVehicle?.sale_price_net === undefined
+            ? null
+            : Number(saleVehicle.sale_price_net);
+    const validPlannedNetSalePrice =
+        plannedNetSalePrice !== null && Number.isFinite(plannedNetSalePrice)
+            ? plannedNetSalePrice
+            : null;
+    const nextInvoiceNotes = resolvePlannedNetSalePriceNote({
+        existingNotes: sale.invoice_notes,
+        plannedNetSalePrice: validPlannedNetSalePrice,
+        includeNote: includePlannedNetSalePriceNote,
+    });
+
+    if ((nextInvoiceNotes ?? null) !== (sale.invoice_notes ?? null)) {
+        const { error: saleNotesUpdateError } = await supabase
+            .from("sales")
+            .update({
+                invoice_notes: nextInvoiceNotes,
+            })
+            .eq("id", saleId)
+            .eq("company_id", companyId);
+
+        if (saleNotesUpdateError) {
+            throw new Error(
+                `Rechnungsnotiz konnte nicht gespeichert werden: ${saleNotesUpdateError.message}`,
+            );
+        }
     }
 
     const storedPdf = await generateAndStoreInvoicePdf(invoiceId);

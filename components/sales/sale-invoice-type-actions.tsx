@@ -82,6 +82,7 @@ export function SaleInvoiceTypeActions({
             {hasPlannedNetSalePrice ? (
                 <label className="flex cursor-pointer items-start gap-3 rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
                     <input
+                        id={`sale-${saleId}-include-planned-net-sale-price-note`}
                         type="checkbox"
                         checked={includePlannedNetSalePriceNote}
                         onChange={(event) =>

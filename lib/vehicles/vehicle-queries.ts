@@ -26,6 +26,18 @@ export type VehicleRow = {
     document_status: VehicleDocumentStatus;
 };
 
+type VehicleDocumentRow = {
+    vehicle_id: string | null;
+    status: "available" | "missing" | "needs_review";
+};
+
+function getVehicleDocumentStatus(availableDocumentCount: number): VehicleDocumentStatus {
+    if (availableDocumentCount >= 2) return "complete";
+    if (availableDocumentCount === 1) return "partial";
+
+    return "missing";
+}
+
 export async function getVehicles(): Promise<VehicleRow[]> {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -59,11 +71,40 @@ export async function getVehicles(): Promise<VehicleRow[]> {
         throw new Error(`Fahrzeuge konnten nicht geladen werden: ${error.message}`);
     }
 
-    return (data ?? []).map((vehicle) => ({
+    const vehicles = data ?? [];
+    const vehicleIds = vehicles.map((vehicle) => vehicle.id);
+    const availableDocumentsByVehicleId = new Map<string, number>();
+
+    if (vehicleIds.length > 0) {
+        const { data: documentsData, error: documentsError } = await supabase
+            .from("documents")
+            .select("vehicle_id, status")
+            .eq("company_id", companyId)
+            .in("vehicle_id", vehicleIds);
+
+        if (documentsError) {
+            throw new Error(
+                `Fahrzeugdokumente konnten nicht geladen werden: ${documentsError.message}`,
+            );
+        }
+
+        for (const document of (documentsData ?? []) as VehicleDocumentRow[]) {
+            if (!document.vehicle_id || document.status !== "available") continue;
+
+            availableDocumentsByVehicleId.set(
+                document.vehicle_id,
+                (availableDocumentsByVehicleId.get(document.vehicle_id) ?? 0) + 1,
+            );
+        }
+    }
+
+    return vehicles.map((vehicle) => ({
         ...vehicle,
         seller_name: null,
         buyer_name: null,
-        document_status: "partial",
+        document_status: getVehicleDocumentStatus(
+            availableDocumentsByVehicleId.get(vehicle.id) ?? 0,
+        ),
     }));
 }
 
