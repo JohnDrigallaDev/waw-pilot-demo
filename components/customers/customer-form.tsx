@@ -5,6 +5,7 @@ import { useActionState, useState, type FormEventHandler } from "react";
 import { Building2, Save, UserRound } from "lucide-react";
 
 import { createCustomerAction } from "@/app/dashboard/customers/new/actions";
+import { EMAIL_LANGUAGE_OPTIONS } from "@/lib/customers/email-languages";
 import { phoneInputPattern, sanitizePhoneInput } from "@/lib/validation/phone";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -139,6 +140,7 @@ export function CustomerForm() {
                             <FormField label="Vorname" name="first_name" />
                             <FormField label="Nachname" name="last_name" />
                             <FormField label="E-Mail" name="email" type="email" />
+                            <EmailLanguageField defaultValue="de" />
                             <FormField
                                 label="Telefon"
                                 name="phone"
@@ -231,6 +233,34 @@ export function CustomerForm() {
                     </div>
                 </div>
             </form>
+        </div>
+    );
+}
+
+function EmailLanguageField({ defaultValue = "de" }: { defaultValue?: string }) {
+    return (
+        <div className="space-y-2">
+            <Label
+                htmlFor="preferred_language"
+                className="font-bold text-slate-700"
+            >
+                Sprache für E-Mails
+            </Label>
+            <select
+                id="preferred_language"
+                name="preferred_language"
+                defaultValue={defaultValue}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 font-medium text-slate-900 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
+            >
+                {EMAIL_LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+            <p className="text-xs font-semibold leading-5 text-slate-500">
+                Diese Sprache wird für automatisch versendete E-Mails verwendet.
+            </p>
         </div>
     );
 }

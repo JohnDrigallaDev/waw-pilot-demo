@@ -13,6 +13,7 @@ export type CustomerRow = {
     city: string;
     country: string;
     email: string | null;
+    preferred_language: string;
     phone: string | null;
     tax_number: string | null;
     vat_id: string | null;
@@ -42,6 +43,7 @@ export async function getCustomers(): Promise<CustomerRow[]> {
       city,
       country,
       email,
+      preferred_language,
       phone,
       tax_number,
       vat_id,

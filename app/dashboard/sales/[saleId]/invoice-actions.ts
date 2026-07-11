@@ -11,6 +11,14 @@ import {
     getNextInvoiceNumber,
     type InvoiceType,
 } from "@/lib/invoices/invoice-numbering";
+import {
+    getInvoiceEmailTemplate,
+} from "@/lib/email/templates/invoice-email";
+import { normalizeEmailLanguage } from "@/lib/customers/email-languages";
+import {
+    EmailConfigurationError,
+    sendEmailWithResend,
+} from "@/lib/email/resend";
 import { assertCompanySignatureStampConfigured } from "@/lib/pdf/company-signature-assets";
 import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -34,6 +42,33 @@ type SaleInvoiceSourceRow = {
         | {
         sale_price_net: number | string | null;
     }[]
+        | null;
+};
+
+type InvoiceEmailDocumentRelation = {
+    file_name: string | null;
+    file_path: string | null;
+    mime_type: string | null;
+};
+
+type InvoiceEmailCustomerRelation = {
+    type: "company" | "private";
+    company_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    preferred_language: string | null;
+};
+
+type InvoiceEmailQueryRow = {
+    id: string;
+    sale_id: string | null;
+    invoice_number: string;
+    email_send_count: number | null;
+    customers: InvoiceEmailCustomerRelation | InvoiceEmailCustomerRelation[] | null;
+    documents:
+        | InvoiceEmailDocumentRelation
+        | InvoiceEmailDocumentRelation[]
         | null;
 };
 
@@ -163,6 +198,37 @@ function getInvoiceActivityLabel(invoiceType: InvoiceType): string {
     if (invoiceType === "down_payment") return "Anzahlungsrechnung";
 
     return getInvoiceTypeLabel(invoiceType);
+}
+
+function getInvoiceEmailErrorRedirect(
+    saleId: string,
+    invoiceId: string,
+    errorCode: string,
+): string {
+    return `/dashboard/sales/${saleId}?invoiceEmailError=${errorCode}&highlightInvoiceId=${invoiceId}`;
+}
+
+function getCustomerNameForEmail(
+    customer: InvoiceEmailCustomerRelation,
+): string {
+    if (customer.type === "company") {
+        return customer.company_name ?? "Kunde";
+    }
+
+    return [customer.first_name, customer.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || "Kunde";
+}
+
+function getInvoiceEmailSuccessRedirect(
+    saleId: string,
+    invoiceId: string,
+    email: string,
+): string {
+    return `/dashboard/sales/${saleId}?invoiceEmailSent=${encodeURIComponent(
+        email,
+    )}&highlightInvoiceId=${invoiceId}`;
 }
 
 export async function createSaleInvoiceAction(formData: FormData) {
@@ -590,6 +656,142 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
             String(invoiceData.invoice_number),
         )}&highlightInvoiceId=${invoiceId}`,
     );
+}
+
+export async function sendSaleInvoiceEmailAction(formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const saleId = getStringValue(formData, "sale_id");
+    const invoiceId = getStringValue(formData, "invoice_id");
+
+    if (!saleId) {
+        throw new Error("Verkauf fehlt.");
+    }
+
+    if (!invoiceId) {
+        throw new Error("Rechnung fehlt.");
+    }
+
+    const { data, error } = await supabase
+        .from("invoices")
+        .select(
+            `
+      id,
+      sale_id,
+      invoice_number,
+      email_send_count,
+      customers:customer_id (
+        type,
+        company_name,
+        first_name,
+        last_name,
+        email,
+        preferred_language
+      ),
+      documents:pdf_document_id (
+        file_name,
+        file_path,
+        mime_type
+      )
+    `,
+        )
+        .eq("id", invoiceId)
+        .eq("sale_id", saleId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (error || !data) {
+        console.error("[email] invoice lookup failed", error);
+        redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "sendFailed"));
+    }
+
+    const invoice = data as unknown as InvoiceEmailQueryRow;
+    const customer = getSingleRelation(invoice.customers);
+    const document = getSingleRelation(invoice.documents);
+
+    if (!customer?.email) {
+        redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "missingEmail"));
+    }
+
+    if (!document?.file_path) {
+        redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "missingPdf"));
+    }
+
+    const { data: fileData, error: downloadError } = await supabase.storage
+        .from("documents")
+        .download(document.file_path);
+
+    if (downloadError || !fileData) {
+        console.error("[email] invoice PDF download failed", downloadError);
+        redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "missingPdf"));
+    }
+
+    const pdfBytes = Buffer.from(await fileData.arrayBuffer());
+    const language = normalizeEmailLanguage(customer.preferred_language, "en");
+    const template = getInvoiceEmailTemplate(language, {
+        invoiceNumber: invoice.invoice_number,
+        customerName: getCustomerNameForEmail(customer),
+    });
+
+    let deliveryErrorCode: string | null = null;
+
+    try {
+        await sendEmailWithResend({
+            to: customer.email,
+            subject: template.subject,
+            text: template.text,
+            html: template.html,
+            attachments: [
+                {
+                    filename: `rechnung-${invoice.invoice_number}.pdf`,
+                    content: pdfBytes,
+                    contentType: document.mime_type ?? "application/pdf",
+                },
+            ],
+        });
+    } catch (sendError) {
+        deliveryErrorCode =
+            sendError instanceof EmailConfigurationError
+                ? "mailNotConfigured"
+                : "sendFailed";
+
+        if (!(sendError instanceof EmailConfigurationError)) {
+            console.error("[email] invoice delivery failed", sendError);
+        }
+    }
+
+    if (deliveryErrorCode) {
+        redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, deliveryErrorCode));
+    }
+
+    const { error: updateError } = await supabase
+        .from("invoices")
+        .update({
+            email_sent_at: new Date().toISOString(),
+            email_sent_to: customer.email,
+            email_sent_language: language,
+            email_send_count: (invoice.email_send_count ?? 0) + 1,
+        })
+        .eq("id", invoiceId)
+        .eq("company_id", companyId);
+
+    if (updateError) {
+        console.error("[email] invoice email status update failed", updateError);
+        redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "sendFailed"));
+    }
+
+    await logActivity({
+        action: `Rechnung ${invoice.invoice_number} per E-Mail an ${customer.email} gesendet`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
+
+    revalidatePath(`/dashboard/sales/${saleId}`);
+    revalidatePath("/dashboard/invoices");
+    revalidatePath("/dashboard/activities");
+
+    redirect(getInvoiceEmailSuccessRedirect(saleId, invoiceId, customer.email));
 }
 
 export async function markInvoicePaidAction(formData: FormData) {

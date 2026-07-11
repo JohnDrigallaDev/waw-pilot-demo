@@ -41,7 +41,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
     markInvoicePaidAction,
-    regenerateSaleInvoicePdfAction,
 } from "@/app/dashboard/sales/[saleId]/invoice-actions";
 import { SaleExportDetailsForm } from "@/components/sales/sale-export-details-form";
 import type { SaleExportDetails } from "@/lib/sales/sale-export-details-queries";
@@ -49,6 +48,7 @@ import { FlashMessage } from "@/components/shared/flash-message";
 import { DeleteSaleDocumentForm } from "@/components/sales/delete-sale-document-form";
 import { TemporaryHighlight } from "@/components/shared/temporary-highlight";
 import { RegenerateInvoicePdfForm } from "@/components/sales/regenerate-invoice-pdf-form";
+import { SendInvoiceEmailForm } from "@/components/sales/send-invoice-email-form";
 
 type SaleDetailProps = {
     sale: SaleDetailType;
@@ -57,6 +57,8 @@ type SaleDetailProps = {
     generatedDocumentType?: string | null;
     invoiceCreatedNumber?: string | null;
     invoiceRegeneratedNumber?: string | null;
+    invoiceEmailSent?: string | null;
+    invoiceEmailError?: string | null;
     highlightInvoiceId?: string | null;
     documentUploaded?: boolean;
     documentDeleted?: boolean;
@@ -72,6 +74,8 @@ export function SaleDetail({
                                generatedDocumentType = null,
                                invoiceCreatedNumber = null,
                                invoiceRegeneratedNumber = null,
+                               invoiceEmailSent = null,
+                               invoiceEmailError = null,
                                highlightInvoiceId = null,
                                documentUploaded = false,
                                documentDeleted = false,
@@ -130,6 +134,31 @@ export function SaleDetail({
                     message="Rechnung wurde neu generiert."
                     description={`Die aktualisierte PDF für Rechnung ${invoiceRegeneratedNumber} ist unten im Bereich „Rechnungen & Zahlung“ verfügbar.`}
                 />
+            ) : null}
+
+            {invoiceEmailSent ? (
+                <FlashMessage
+                    message="Rechnung wurde per E-Mail gesendet."
+                    description={`Rechnung wurde per E-Mail an ${invoiceEmailSent} gesendet.`}
+                />
+            ) : null}
+
+            {invoiceEmailError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
+                            <FileWarning className="size-5" />
+                        </div>
+                        <div>
+                            <p className="font-extrabold text-red-950">
+                                Rechnung konnte nicht per E-Mail gesendet werden.
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-red-800">
+                                {getInvoiceEmailErrorMessage(invoiceEmailError)}
+                            </p>
+                        </div>
+                    </div>
+                </div>
             ) : null}
 
             {documentDeleted ? (
@@ -712,10 +741,34 @@ function InvoiceCard({
                 </Button>
 
                 <RegenerateInvoicePdfForm saleId={saleId} invoiceId={invoice.id} />
+
+                <SendInvoiceEmailForm saleId={saleId} invoiceId={invoice.id} />
             </div>
+
+            {invoice.email_sent_at && invoice.email_sent_to ? (
+                <p className="mt-3 text-xs font-bold text-slate-500">
+                    Zuletzt gesendet am {formatDate(invoice.email_sent_at)} an{" "}
+                    {invoice.email_sent_to}
+                </p>
+            ) : null}
         </div>
         </TemporaryHighlight>
     );
+}
+
+function getInvoiceEmailErrorMessage(errorCode: string): string {
+    const messages: Record<string, string> = {
+        missingEmail:
+            "Beim Kunden ist keine E-Mail-Adresse hinterlegt. Bitte ergänze zuerst die E-Mail-Adresse in den Kundendaten.",
+        missingPdf:
+            "Für diese Rechnung wurde noch kein PDF erzeugt. Bitte generiere zuerst das PDF.",
+        mailNotConfigured:
+            "E-Mail-Versand ist noch nicht eingerichtet. Bitte RESEND_API_KEY und MAIL_FROM konfigurieren.",
+        sendFailed:
+            "Rechnung konnte nicht per E-Mail gesendet werden. Bitte versuche es erneut.",
+    };
+
+    return messages[errorCode] ?? messages.sendFailed;
 }
 
 function MarkSaleInvoicePaidButton({

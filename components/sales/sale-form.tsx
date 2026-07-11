@@ -20,6 +20,7 @@ import {
 
 import { createSaleAction } from "@/app/dashboard/sales/new/actions";
 import type { CustomerRow } from "@/lib/customers/customer-queries";
+import { EMAIL_LANGUAGE_OPTIONS } from "@/lib/customers/email-languages";
 import { getCustomerDisplayName } from "@/lib/customers/customer-helpers";
 import type { VehicleRow } from "@/lib/vehicles/vehicle-queries";
 import { getVehicleDisplayName } from "@/lib/vehicles/vehicle-helpers";
@@ -442,6 +443,7 @@ export function SaleForm({
                                         name="new_customer_email"
                                         type="email"
                                     />
+                                    <EmailLanguageField />
                                     <FormField
                                         label="Telefon"
                                         name="new_customer_phone"
@@ -960,6 +962,34 @@ function AmountPreview({ label, value }: { label: string; value: number }) {
             </p>
             <p className="mt-1 truncate text-lg font-extrabold text-slate-950">
                 {formatCurrency(value)}
+            </p>
+        </div>
+    );
+}
+
+function EmailLanguageField() {
+    return (
+        <div className="space-y-2">
+            <Label
+                htmlFor="new_customer_preferred_language"
+                className="font-bold text-slate-700"
+            >
+                Sprache für E-Mails
+            </Label>
+            <select
+                id="new_customer_preferred_language"
+                name="new_customer_preferred_language"
+                defaultValue="de"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 font-medium text-slate-900 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
+            >
+                {EMAIL_LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+            <p className="text-xs font-semibold leading-5 text-slate-500">
+                Diese Sprache wird für automatisch versendete E-Mails verwendet.
             </p>
         </div>
     );

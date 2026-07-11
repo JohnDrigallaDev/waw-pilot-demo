@@ -7,6 +7,10 @@ import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isValidPhoneNumber } from "@/lib/validation/phone";
+import {
+    normalizeEmailLanguage,
+    type EmailLanguage,
+} from "@/lib/customers/email-languages";
 
 function getStringValue(formData: FormData, key: string): string | null {
     const value = formData.get(key);
@@ -34,6 +38,10 @@ function getCustomerDisplayName(customer: {
         .trim() || "Unbekannte Privatperson";
 }
 
+function getEmailLanguage(formData: FormData): EmailLanguage {
+    return normalizeEmailLanguage(getStringValue(formData, "preferred_language"));
+}
+
 export async function updateCustomerMasterDataAction(formData: FormData) {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -56,6 +64,7 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
     const city = getStringValue(formData, "city");
     const country = getStringValue(formData, "country");
     const email = getStringValue(formData, "email");
+    const preferredLanguage = getEmailLanguage(formData);
     const phone = getStringValue(formData, "phone");
     const taxNumber = getStringValue(formData, "tax_number");
     const vatId = getStringValue(formData, "vat_id");
@@ -72,6 +81,7 @@ export async function updateCustomerMasterDataAction(formData: FormData) {
             city,
             country,
             email,
+            preferred_language: preferredLanguage,
             phone,
             tax_number: taxNumber,
             vat_id: vatId,

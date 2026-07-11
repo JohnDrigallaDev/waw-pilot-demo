@@ -15,6 +15,10 @@ import {
 } from "lucide-react";
 
 import type { CustomerDetail as CustomerDetailType } from "@/lib/customers/customer-detail-queries";
+import {
+    EMAIL_LANGUAGE_OPTIONS,
+    getEmailLanguageLabel,
+} from "@/lib/customers/email-languages";
 import { formatCurrency } from "@/lib/format/currency";
 import { formatDate } from "@/lib/format/date";
 import {
@@ -134,6 +138,10 @@ export function CustomerDetail({
                                     />
                                     <InfoRow label="Adresse" value={customer.address || "—"} />
                                     <InfoRow label="E-Mail" value={customer.email ?? "—"} />
+                                    <InfoRow
+                                        label="E-Mail-Sprache"
+                                        value={getEmailLanguageLabel(customer.preferred_language)}
+                                    />
                                     <InfoRow label="Telefon" value={customer.phone ?? "—"} />
                                     <InfoRow
                                         label="Steuernummer"
@@ -204,6 +212,10 @@ export function CustomerDetail({
                                                 type="email"
                                                 defaultValue={customer.email ?? ""}
                                                 placeholder="kunde@example.com"
+                                            />
+
+                                            <EmailLanguageSelect
+                                                defaultValue={customer.preferred_language}
                                             />
 
                                             <CustomerFormField
@@ -649,6 +661,34 @@ function CustomerFormField({
                 title={title}
                 className="h-11 rounded-2xl border-slate-200 bg-white font-semibold"
             />
+        </div>
+    );
+}
+
+function EmailLanguageSelect({ defaultValue }: { defaultValue: string }) {
+    return (
+        <div className="space-y-2">
+            <Label
+                htmlFor="preferred_language"
+                className="font-bold text-slate-700"
+            >
+                Sprache für E-Mails
+            </Label>
+            <select
+                id="preferred_language"
+                name="preferred_language"
+                defaultValue={defaultValue || "de"}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 font-semibold text-slate-900 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
+            >
+                {EMAIL_LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+            <p className="text-xs font-semibold leading-5 text-cyan-800">
+                Diese Sprache wird für automatisch versendete E-Mails verwendet.
+            </p>
         </div>
     );
 }

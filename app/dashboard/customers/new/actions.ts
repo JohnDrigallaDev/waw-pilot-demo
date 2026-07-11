@@ -6,6 +6,10 @@ import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isValidPhoneNumber } from "@/lib/validation/phone";
+import {
+    normalizeEmailLanguage,
+    type EmailLanguage,
+} from "@/lib/customers/email-languages";
 
 type CreateCustomerState = {
     success: boolean;
@@ -40,6 +44,10 @@ function getCustomerName({
     return [firstName, lastName].filter(Boolean).join(" ") || "Unbekannte Privatperson";
 }
 
+function getEmailLanguage(formData: FormData): EmailLanguage {
+    return normalizeEmailLanguage(getStringValue(formData, "preferred_language"));
+}
+
 export async function createCustomerAction(
     _previousState: CreateCustomerState,
     formData: FormData,
@@ -67,6 +75,7 @@ export async function createCustomerAction(
     const country = getStringValue(formData, "country") ?? "Deutschland";
 
     const email = getStringValue(formData, "email");
+    const preferredLanguage = getEmailLanguage(formData);
     const phone = getStringValue(formData, "phone");
     const taxNumber = getStringValue(formData, "tax_number");
     const vatId = getStringValue(formData, "vat_id");
@@ -118,6 +127,7 @@ export async function createCustomerAction(
             city,
             country,
             email,
+            preferred_language: preferredLanguage,
             phone,
             tax_number: taxNumber,
             vat_id: vatId,

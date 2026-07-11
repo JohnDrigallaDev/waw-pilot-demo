@@ -13,6 +13,10 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { SaleType } from "@/lib/sales/sale-queries";
 import { logActivity } from "@/lib/activity/activity-log";
 import { isValidPhoneNumber } from "@/lib/validation/phone";
+import {
+    normalizeEmailLanguage,
+    type EmailLanguage,
+} from "@/lib/customers/email-languages";
 
 type CreateSaleState = {
     success: boolean;
@@ -82,6 +86,12 @@ function getNewCustomerType(formData: FormData): CustomerType {
     }
 
     return "company";
+}
+
+function getNewCustomerEmailLanguage(formData: FormData): EmailLanguage {
+    return normalizeEmailLanguage(
+        getStringValue(formData, "new_customer_preferred_language"),
+    );
 }
 
 function roundMoney(value: number): number {
@@ -211,6 +221,7 @@ async function createBuyerCustomerFromSaleForm(
     const country = getStringValue(formData, "new_customer_country") ?? "Deutschland";
 
     const email = getStringValue(formData, "new_customer_email");
+    const preferredLanguage = getNewCustomerEmailLanguage(formData);
     const phone = getStringValue(formData, "new_customer_phone");
     const vatId = getStringValue(formData, "new_customer_vat_id");
     const taxNumber = getStringValue(formData, "new_customer_tax_number");
@@ -273,6 +284,7 @@ async function createBuyerCustomerFromSaleForm(
             city,
             country,
             email,
+            preferred_language: preferredLanguage,
             phone,
             tax_number: taxNumber,
             vat_id: vatId,

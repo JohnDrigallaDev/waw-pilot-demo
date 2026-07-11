@@ -27,6 +27,10 @@ type InvoiceRelation = {
     payment_status: PaymentStatus;
     include_signature_stamp: boolean | null;
     pdf_document_id: string | null;
+    email_sent_at: string | null;
+    email_sent_to: string | null;
+    email_sent_language: string | null;
+    email_send_count: number | null;
     created_at: string;
 };
 
@@ -90,6 +94,7 @@ type SaleDetailQueryRow = {
         city: string | null;
         country: string | null;
         email: string | null;
+        preferred_language: string;
         phone: string | null;
         tax_number: string | null;
         vat_id: string | null;
@@ -122,6 +127,10 @@ export type SaleDetailInvoice = {
     payment_status: PaymentStatus;
     include_signature_stamp: boolean;
     pdf_document_id: string | null;
+    email_sent_at: string | null;
+    email_sent_to: string | null;
+    email_sent_language: string | null;
+    email_send_count: number;
     created_at: string;
 };
 
@@ -157,6 +166,7 @@ export type SaleDetail = {
         city: string | null;
         country: string | null;
         email: string | null;
+        preferred_language: string;
         phone: string | null;
         tax_number: string | null;
         vat_id: string | null;
@@ -276,6 +286,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         city,
         country,
         email,
+        preferred_language,
         phone,
         tax_number,
         vat_id
@@ -291,6 +302,10 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         payment_status,
         include_signature_stamp,
         pdf_document_id,
+        email_sent_at,
+        email_sent_to,
+        email_sent_language,
+        email_send_count,
         created_at
       ),
       documents (
@@ -332,6 +347,10 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             payment_status: invoice.payment_status,
             include_signature_stamp: Boolean(invoice.include_signature_stamp),
             pdf_document_id: invoice.pdf_document_id,
+            email_sent_at: invoice.email_sent_at,
+            email_sent_to: invoice.email_sent_to,
+            email_sent_language: invoice.email_sent_language,
+            email_send_count: invoice.email_send_count ?? 0,
             created_at: invoice.created_at,
         }))
         .sort((a, b) => {
@@ -439,6 +458,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             city: sale.customers.city,
             country: sale.customers.country,
             email: sale.customers.email,
+            preferred_language: sale.customers.preferred_language,
             phone: sale.customers.phone,
             tax_number: sale.customers.tax_number,
             vat_id: sale.customers.vat_id,
