@@ -2,6 +2,7 @@ import { SaleDetail } from "@/components/sales/sale-detail";
 import { getSaleGeneratedDocumentChecks } from "@/lib/pdf/generated-documents/sale-document-checks";
 import { getSaleDetail } from "@/lib/sales/sale-detail-queries";
 import { getSaleExportDetails } from "@/lib/sales/sale-export-details-queries";
+import { isZugferdServiceConfigured } from "@/lib/zugferd/zugferd-service-client";
 
 type SaleDetailPageProps = {
     params: Promise<{
@@ -13,6 +14,10 @@ type SaleDetailPageProps = {
         invoiceRegenerated?: string;
         invoiceEmailSent?: string;
         invoiceEmailError?: string;
+        zugferdCreated?: string;
+        zugferdEmailSent?: string;
+        zugferdError?: string;
+        zugferdMissing?: string;
         highlightInvoiceId?: string;
         documentDeleted?: string;
         documentUploaded?: string;
@@ -42,11 +47,20 @@ export default async function SaleDetailPage({
             sale={sale}
             generatedDocuments={generatedDocuments}
             exportDetails={exportDetails}
+            isZugferdServiceConfigured={isZugferdServiceConfigured()}
             generatedDocumentType={resolvedSearchParams.generatedDocument ?? null}
             invoiceCreatedNumber={resolvedSearchParams.invoiceCreated ?? null}
             invoiceRegeneratedNumber={resolvedSearchParams.invoiceRegenerated ?? null}
             invoiceEmailSent={resolvedSearchParams.invoiceEmailSent ?? null}
             invoiceEmailError={resolvedSearchParams.invoiceEmailError ?? null}
+            zugferdCreated={resolvedSearchParams.zugferdCreated === "1"}
+            zugferdEmailSent={resolvedSearchParams.zugferdEmailSent ?? null}
+            zugferdError={resolvedSearchParams.zugferdError ?? null}
+            zugferdMissingFields={
+                resolvedSearchParams.zugferdMissing
+                    ? resolvedSearchParams.zugferdMissing.split("|").filter(Boolean)
+                    : []
+            }
             highlightInvoiceId={resolvedSearchParams.highlightInvoiceId ?? null}
             documentUploaded={resolvedSearchParams.documentUploaded === "1"}
             documentDeleted={resolvedSearchParams.documentDeleted === "1"}

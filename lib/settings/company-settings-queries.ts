@@ -14,6 +14,7 @@ export type CompanySettings = {
     phone: string | null;
     vat_id: string | null;
     tax_number: string | null;
+    commercial_register_number: string | null;
     signature_image_path: string | null;
     stamp_image_path: string | null;
 };
@@ -38,6 +39,7 @@ export async function getCompanySettings(): Promise<CompanySettings> {
             phone,
             vat_id,
             tax_number,
+            commercial_register_number,
             signature_image_path,
             stamp_image_path
         `,

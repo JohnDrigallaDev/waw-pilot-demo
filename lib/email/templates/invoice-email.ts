@@ -320,3 +320,59 @@ export function getInvoiceEmailTemplate(
         html: toHtml(text),
     };
 }
+
+export function getZugferdInvoiceEmailTemplate(
+    language: string | null | undefined,
+    params: InvoiceEmailTemplateParams,
+): InvoiceEmailTemplate {
+    const normalizedLanguage = normalizeEmailLanguage(language, "de");
+    const invoiceNumber = params.invoiceNumber;
+    const customerName = params.customerName;
+
+    const templates: Partial<Record<EmailLanguage, TemplateText>> = {
+        de: {
+            subject: `Ihre E-Rechnung ${invoiceNumber} von WAW Nutzfahrzeuge`,
+            greeting: `Guten Tag ${customerName},`,
+            attachment: `anbei erhalten Sie Ihre Rechnung ${invoiceNumber} im ZUGFeRD-Format als PDF mit eingebetteten strukturierten Rechnungsdaten.`,
+            questions: "Bei Fragen melden Sie sich gerne bei uns.",
+            closing: "Mit freundlichen Grüßen\nWAW Nutzfahrzeuge",
+        },
+        en: {
+            subject: `Your e-invoice ${invoiceNumber} from WAW Nutzfahrzeuge`,
+            greeting: `Hello ${customerName},`,
+            attachment: `please find attached your invoice ${invoiceNumber} in ZUGFeRD format as a PDF with embedded structured invoice data.`,
+            questions: "If you have any questions, feel free to contact us.",
+            closing: "Kind regards\nWAW Nutzfahrzeuge",
+        },
+        pl: {
+            subject: `E-faktura ${invoiceNumber} od WAW Nutzfahrzeuge`,
+            greeting: `Dzień dobry ${customerName},`,
+            attachment: `w załączniku przesyłamy fakturę ${invoiceNumber} w formacie ZUGFeRD jako PDF z osadzonymi ustrukturyzowanymi danymi faktury.`,
+            questions: "W razie pytań prosimy o kontakt.",
+            closing: "Z poważaniem\nWAW Nutzfahrzeuge",
+        },
+        bg: {
+            subject: `Вашата електронна фактура ${invoiceNumber} от WAW Nutzfahrzeuge`,
+            greeting: `Здравейте ${customerName},`,
+            attachment: `в прикачения файл ще намерите фактура ${invoiceNumber} във формат ZUGFeRD като PDF с вградени структурирани данни за фактурата.`,
+            questions: "Ако имате въпроси, моля свържете се с нас.",
+            closing: "С уважение\nWAW Nutzfahrzeuge",
+        },
+    };
+
+    const fallbackTemplate: TemplateText = {
+        subject: `Ihre E-Rechnung ${invoiceNumber} von WAW Nutzfahrzeuge`,
+        greeting: `Guten Tag ${customerName},`,
+        attachment: `anbei erhalten Sie Ihre Rechnung ${invoiceNumber} im ZUGFeRD-Format als PDF mit eingebetteten strukturierten Rechnungsdaten.`,
+        questions: "Bei Fragen melden Sie sich gerne bei uns.",
+        closing: "Mit freundlichen Grüßen\nWAW Nutzfahrzeuge",
+    };
+    const template = templates[normalizedLanguage] ?? fallbackTemplate;
+    const text = `${template.greeting}\n\n${template.attachment}\n\n${template.questions}\n\n${template.closing}`;
+
+    return {
+        subject: template.subject,
+        text,
+        html: toHtml(text),
+    };
+}

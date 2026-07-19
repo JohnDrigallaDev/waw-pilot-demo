@@ -15,6 +15,7 @@ type CompanyRelation = {
     phone: string | null;
     vat_id: string | null;
     tax_number: string | null;
+    commercial_register_number: string | null;
 };
 
 type CustomerRelation = {
@@ -129,7 +130,8 @@ export async function getInvoicePdfData(
         email,
         phone,
         vat_id,
-        tax_number
+        tax_number,
+        commercial_register_number
       ),
       customers (
         type,
@@ -205,6 +207,7 @@ export async function getInvoicePdfData(
             phone: company.phone,
             vatId: company.vat_id,
             taxNumber: company.tax_number,
+            registrationId: company.commercial_register_number,
         },
         customer: {
             name: getCustomerName(customer),

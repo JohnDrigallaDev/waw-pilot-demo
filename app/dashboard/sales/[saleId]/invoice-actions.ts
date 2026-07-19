@@ -13,6 +13,7 @@ import {
 } from "@/lib/invoices/invoice-numbering";
 import {
     getInvoiceEmailTemplate,
+    getZugferdInvoiceEmailTemplate,
 } from "@/lib/email/templates/invoice-email";
 import { normalizeEmailLanguage } from "@/lib/customers/email-languages";
 import {
@@ -20,8 +21,21 @@ import {
     sendEmailWithResend,
 } from "@/lib/email/resend";
 import { assertCompanySignatureStampConfigured } from "@/lib/pdf/company-signature-assets";
+import { generateInvoicePdf } from "@/lib/pdf/invoice-pdf";
+import { getInvoicePdfData } from "@/lib/pdf/invoice-pdf-data";
 import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+    buildCanonicalInvoiceData,
+    ZugferdDataValidationError,
+    type ZugferdValidationIssue,
+} from "@/lib/zugferd/canonical-invoice";
+import {
+    generateValidatedZugferdPdf,
+    ZugferdServiceConfigurationError,
+    ZugferdServiceValidationError,
+    type ZugferdServiceValidationSummary,
+} from "@/lib/zugferd/zugferd-service-client";
 
 type SaleInvoiceSourceRow = {
     id: string;
@@ -70,6 +84,16 @@ type InvoiceEmailQueryRow = {
         | InvoiceEmailDocumentRelation
         | InvoiceEmailDocumentRelation[]
         | null;
+};
+
+type ZugferdInvoiceEmailQueryRow = {
+    id: string;
+    sale_id: string | null;
+    invoice_number: string;
+    zugferd_file_path: string | null;
+    zugferd_validation_status: string | null;
+    zugferd_email_send_count: number | null;
+    customers: InvoiceEmailCustomerRelation | InvoiceEmailCustomerRelation[] | null;
 };
 
 function getStringValue(formData: FormData, key: string): string | null {
@@ -229,6 +253,91 @@ function getInvoiceEmailSuccessRedirect(
     return `/dashboard/sales/${saleId}?invoiceEmailSent=${encodeURIComponent(
         email,
     )}&highlightInvoiceId=${invoiceId}`;
+}
+
+function getZugferdErrorRedirect(
+    saleId: string,
+    invoiceId: string,
+    errorCode: string,
+    missingFields: string[] = [],
+): string {
+    const params = new URLSearchParams({
+        zugferdError: errorCode,
+        highlightInvoiceId: invoiceId,
+    });
+
+    if (missingFields.length > 0) {
+        params.set("zugferdMissing", missingFields.join("|"));
+    }
+
+    return `/dashboard/sales/${saleId}?${params.toString()}`;
+}
+
+function getZugferdSuccessRedirect(
+    saleId: string,
+    invoiceId: string,
+    successCode: "created" | "sent",
+    email?: string,
+): string {
+    const params = new URLSearchParams({
+        highlightInvoiceId: invoiceId,
+    });
+
+    if (successCode === "created") {
+        params.set("zugferdCreated", "1");
+    } else if (email) {
+        params.set("zugferdEmailSent", email);
+    }
+
+    return `/dashboard/sales/${saleId}?${params.toString()}`;
+}
+
+function getZugferdIssueMessages(issues: ZugferdValidationIssue[]): string[] {
+    const messages = issues
+        .filter((issue) => issue.severity === "error")
+        .filter((issue) => !issue.ruleId?.endsWith("_REPORT"))
+        .map((issue) => issue.message)
+        .filter((message) => message.trim().length > 0);
+
+    return Array.from(new Set(messages));
+}
+
+function getZugferdValidationSummaryForStorage(
+    validation: ZugferdServiceValidationSummary,
+): Record<string, unknown> {
+    return {
+        status: validation.status,
+        mustangVersion: validation.mustangVersion ?? null,
+        veraPdfVersion: validation.veraPdfVersion ?? null,
+        xmlValid: validation.xmlValid,
+        pdfAValid: validation.pdfAValid,
+        consistencyValid: validation.consistencyValid,
+        issues: validation.issues,
+    };
+}
+
+async function markZugferdInvalid(
+    invoiceId: string,
+    companyId: string,
+    issues: ZugferdValidationIssue[],
+) {
+    const supabase = createServerSupabaseClient();
+
+    const { error } = await supabase
+        .from("invoices")
+        .update({
+            zugferd_validation_status: "invalid",
+            zugferd_validation_summary: {
+                status: "invalid",
+                issues,
+            },
+        })
+        .eq("id", invoiceId)
+        .eq("company_id", companyId);
+
+    if (error) {
+        console.error("[zugferd] invalid status update failed", error);
+    }
 }
 
 export async function createSaleInvoiceAction(formData: FormData) {
@@ -792,6 +901,368 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
     revalidatePath("/dashboard/activities");
 
     redirect(getInvoiceEmailSuccessRedirect(saleId, invoiceId, customer.email));
+}
+
+export async function createZugferdInvoiceAction(formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const saleId = getStringValue(formData, "sale_id");
+    const invoiceId = getStringValue(formData, "invoice_id");
+
+    if (!saleId) {
+        throw new Error("Verkauf fehlt.");
+    }
+
+    if (!invoiceId) {
+        throw new Error("Rechnung fehlt.");
+    }
+
+    const { data: invoiceData, error: invoiceError } = await supabase
+        .from("invoices")
+        .select("id, invoice_type, invoice_number, customer_id, vehicle_id")
+        .eq("id", invoiceId)
+        .eq("sale_id", saleId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (invoiceError || !invoiceData) {
+        console.error("[zugferd] invoice lookup failed", invoiceError);
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "createFailed"));
+    }
+
+    const { error: pendingUpdateError } = await supabase
+        .from("invoices")
+        .update({
+            zugferd_validation_status: "pending",
+            zugferd_validation_summary: null,
+        })
+        .eq("id", invoiceId)
+        .eq("company_id", companyId);
+
+    if (pendingUpdateError) {
+        console.error("[zugferd] pending status update failed", pendingUpdateError);
+    }
+
+    let storedZugferd: {
+        fileName: string;
+        filePath: string;
+        fileSize: number;
+        generatedAt: string;
+        profile: "EN16931";
+        standardVersion: string;
+        validation: ZugferdServiceValidationSummary;
+        sha256: string;
+    } | null = null;
+
+    try {
+        const pdfData = await getInvoicePdfData(invoiceId);
+        const canonicalInvoice = buildCanonicalInvoiceData(pdfData);
+        const visiblePdfBytes = await generateInvoicePdf(pdfData);
+        const serviceResult = await generateValidatedZugferdPdf({
+            invoice: canonicalInvoice,
+            visiblePdfBase64: Buffer.from(visiblePdfBytes).toString("base64"),
+        });
+        const pdfBytes = Buffer.from(serviceResult.pdfBase64, "base64");
+        const fileName =
+            serviceResult.fileName ?? `rechnung-${pdfData.invoiceNumber}-zugferd.pdf`;
+        const filePath = `invoices/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from("documents")
+            .upload(filePath, pdfBytes, {
+                contentType: "application/pdf",
+                upsert: true,
+            });
+
+        if (uploadError) {
+            throw new Error(
+                `ZUGFeRD-Rechnung konnte nicht gespeichert werden: ${uploadError.message}`,
+            );
+        }
+
+        storedZugferd = {
+            fileName,
+            filePath,
+            fileSize: pdfBytes.byteLength,
+            generatedAt: new Date().toISOString(),
+            profile: serviceResult.profile,
+            standardVersion: serviceResult.standardVersion,
+            validation: serviceResult.validation,
+            sha256: serviceResult.sha256,
+        };
+    } catch (error) {
+        if (error instanceof ZugferdDataValidationError) {
+            await markZugferdInvalid(invoiceId, companyId, error.issues);
+            redirect(
+                getZugferdErrorRedirect(
+                    saleId,
+                    invoiceId,
+                    "missingData",
+                    error.missingFields,
+                ),
+            );
+        }
+
+        if (error instanceof ZugferdServiceConfigurationError) {
+            await markZugferdInvalid(invoiceId, companyId, [
+                { severity: "error", message: error.message },
+            ]);
+            redirect(
+                getZugferdErrorRedirect(
+                    saleId,
+                    invoiceId,
+                    "serviceNotConfigured",
+                ),
+            );
+        }
+
+        if (error instanceof ZugferdServiceValidationError) {
+            await markZugferdInvalid(invoiceId, companyId, error.issues);
+            redirect(
+                getZugferdErrorRedirect(
+                    saleId,
+                    invoiceId,
+                    "validationFailed",
+                    getZugferdIssueMessages(error.issues),
+                ),
+            );
+        }
+
+        await markZugferdInvalid(invoiceId, companyId, [
+            {
+                severity: "error",
+                message: "ZUGFeRD-Rechnung konnte nicht erstellt werden.",
+            },
+        ]);
+        console.error("[zugferd] generation failed", error);
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "createFailed"));
+    }
+
+    if (!storedZugferd) {
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "createFailed"));
+    }
+
+    const { error: invoiceUpdateError } = await supabase
+        .from("invoices")
+        .update({
+            zugferd_file_path: storedZugferd.filePath,
+            zugferd_generated_at: storedZugferd.generatedAt,
+            zugferd_profile: storedZugferd.profile,
+            zugferd_standard_version: storedZugferd.standardVersion,
+            zugferd_validation_status: "valid",
+            zugferd_validated_at: storedZugferd.generatedAt,
+            zugferd_validation_summary: getZugferdValidationSummaryForStorage(
+                storedZugferd.validation,
+            ),
+            zugferd_sha256: storedZugferd.sha256,
+        })
+        .eq("id", invoiceId)
+        .eq("company_id", companyId);
+
+    if (invoiceUpdateError) {
+        console.error("[zugferd] invoice update failed", invoiceUpdateError);
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "createFailed"));
+    }
+
+    const { data: existingDocument, error: existingDocumentError } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("invoice_id", invoiceId)
+        .eq("document_type", "zugferd_invoice")
+        .maybeSingle();
+
+    if (existingDocumentError) {
+        console.error("[zugferd] document lookup failed", existingDocumentError);
+    }
+
+    if (existingDocument?.id) {
+        const { error: documentUpdateError } = await supabase
+            .from("documents")
+            .update({
+                source: "generated",
+                status: "available",
+                file_name: storedZugferd.fileName,
+                file_path: storedZugferd.filePath,
+                mime_type: "application/pdf",
+                file_size: storedZugferd.fileSize,
+                generated_by_system: true,
+            })
+            .eq("id", existingDocument.id)
+            .eq("company_id", companyId);
+
+        if (documentUpdateError) {
+            console.error("[zugferd] document update failed", documentUpdateError);
+        }
+    } else {
+        const { error: documentInsertError } = await supabase
+            .from("documents")
+            .insert({
+                company_id: companyId,
+                document_type: "zugferd_invoice",
+                source: "generated",
+                status: "available",
+                file_name: storedZugferd.fileName,
+                file_path: storedZugferd.filePath,
+                mime_type: "application/pdf",
+                file_size: storedZugferd.fileSize,
+                customer_id: invoiceData.customer_id,
+                vehicle_id: invoiceData.vehicle_id,
+                sale_id: saleId,
+                invoice_id: invoiceId,
+                generated_by_system: true,
+            });
+
+        if (documentInsertError) {
+            console.error("[zugferd] document insert failed", documentInsertError);
+        }
+    }
+
+    await logActivity({
+        action: `ZUGFeRD-Rechnung ${invoiceData.invoice_number} erstellt und validiert`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
+
+    revalidatePath(`/dashboard/sales/${saleId}`);
+    revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/activities");
+
+    redirect(getZugferdSuccessRedirect(saleId, invoiceId, "created"));
+}
+
+export async function sendZugferdInvoiceEmailAction(formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const saleId = getStringValue(formData, "sale_id");
+    const invoiceId = getStringValue(formData, "invoice_id");
+
+    if (!saleId) {
+        throw new Error("Verkauf fehlt.");
+    }
+
+    if (!invoiceId) {
+        throw new Error("Rechnung fehlt.");
+    }
+
+    const { data, error } = await supabase
+        .from("invoices")
+        .select(
+            `
+      id,
+      sale_id,
+      invoice_number,
+      zugferd_file_path,
+      zugferd_validation_status,
+      zugferd_email_send_count,
+      customers:customer_id (
+        type,
+        company_name,
+        first_name,
+        last_name,
+        email,
+        preferred_language
+      )
+    `,
+        )
+        .eq("id", invoiceId)
+        .eq("sale_id", saleId)
+        .eq("company_id", companyId)
+        .single();
+
+    if (error || !data) {
+        console.error("[zugferd-email] invoice lookup failed", error);
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "sendFailed"));
+    }
+
+    const invoice = data as unknown as ZugferdInvoiceEmailQueryRow;
+    const customer = getSingleRelation(invoice.customers);
+
+    if (!customer?.email) {
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "missingEmail"));
+    }
+
+    if (!invoice.zugferd_file_path) {
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "missingZugferd"));
+    }
+
+    if (invoice.zugferd_validation_status !== "valid") {
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "notValidated"));
+    }
+
+    const { data: fileData, error: downloadError } = await supabase.storage
+        .from("documents")
+        .download(invoice.zugferd_file_path);
+
+    if (downloadError || !fileData) {
+        console.error("[zugferd-email] download failed", downloadError);
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "missingZugferd"));
+    }
+
+    const language = normalizeEmailLanguage(customer.preferred_language, "de");
+    const template = getZugferdInvoiceEmailTemplate(language, {
+        invoiceNumber: invoice.invoice_number,
+        customerName: getCustomerNameForEmail(customer),
+    });
+    let deliveryErrorCode: string | null = null;
+
+    try {
+        await sendEmailWithResend({
+            to: customer.email,
+            subject: template.subject,
+            text: template.text,
+            html: template.html,
+            attachments: [
+                {
+                    filename: `rechnung-${invoice.invoice_number}-zugferd.pdf`,
+                    content: Buffer.from(await fileData.arrayBuffer()),
+                    contentType: "application/pdf",
+                },
+            ],
+        });
+    } catch (sendError) {
+        deliveryErrorCode =
+            sendError instanceof EmailConfigurationError
+                ? "mailNotConfigured"
+                : "zugferdSendFailed";
+
+        if (!(sendError instanceof EmailConfigurationError)) {
+            console.error("[zugferd-email] delivery failed", sendError);
+        }
+    }
+
+    if (deliveryErrorCode) {
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, deliveryErrorCode));
+    }
+
+    const { error: updateError } = await supabase
+        .from("invoices")
+        .update({
+            zugferd_email_sent_at: new Date().toISOString(),
+            zugferd_email_sent_to: customer.email,
+            zugferd_email_sent_language: language,
+            zugferd_email_send_count: (invoice.zugferd_email_send_count ?? 0) + 1,
+        })
+        .eq("id", invoiceId)
+        .eq("company_id", companyId);
+
+    if (updateError) {
+        console.error("[zugferd-email] status update failed", updateError);
+        redirect(getZugferdErrorRedirect(saleId, invoiceId, "zugferdSendFailed"));
+    }
+
+    await logActivity({
+        action: `ZUGFeRD-Rechnung ${invoice.invoice_number} per E-Mail an ${customer.email} gesendet`,
+        entityType: "invoice",
+        entityId: invoiceId,
+    });
+
+    revalidatePath(`/dashboard/sales/${saleId}`);
+    revalidatePath("/dashboard/activities");
+
+    redirect(getZugferdSuccessRedirect(saleId, invoiceId, "sent", customer.email));
 }
 
 export async function markInvoicePaidAction(formData: FormData) {

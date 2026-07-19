@@ -26,6 +26,7 @@ export type UpdateCompanySettingsState = {
         phone: string;
         vat_id: string;
         tax_number: string;
+        commercial_register_number: string;
     };
 };
 
@@ -53,6 +54,10 @@ function getFormValues(formData: FormData): UpdateCompanySettingsState["values"]
         phone: getStringValue(formData, "phone"),
         vat_id: getStringValue(formData, "vat_id"),
         tax_number: getStringValue(formData, "tax_number"),
+        commercial_register_number: getStringValue(
+            formData,
+            "commercial_register_number",
+        ),
     };
 }
 
@@ -152,6 +157,7 @@ export async function updateCompanySettingsAction(
             phone: values.phone || null,
             vat_id: values.vat_id || null,
             tax_number: values.tax_number || null,
+            commercial_register_number: values.commercial_register_number || null,
             updated_at: new Date().toISOString(),
         })
         .eq("id", companyId)

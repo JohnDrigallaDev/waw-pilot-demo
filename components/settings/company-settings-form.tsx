@@ -57,6 +57,7 @@ function createInitialState(company: CompanySettings): UpdateCompanySettingsStat
             phone: company.phone ?? "",
             vat_id: company.vat_id ?? "",
             tax_number: company.tax_number ?? "",
+            commercial_register_number: company.commercial_register_number ?? "",
         },
     };
 }
@@ -200,7 +201,7 @@ export function CompanySettingsForm({
                         <SectionTitle
                             icon={ShieldCheck}
                             title="Steuerdaten"
-                            description="USt-ID und Steuernummer für Rechnungen."
+                            description="USt-ID, Steuernummer und Handelsregisterkennung für Rechnungen."
                         />
 
                         <div className="grid gap-4 md:grid-cols-2">
@@ -214,6 +215,12 @@ export function CompanySettingsForm({
                                 label="Steuernummer"
                                 name="tax_number"
                                 defaultValue={values.tax_number}
+                            />
+
+                            <FormField
+                                label="Handelsregisternummer"
+                                name="commercial_register_number"
+                                defaultValue={values.commercial_register_number}
                             />
                         </div>
                     </CardContent>

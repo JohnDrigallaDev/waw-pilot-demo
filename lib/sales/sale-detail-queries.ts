@@ -31,6 +31,18 @@ type InvoiceRelation = {
     email_sent_to: string | null;
     email_sent_language: string | null;
     email_send_count: number | null;
+    zugferd_file_path: string | null;
+    zugferd_generated_at: string | null;
+    zugferd_profile: string | null;
+    zugferd_standard_version: string | null;
+    zugferd_validation_status: "valid" | "invalid" | "pending" | null;
+    zugferd_validated_at: string | null;
+    zugferd_validation_summary: Record<string, unknown> | null;
+    zugferd_sha256: string | null;
+    zugferd_email_sent_at: string | null;
+    zugferd_email_sent_to: string | null;
+    zugferd_email_sent_language: string | null;
+    zugferd_email_send_count: number | null;
     created_at: string;
 };
 
@@ -131,6 +143,18 @@ export type SaleDetailInvoice = {
     email_sent_to: string | null;
     email_sent_language: string | null;
     email_send_count: number;
+    zugferd_file_path: string | null;
+    zugferd_generated_at: string | null;
+    zugferd_profile: string | null;
+    zugferd_standard_version: string | null;
+    zugferd_validation_status: "valid" | "invalid" | "pending" | null;
+    zugferd_validated_at: string | null;
+    zugferd_validation_summary: Record<string, unknown> | null;
+    zugferd_sha256: string | null;
+    zugferd_email_sent_at: string | null;
+    zugferd_email_sent_to: string | null;
+    zugferd_email_sent_language: string | null;
+    zugferd_email_send_count: number;
     created_at: string;
 };
 
@@ -306,6 +330,18 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         email_sent_to,
         email_sent_language,
         email_send_count,
+        zugferd_file_path,
+        zugferd_generated_at,
+        zugferd_profile,
+        zugferd_standard_version,
+        zugferd_validation_status,
+        zugferd_validated_at,
+        zugferd_validation_summary,
+        zugferd_sha256,
+        zugferd_email_sent_at,
+        zugferd_email_sent_to,
+        zugferd_email_sent_language,
+        zugferd_email_send_count,
         created_at
       ),
       documents (
@@ -351,6 +387,18 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             email_sent_to: invoice.email_sent_to,
             email_sent_language: invoice.email_sent_language,
             email_send_count: invoice.email_send_count ?? 0,
+            zugferd_file_path: invoice.zugferd_file_path,
+            zugferd_generated_at: invoice.zugferd_generated_at,
+            zugferd_profile: invoice.zugferd_profile,
+            zugferd_standard_version: invoice.zugferd_standard_version,
+            zugferd_validation_status: invoice.zugferd_validation_status,
+            zugferd_validated_at: invoice.zugferd_validated_at,
+            zugferd_validation_summary: invoice.zugferd_validation_summary,
+            zugferd_sha256: invoice.zugferd_sha256,
+            zugferd_email_sent_at: invoice.zugferd_email_sent_at,
+            zugferd_email_sent_to: invoice.zugferd_email_sent_to,
+            zugferd_email_sent_language: invoice.zugferd_email_sent_language,
+            zugferd_email_send_count: invoice.zugferd_email_send_count ?? 0,
             created_at: invoice.created_at,
         }))
         .sort((a, b) => {

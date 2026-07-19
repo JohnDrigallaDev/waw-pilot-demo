@@ -33,6 +33,7 @@ export type InvoicePdfData = {
         phone: string | null;
         vatId: string | null;
         taxNumber: string | null;
+        registrationId: string | null;
     };
 
     customer: {

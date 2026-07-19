@@ -7,6 +7,7 @@ export function getDocumentTypeLabel(type: string): string {
     const labels: Record<string, string> = {
         invoice: "Rechnung",
         invoice_pdf: "Rechnungs-PDF",
+        zugferd_invoice: "E-Rechnung (ZUGFeRD)",
         purchase_invoice: "Einkaufsrechnung",
 
         purchase_contract: "Ankaufsvertrag",

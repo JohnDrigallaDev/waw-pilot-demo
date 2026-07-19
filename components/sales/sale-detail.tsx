@@ -5,6 +5,7 @@ import {
     Download,
     ExternalLink,
     FileText,
+    FileCheck2,
     FileWarning,
     Receipt,
     Route,
@@ -49,16 +50,22 @@ import { DeleteSaleDocumentForm } from "@/components/sales/delete-sale-document-
 import { TemporaryHighlight } from "@/components/shared/temporary-highlight";
 import { RegenerateInvoicePdfForm } from "@/components/sales/regenerate-invoice-pdf-form";
 import { SendInvoiceEmailForm } from "@/components/sales/send-invoice-email-form";
+import { ZugferdInvoiceActions } from "@/components/sales/zugferd-invoice-actions";
 
 type SaleDetailProps = {
     sale: SaleDetailType;
     generatedDocuments: SaleGeneratedDocumentCheck[];
     exportDetails: SaleExportDetails;
+    isZugferdServiceConfigured: boolean;
     generatedDocumentType?: string | null;
     invoiceCreatedNumber?: string | null;
     invoiceRegeneratedNumber?: string | null;
     invoiceEmailSent?: string | null;
     invoiceEmailError?: string | null;
+    zugferdCreated?: boolean;
+    zugferdEmailSent?: string | null;
+    zugferdError?: string | null;
+    zugferdMissingFields?: string[];
     highlightInvoiceId?: string | null;
     documentUploaded?: boolean;
     documentDeleted?: boolean;
@@ -71,11 +78,16 @@ export function SaleDetail({
                                sale,
                                generatedDocuments,
                                exportDetails,
+                               isZugferdServiceConfigured,
                                generatedDocumentType = null,
                                invoiceCreatedNumber = null,
                                invoiceRegeneratedNumber = null,
                                invoiceEmailSent = null,
                                invoiceEmailError = null,
+                               zugferdCreated = false,
+                               zugferdEmailSent = null,
+                               zugferdError = null,
+                               zugferdMissingFields = [],
                                highlightInvoiceId = null,
                                documentUploaded = false,
                                documentDeleted = false,
@@ -156,6 +168,42 @@ export function SaleDetail({
                             <p className="mt-1 text-sm font-semibold text-red-800">
                                 {getInvoiceEmailErrorMessage(invoiceEmailError)}
                             </p>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {zugferdCreated ? (
+                <FlashMessage message="ZUGFeRD-Rechnung wurde erstellt und geprüft." />
+            ) : null}
+
+            {zugferdEmailSent ? (
+                <FlashMessage
+                    message="ZUGFeRD-Rechnung wurde per E-Mail gesendet."
+                    description={`ZUGFeRD-Rechnung wurde per E-Mail an ${zugferdEmailSent} gesendet.`}
+                />
+            ) : null}
+
+            {zugferdError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
+                            <FileWarning className="size-5" />
+                        </div>
+                        <div>
+                            <p className="font-extrabold text-red-950">
+                                {getZugferdErrorTitle(zugferdError)}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-red-800">
+                                {getZugferdErrorMessage(zugferdError)}
+                            </p>
+                            {zugferdMissingFields.length > 0 ? (
+                                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm font-semibold text-red-800">
+                                    {zugferdMissingFields.map((field) => (
+                                        <li key={field}>{field}</li>
+                                    ))}
+                                </ul>
+                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -398,6 +446,9 @@ export function SaleDetail({
                                             invoice={invoice}
                                             datevStatus={sale.datev_status}
                                             highlighted={highlightInvoiceId === invoice.id}
+                                            isZugferdServiceConfigured={
+                                                isZugferdServiceConfigured
+                                            }
                                         />
                                     ))}
                                 </div>
@@ -674,12 +725,20 @@ function InvoiceCard({
                          invoice,
                          datevStatus,
                          highlighted,
+                         isZugferdServiceConfigured,
                      }: {
     saleId: string;
     invoice: SaleDetailInvoice;
     datevStatus: SaleDetailType["datev_status"];
     highlighted?: boolean;
+    isZugferdServiceConfigured: boolean;
 }) {
+    const hasValidatedZugferd =
+        invoice.zugferd_validation_status === "valid" &&
+        Boolean(invoice.zugferd_file_path);
+    const hasUnvalidatedZugferd =
+        Boolean(invoice.zugferd_file_path) && !hasValidatedZugferd;
+
     return (
         <TemporaryHighlight active={highlighted}>
         <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
@@ -751,6 +810,79 @@ function InvoiceCard({
                     {invoice.email_sent_to}
                 </p>
             ) : null}
+
+            {invoice.invoice_type === "standard" ? (
+                <div className="mt-5 rounded-3xl border border-cyan-100 bg-white p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <FileCheck2 className="size-4 text-cyan-700" />
+                                <p className="font-extrabold text-slate-950">
+                                    E-Rechnung (ZUGFeRD)
+                                </p>
+                            </div>
+                            <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
+                                Erstellt eine standardkonforme PDF/A-3-Rechnung mit eingebetteten XML-Rechnungsdaten.
+                            </p>
+                        </div>
+                        {hasValidatedZugferd ? (
+                            <StatusBadge tone="success">ZUGFeRD geprüft</StatusBadge>
+                        ) : null}
+                    </div>
+
+                    {hasValidatedZugferd && invoice.zugferd_generated_at ? (
+                        <p className="mt-3 text-xs font-bold text-slate-500">
+                            Erstellt am {formatDate(invoice.zugferd_generated_at)}
+                            {" · ZUGFeRD 2.5 · EN 16931 · PDF/A-3b"}
+                        </p>
+                    ) : null}
+
+                    {hasUnvalidatedZugferd ? (
+                        <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                            Vorhandene ZUGFeRD-Datei ist nicht geprüft oder nicht
+                            standardkonform. Bitte neu erstellen und prüfen.
+                        </p>
+                    ) : null}
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        <ZugferdInvoiceActions
+                            saleId={saleId}
+                            invoiceId={invoice.id}
+                            isValidated={hasValidatedZugferd}
+                            isServiceConfigured={isZugferdServiceConfigured}
+                        />
+
+                        {hasValidatedZugferd ? (
+                            <Button
+                                asChild
+                                variant="outline"
+                                className="rounded-2xl bg-white font-bold"
+                            >
+                                <Link href={`/api/invoices/${invoice.id}/zugferd`}>
+                                    <Download className="mr-2 size-4" />
+                                    ZUGFeRD herunterladen
+                                </Link>
+                            </Button>
+                        ) : null}
+                    </div>
+
+                    {invoice.zugferd_email_sent_at &&
+                    invoice.zugferd_email_sent_to ? (
+                        <p className="mt-3 text-xs font-bold text-slate-500">
+                            Zuletzt als ZUGFeRD gesendet am{" "}
+                            {formatDate(invoice.zugferd_email_sent_at)} an{" "}
+                            {invoice.zugferd_email_sent_to}
+                        </p>
+                    ) : null}
+
+                    {!isZugferdServiceConfigured ? (
+                        <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                            ZUGFeRD-Erstellung ist noch nicht eingerichtet. Bitte
+                            zuerst den validierenden ZUGFeRD-Service konfigurieren.
+                        </p>
+                    ) : null}
+                </div>
+            ) : null}
         </div>
         </TemporaryHighlight>
     );
@@ -769,6 +901,46 @@ function getInvoiceEmailErrorMessage(errorCode: string): string {
     };
 
     return messages[errorCode] ?? messages.sendFailed;
+}
+
+function getZugferdErrorTitle(errorCode: string): string {
+    if (errorCode === "missingData") {
+        return "ZUGFeRD konnte nicht erstellt werden.";
+    }
+
+    if (errorCode === "validationFailed") {
+        return "ZUGFeRD konnte nicht validiert werden.";
+    }
+
+    if (errorCode === "zugferdSendFailed" || errorCode === "sendFailed") {
+        return "ZUGFeRD-Rechnung konnte nicht per E-Mail gesendet werden.";
+    }
+
+    return "ZUGFeRD-Rechnung konnte nicht erstellt werden.";
+}
+
+function getZugferdErrorMessage(errorCode: string): string {
+    const messages: Record<string, string> = {
+        missingData: "Bitte ergänze folgende Pflichtdaten:",
+        missingEmail:
+            "Beim Kunden ist keine E-Mail-Adresse hinterlegt. Bitte ergänze zuerst die E-Mail-Adresse in den Kundendaten.",
+        missingZugferd: "Bitte erstelle zuerst die ZUGFeRD-Rechnung.",
+        notValidated:
+            "Die ZUGFeRD-Rechnung wurde noch nicht erfolgreich validiert. Bitte erstelle und prüfe sie zuerst.",
+        serviceNotConfigured:
+            "ZUGFeRD-Service ist noch nicht eingerichtet. Bitte ZUGFERD_SERVICE_URL und ZUGFERD_SERVICE_API_KEY konfigurieren.",
+        validationFailed: "ZUGFeRD konnte nicht validiert werden.",
+        mailNotConfigured:
+            "E-Mail-Versand ist noch nicht eingerichtet. Bitte RESEND_API_KEY und MAIL_FROM konfigurieren.",
+        createFailed:
+            "ZUGFeRD-Rechnung konnte nicht erstellt werden. Bitte prüfe die Daten und versuche es erneut.",
+        zugferdSendFailed:
+            "ZUGFeRD-Rechnung konnte nicht per E-Mail gesendet werden. Bitte versuche es erneut.",
+        sendFailed:
+            "ZUGFeRD-Rechnung konnte nicht per E-Mail gesendet werden. Bitte versuche es erneut.",
+    };
+
+    return messages[errorCode] ?? messages.createFailed;
 }
 
 function MarkSaleInvoicePaidButton({
