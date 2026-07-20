@@ -2,6 +2,10 @@ import type {
     DocumentSource,
     DocumentStatus,
 } from "@/lib/documents/document-queries";
+import {
+    getDocumentStatusLabel as getCentralDocumentStatusLabel,
+    getDocumentStatusTone as getCentralDocumentStatusTone,
+} from "@/utils/document-status";
 
 export function getDocumentTypeLabel(type: string): string {
     const labels: Record<string, string> = {
@@ -65,22 +69,13 @@ export function getDocumentSourceLabel(source: DocumentSource): string {
 }
 
 export function getDocumentStatusLabel(status: DocumentStatus): string {
-    const labels: Record<DocumentStatus, string> = {
-        available: "Verfügbar",
-        missing: "Fehlt",
-        needs_review: "Prüfen",
-    };
-
-    return labels[status];
+    return getCentralDocumentStatusLabel(status);
 }
 
 export function getDocumentStatusTone(
     status: DocumentStatus,
 ): "success" | "warning" | "danger" {
-    if (status === "available") return "success";
-    if (status === "needs_review") return "warning";
-
-    return "danger";
+    return getCentralDocumentStatusTone(status);
 }
 
 export function getDocumentSourceTone(
