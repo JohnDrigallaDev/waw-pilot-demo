@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Fragment, type ReactNode, useMemo, useState } from "react";
 import {
     Archive,
     Download,
@@ -9,7 +10,6 @@ import {
     FileArchive,
     FileText,
     FileWarning,
-    Receipt,
     Search,
     Upload,
 } from "lucide-react";
@@ -29,6 +29,7 @@ import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { StatusFilter } from "@/components/filters/status-filter";
 
 type DocumentsOverviewProps = {
     documents: DocumentRow[];
@@ -258,6 +259,8 @@ export function DocumentsOverview({
                                       initialFilter = null,
                                       initialVehicleId = null,
                                   }: DocumentsOverviewProps) {
+    const router = useRouter();
+    const searchParams = useSearchParams();
     const [query, setQuery] = useState("");
     const [documentFilter, setDocumentFilter] =
         useState<DocumentFilter>(() => getInitialDocumentFilter(initialFilter));
@@ -369,6 +372,22 @@ export function DocumentsOverview({
             .filter((group) => group.documents.length > 0);
     }, [filteredDocuments]);
 
+    function updateDocumentFilter(nextFilter: DocumentFilter) {
+        setDocumentFilter(nextFilter);
+
+        const params = new URLSearchParams(searchParams.toString());
+        if (nextFilter === "all") {
+            params.delete("filter");
+            params.delete("status");
+        } else {
+            params.set("filter", nextFilter);
+            params.delete("status");
+        }
+
+        const nextQuery = params.toString();
+        router.push(nextQuery ? `/dashboard/documents?${nextQuery}` : "/dashboard/documents");
+    }
+
     return (
         <div className="space-y-6">
             <PageHeader
@@ -441,50 +460,19 @@ export function DocumentsOverview({
                         </div>
 
                         <div className="mt-5 overflow-x-auto">
-                            <div className="inline-grid min-w-max grid-cols-7 gap-1 rounded-2xl bg-slate-100 p-1">
-                                <DocumentFilterButton
-                                    active={documentFilter === "all"}
-                                    onClick={() => setDocumentFilter("all")}
-                                    label="Alle"
-                                    count={documents.length}
-                                />
-                                <DocumentFilterButton
-                                    active={documentFilter === "invoices"}
-                                    onClick={() => setDocumentFilter("invoices")}
-                                    label="Rechnungen"
-                                    count={invoiceDocuments}
-                                />
-                                <DocumentFilterButton
-                                    active={documentFilter === "vehicle_documents"}
-                                    onClick={() => setDocumentFilter("vehicle_documents")}
-                                    label="Fahrzeuge"
-                                    count={vehicleDocuments}
-                                />
-                                <DocumentFilterButton
-                                    active={documentFilter === "purchase_documents"}
-                                    onClick={() => setDocumentFilter("purchase_documents")}
-                                    label="Ankauf"
-                                    count={purchaseDocuments}
-                                />
-                                <DocumentFilterButton
-                                    active={documentFilter === "license_plates"}
-                                    onClick={() => setDocumentFilter("license_plates")}
-                                    label="Kennzeichen"
-                                    count={licensePlateDocuments}
-                                />
-                                <DocumentFilterButton
-                                    active={documentFilter === "cashbook"}
-                                    onClick={() => setDocumentFilter("cashbook")}
-                                    label="Kassenbuch"
-                                    count={cashbookDocuments}
-                                />
-                                <DocumentFilterButton
-                                    active={documentFilter === "needs_review"}
-                                    onClick={() => setDocumentFilter("needs_review")}
-                                    label="Prüfen"
-                                    count={needsReviewDocuments}
-                                />
-                            </div>
+                            <StatusFilter
+                                activeValue={documentFilter}
+                                onChange={(value) => updateDocumentFilter(value as DocumentFilter)}
+                                options={[
+                                    { value: "all", label: `Alle ${documents.length}` },
+                                    { value: "invoices", label: `Rechnungen ${invoiceDocuments}` },
+                                    { value: "vehicle_documents", label: `Fahrzeuge ${vehicleDocuments}` },
+                                    { value: "purchase_documents", label: `Ankauf ${purchaseDocuments}` },
+                                    { value: "license_plates", label: `Kennzeichen ${licensePlateDocuments}` },
+                                    { value: "cashbook", label: `Kassenbuch ${cashbookDocuments}` },
+                                    { value: "needs_review", label: `Prüfen ${needsReviewDocuments}` },
+                                ]}
+                            />
                         </div>
 
                     </div>
@@ -498,43 +486,11 @@ export function DocumentsOverview({
                                     </p>
 
                                     {group.documents.map((document) => (
-                                        <div
+                                        <DocumentMobileCard
                                             key={document.id}
-                                            className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99]"
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <DocumentTypePill document={document} />
-
-                                                    <p className="mt-2 line-clamp-2 text-base font-extrabold leading-6 text-slate-950">
-                                                        {getDocumentDisplayName(document)}
-                                                    </p>
-                                                    <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
-                                                        {getDocumentMetaText(document)}
-                                                    </p>
-                                                </div>
-
-                                                <StatusBadge tone={getDocumentStatusTone(document.status)}>
-                                                    {getDocumentStatusLabel(document.status)}
-                                                </StatusBadge>
-                                            </div>
-
-                                            {getDocumentReferenceLabel(document) ? (
-                                                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                                                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                                                        Bezug
-                                                    </p>
-                                                    <p className="mt-1 text-sm font-extrabold text-cyan-700">
-                                                        {getDocumentReferenceLabel(document)}
-                                                    </p>
-                                                </div>
-                                            ) : null}
-
-                                            <div className="mt-4 grid grid-cols-2 gap-2">
-                                                <DocumentOpenButton document={document} fullWidth />
-                                                <DocumentDownloadButton document={document} fullWidth />
-                                            </div>
-                                        </div>
+                                            document={document}
+                                            reviewMode={documentFilter === "needs_review"}
+                                        />
                                     ))}
                                 </div>
                             ))}
@@ -580,9 +536,13 @@ export function DocumentsOverview({
                                                         </div>
 
                                                         <div className="min-w-0">
-                                                            <p className="max-w-sm font-extrabold leading-6 text-slate-950">
+                                                            <DocumentPrimaryLink
+                                                                document={document}
+                                                                reviewMode={documentFilter === "needs_review"}
+                                                                className="block max-w-sm font-extrabold leading-6 text-slate-950 hover:text-cyan-700 hover:underline"
+                                                            >
                                                                 {getDocumentDisplayName(document)}
-                                                            </p>
+                                                            </DocumentPrimaryLink>
                                                             <p className="mt-1 max-w-md text-xs font-semibold leading-5 text-slate-500">
                                                                 {getDocumentMetaText(document)}
                                                             </p>
@@ -657,41 +617,6 @@ export function DocumentsOverview({
     );
 }
 
-function DocumentFilterButton({
-                                  active,
-                                  onClick,
-                                  label,
-                                  count,
-                              }: {
-    active: boolean;
-    onClick: () => void;
-    label: string;
-    count: number;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={
-                active
-                    ? "flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-extrabold text-slate-950 shadow-sm"
-                    : "flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold text-slate-500 transition hover:text-slate-950"
-            }
-        >
-            <span>{label}</span>
-            <span
-                className={
-                    active
-                        ? "rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-extrabold text-cyan-700"
-                        : "rounded-full bg-white/70 px-2 py-0.5 text-xs font-extrabold text-slate-400"
-                }
-            >
-                {count}
-            </span>
-        </button>
-    );
-}
-
 function DocumentTypePill({ document }: { document: DocumentRow }) {
     const group = getDocumentGroup(document.document_type);
 
@@ -724,6 +649,96 @@ function getDocumentGroup(
     if (documentType === "cashbook_receipt") return "cashbook";
 
     return "other";
+}
+
+function getReviewDocumentHref(document: DocumentRow): string | null {
+    if (!document.sale_id) return null;
+
+    return `/dashboard/sales/${document.sale_id}#document-${document.document_type}`;
+}
+
+function DocumentPrimaryLink({
+    document,
+    reviewMode,
+    className,
+    children,
+}: {
+    document: DocumentRow;
+    reviewMode: boolean;
+    className?: string;
+    children: ReactNode;
+}) {
+    const reviewHref = reviewMode ? getReviewDocumentHref(document) : null;
+    const fileHref = document.file_path ? `/api/documents/${document.id}/file` : null;
+    const href = reviewHref ?? fileHref;
+
+    if (!href) return <span className={className}>{children}</span>;
+
+    return (
+        <Link href={href} target={reviewHref ? undefined : "_blank"} className={className}>
+            {children}
+        </Link>
+    );
+}
+
+function DocumentMobileCard({
+    document,
+    reviewMode,
+}: {
+    document: DocumentRow;
+    reviewMode: boolean;
+}) {
+    const reviewHref = reviewMode ? getReviewDocumentHref(document) : null;
+    const content = (
+        <>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <DocumentTypePill document={document} />
+
+                    <p className="mt-2 line-clamp-2 text-base font-extrabold leading-6 text-slate-950">
+                        {getDocumentDisplayName(document)}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
+                        {getDocumentMetaText(document)}
+                    </p>
+                </div>
+
+                <StatusBadge tone={getDocumentStatusTone(document.status)}>
+                    {getDocumentStatusLabel(document.status)}
+                </StatusBadge>
+            </div>
+
+            {getDocumentReferenceLabel(document) ? (
+                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                        Bezug
+                    </p>
+                    <p className="mt-1 text-sm font-extrabold text-cyan-700">
+                        {getDocumentReferenceLabel(document)}
+                    </p>
+                </div>
+            ) : null}
+
+            {reviewHref ? null : (
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                    <DocumentOpenButton document={document} fullWidth />
+                    <DocumentDownloadButton document={document} fullWidth />
+                </div>
+            )}
+        </>
+    );
+
+    const className = "rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 active:scale-[0.99]";
+
+    if (reviewHref) {
+        return (
+            <Link href={reviewHref} className={`${className} block hover:border-cyan-200 hover:bg-cyan-50/40 hover:shadow-md`}>
+                {content}
+            </Link>
+        );
+    }
+
+    return <div className={className}>{content}</div>;
 }
 
 type DocumentActionProps = {
@@ -834,25 +849,6 @@ function DocumentStatCard({
         >
             {card}
         </Link>
-    );
-}
-
-function DocumentMobileInfoBox({
-                                   label,
-                                   value,
-                               }: {
-    label: string;
-    value: string;
-}) {
-    return (
-        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                {label}
-            </p>
-            <p className="mt-1 line-clamp-2 text-sm font-extrabold text-slate-950">
-                {value}
-            </p>
-        </div>
     );
 }
 

@@ -8,7 +8,6 @@ import { getCurrentCompanyId } from "@/lib/company";
 import {
     getDocumentUploadFailedMessage,
     getImageAssetTooLargeMessage,
-    getInvalidTermsPdfMessage,
     getUnsupportedImageAssetTypeMessage,
     isAllowedTermsPdfFile,
     isAllowedImageAssetFile,
@@ -433,6 +432,8 @@ export async function uploadCompanyTermsPdfAction(formData: FormData) {
 }
 
 export async function removeCompanyTermsPdfAction(_formData: FormData) {
+    void _formData;
+
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
 

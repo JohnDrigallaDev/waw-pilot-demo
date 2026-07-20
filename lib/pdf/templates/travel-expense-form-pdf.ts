@@ -476,7 +476,7 @@ export async function generateTravelExpenseFormPdf(
         lineEndX: leftLineEndX,
     });
 
-    leftY = drawFieldLine(page, {
+    drawFieldLine(page, {
         label: "Fahrzeug / Kennzeichen",
         value: requireValue(data.vehicleOrPlate),
         x: leftX,
@@ -573,7 +573,7 @@ export async function generateTravelExpenseFormPdf(
         boxWidth: 128,
     });
 
-    mileageY = drawMileageInput(page, {
+    drawMileageInput(page, {
         label: "Gefahrene Kilometer",
         value: getMileageDistance(data),
         x: leftBoxX + 14,

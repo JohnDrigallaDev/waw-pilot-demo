@@ -30,11 +30,6 @@ type SaleDocumentDeleteQueryResult = {
     generated_by_system: boolean | null;
 };
 
-type SaleDocumentDeleteManyQueryResult = {
-    id: string;
-    file_path: string | null;
-};
-
 function getStringValue(formData: FormData, key: string): string | null {
     const value = formData.get(key);
 

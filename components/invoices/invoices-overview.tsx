@@ -205,15 +205,22 @@ export function InvoicesOverview({
     );
 
     useEffect(() => {
-        setActiveHighlightId(highlightedInvoiceId);
+        const startTimeoutId = window.setTimeout(() => {
+            setActiveHighlightId(highlightedInvoiceId);
+        }, 0);
 
-        if (!highlightedInvoiceId) return;
+        if (!highlightedInvoiceId) {
+            return () => window.clearTimeout(startTimeoutId);
+        }
 
         const timeoutId = window.setTimeout(() => {
             setActiveHighlightId(undefined);
         }, 3000);
 
-        return () => window.clearTimeout(timeoutId);
+        return () => {
+            window.clearTimeout(startTimeoutId);
+            window.clearTimeout(timeoutId);
+        };
     }, [highlightedInvoiceId]);
 
     const standardInvoices = invoices.filter(

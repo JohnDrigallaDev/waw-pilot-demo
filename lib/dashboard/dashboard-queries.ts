@@ -12,6 +12,7 @@ import { getSales } from "@/lib/sales/sale-queries";
 import { getSaleProfitNet } from "@/lib/sales/sale-helpers";
 import { getVehicles } from "@/lib/vehicles/vehicle-queries";
 import { getPurchaseCases } from "@/lib/purchases/purchase-queries";
+import { matchesMonthFilter, normalizeMonthFilter } from "@/utils/month-filter";
 
 export type DashboardData = {
     customersCount: number;
@@ -73,7 +74,8 @@ export type DashboardData = {
     }[];
 };
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(month?: string | null): Promise<DashboardData> {
+    const monthFilter = normalizeMonthFilter(month);
     const [
         customers,
         vehicles,
@@ -100,14 +102,26 @@ export async function getDashboardData(): Promise<DashboardData> {
 
     const soldVehicles = vehicles.filter((vehicle) => vehicle.status === "sold");
 
-    const totalRevenueNet = sales.reduce((sum, sale) => sum + sale.net_amount, 0);
+    const filteredSales = sales.filter((sale) =>
+        matchesMonthFilter(sale.sale_date, monthFilter),
+    );
 
-    const totalProfitNet = sales.reduce(
+    const filteredInvoices = invoices.filter((invoice) =>
+        matchesMonthFilter(invoice.invoice_date, monthFilter),
+    );
+
+    const filteredCashbookEntries = cashbookEntries.filter((entry) =>
+        matchesMonthFilter(entry.booking_date, monthFilter),
+    );
+
+    const totalRevenueNet = filteredSales.reduce((sum, sale) => sum + sale.net_amount, 0);
+
+    const totalProfitNet = filteredSales.reduce(
         (sum, sale) => sum + getSaleProfitNet(sale),
         0,
     );
 
-    const openInvoices = invoices.filter(
+    const openInvoices = filteredInvoices.filter(
         (invoice) => invoice.payment_status !== "paid",
     );
 
@@ -208,8 +222,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         vehiclesCount: vehicles.length,
         currentVehiclesCount: currentVehicles.length,
         soldVehiclesCount: soldVehicles.length,
-        salesCount: sales.length,
-        invoicesCount: invoices.length,
+        salesCount: filteredSales.length,
+        invoicesCount: filteredInvoices.length,
         documentsCount: documents.length,
 
         licensePlateCasesCount: licensePlateCases.length,
@@ -226,7 +240,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         incompleteDocumentsCount: incompleteDocuments.length,
         totalRevenueNet,
         totalProfitNet,
-        cashbookBalance: calculateBalance(cashbookEntries),
+        cashbookBalance: calculateBalance(filteredCashbookEntries),
 
         recentVehicles: vehicles.slice(0, 4).map((vehicle) => ({
             id: vehicle.id,
@@ -236,7 +250,7 @@ export async function getDashboardData(): Promise<DashboardData> {
             createdAt: vehicle.created_at,
         })),
 
-        recentSales: sales.slice(0, 4).map((sale) => ({
+        recentSales: filteredSales.slice(0, 4).map((sale) => ({
             id: sale.id,
             invoiceNumber: sale.invoice_number,
             customerName: sale.customer_name,

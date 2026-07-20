@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
     AlertTriangle,
     CheckCircle2,
-    ExternalLink,
     FileCheck2,
     FileSignature,
     FileText,
@@ -19,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { GenerateSaleDocumentSubmitButton } from "@/components/sales/generate-sale-document-submit-button";
 import { TemporarySuccessMessage } from "@/components/shared/temporary-success-message";
+import { DocumentCard } from "@/components/shared/document-card";
 
 type SaleGeneratedDocumentsCardProps = {
     saleId: string;
@@ -134,48 +134,46 @@ function GeneratedDocumentRow({
             Boolean(document.signedDocument));
 
     return (
-        <div className="p-5">
+        <div id={`document-${document.documentType}`} className="scroll-mt-28 p-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <DocumentIcon status={document.status} />
+                    <DocumentCard
+                        className="border-0 bg-transparent p-0 shadow-none"
+                        icon={<DocumentIcon status={document.status} />}
+                        title={<span className="text-xl font-extrabold text-slate-950">{document.label}</span>}
+                        description={document.description}
+                        status={
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                <StatusBadge tone={document.statusTone}>
+                                    {document.statusLabel}
+                                </StatusBadge>
 
-                        <h3 className="text-base font-extrabold text-slate-950">
-                            {document.label}
-                        </h3>
+                                {showSignatureStatus ? (
+                                    <StatusBadge tone="warning">
+                                        Unterschrift nötig
+                                    </StatusBadge>
+                                ) : (
+                                    <StatusBadge tone="neutral">
+                                        {document.requiresSignature
+                                            ? "Kein Rücklauf hier"
+                                            : "Keine Unterschrift"}
+                                    </StatusBadge>
+                                )}
 
-                        <StatusBadge tone={document.statusTone}>
-                            {document.statusLabel}
-                        </StatusBadge>
-
-                        {showSignatureStatus ? (
-                            <StatusBadge tone="warning">
-                                Unterschrift nötig
-                            </StatusBadge>
-                        ) : (
-                            <StatusBadge tone="neutral">
-                                {document.requiresSignature
-                                    ? "Kein Rücklauf hier"
-                                    : "Keine Unterschrift"}
-                            </StatusBadge>
-                        )}
-
-                        {document.generationMode !== "automatic" ? (
-                            <StatusBadge
-                                tone={
-                                    document.generationMode === "not_relevant"
-                                        ? "neutral"
-                                        : "info"
-                                }
-                            >
-                                {getGenerationModeLabel(document)}
-                            </StatusBadge>
-                        ) : null}
-                    </div>
-
-                    <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">
-                        {document.description}
-                    </p>
+                                {document.generationMode !== "automatic" ? (
+                                    <StatusBadge
+                                        tone={
+                                            document.generationMode === "not_relevant"
+                                                ? "neutral"
+                                                : "info"
+                                        }
+                                    >
+                                        {getGenerationModeLabel(document)}
+                                    </StatusBadge>
+                                ) : null}
+                            </div>
+                        }
+                    />
 
                     {wasJustGenerated ? (
                         <TemporarySuccessMessage
@@ -340,36 +338,10 @@ function GeneratedDocumentRow({
                         <DocumentContextAction document={document} />
                     )}
 
-                    {canOpenGenerated ? (
-                        <Button
-                            asChild
-                            variant="outline"
-                            className="h-11 rounded-2xl border-slate-200 bg-white font-bold"
-                        >
-                            <Link
-                                href={`/api/documents/${document.generatedDocument?.id}/file`}
-                                target="_blank"
-                            >
-                                <ExternalLink className="mr-2 size-4" />
-                                Öffnen
-                            </Link>
-                        </Button>
-                    ) : null}
-
-                    {canOpenSigned ? (
-                        <Button
-                            asChild
-                            variant="outline"
-                            className="h-11 rounded-2xl border-emerald-200 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100"
-                        >
-                            <Link
-                                href={`/api/documents/${document.signedDocument?.id}/file`}
-                                target="_blank"
-                            >
-                                <ExternalLink className="mr-2 size-4" />
-                                Öffnen Neu
-                            </Link>
-                        </Button>
+                    {canOpenGenerated || canOpenSigned ? (
+                        <p className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-center text-xs font-bold leading-5 text-slate-500">
+                            Dokumentkarte anklicken zum Öffnen.
+                        </p>
                     ) : null}
                 </div>
             </div>
@@ -493,7 +465,11 @@ function DocumentFileStatus({
     }
 
     return (
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+        <Link
+            href={`/api/documents/${document.id}/file`}
+            target="_blank"
+            className="block rounded-2xl border border-emerald-100 bg-emerald-50 p-4 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-100 hover:shadow-sm"
+        >
             <div className="flex items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-700">
                     <FileCheck2 className="size-4" />
@@ -507,7 +483,7 @@ function DocumentFileStatus({
                     </p>
                 </div>
             </div>
-        </div>
+        </Link>
     );
 }
 

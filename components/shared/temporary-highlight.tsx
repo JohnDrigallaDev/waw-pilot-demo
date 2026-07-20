@@ -18,15 +18,22 @@ export function TemporaryHighlight({
     const [visible, setVisible] = useState(active);
 
     useEffect(() => {
-        setVisible(active);
+        const startTimeoutId = window.setTimeout(() => {
+            setVisible(active);
+        }, 0);
 
-        if (!active) return;
+        if (!active) {
+            return () => window.clearTimeout(startTimeoutId);
+        }
 
         const timeoutId = window.setTimeout(() => {
             setVisible(false);
         }, 3000);
 
-        return () => window.clearTimeout(timeoutId);
+        return () => {
+            window.clearTimeout(startTimeoutId);
+            window.clearTimeout(timeoutId);
+        };
     }, [active]);
 
     return (

@@ -743,6 +743,7 @@ export function DocumentScannerDialog({
     const [canCapturePhoto, setCanCapturePhoto] = useState(false);
     const [isProcessingScan, setIsProcessingScan] = useState(false);
     const [isScannerUnavailable, setIsScannerUnavailable] = useState(false);
+    const [scannerReady, setScannerReady] = useState(false);
     const [documentDetected, setDocumentDetected] = useState(false);
     const [scanHint, setScanHint] = useState(
         "Dokument vollständig ins Bild halten oder Foto übernehmen",
@@ -779,6 +780,7 @@ export function DocumentScannerDialog({
 
         detectionRunningRef.current = false;
         scannerRef.current = null;
+        setScannerReady(false);
         detectedCornersRef.current = null;
         detectedCanvasSizeRef.current = null;
         setDocumentDetected(false);
@@ -804,6 +806,7 @@ export function DocumentScannerDialog({
         setCanCapturePhoto(false);
         setIsProcessingScan(false);
         setIsScannerUnavailable(false);
+        setScannerReady(false);
         setDocumentDetected(false);
         detectedCornersRef.current = null;
         detectedCanvasSizeRef.current = null;
@@ -940,9 +943,12 @@ export function DocumentScannerDialog({
 
     useEffect(() => {
         if (!open) {
-            stopScanner();
-            resetScannerState();
-            return;
+            const timeoutId = window.setTimeout(() => {
+                stopScanner();
+                resetScannerState();
+            }, 0);
+
+            return () => window.clearTimeout(timeoutId);
         }
 
         let cancelled = false;
@@ -995,6 +1001,7 @@ export function DocumentScannerDialog({
                 });
 
                 scannerRef.current = new scannerConstructor.Constructor();
+                setScannerReady(true);
                 console.info("[scanner] scanner instance created");
                 updateDebug({
                     scannerInstance: "erstellt",
@@ -1005,6 +1012,7 @@ export function DocumentScannerDialog({
                 if (cancelled) return;
 
                 scannerRef.current = null;
+                setScannerReady(false);
                 setIsScannerUnavailable(true);
                 setDocumentDetected(false);
                 updateDebug({
@@ -1261,7 +1269,7 @@ export function DocumentScannerDialog({
         !hasCameraError;
     const primaryButtonLabel = isProcessingScan
         ? "Wird verarbeitet..."
-        : scannerRef.current && documentDetected
+        : scannerReady && documentDetected
             ? "Scan übernehmen"
             : "Foto übernehmen";
 
@@ -1353,7 +1361,7 @@ export function DocumentScannerDialog({
                                 : "rounded-2xl border border-amber-700 bg-amber-950/70 px-4 py-3 text-sm font-bold text-amber-200"
                         }
                     >
-                        {documentDetected && scannerRef.current
+                        {documentDetected && scannerReady
                             ? scanHint
                             : isScannerUnavailable
                                 ? "Automatische Erkennung nicht verfügbar - Foto kann trotzdem übernommen werden."

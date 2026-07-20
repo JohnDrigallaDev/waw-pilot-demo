@@ -49,15 +49,22 @@ export function VehicleInventory({
     const [activeHighlightId, setActiveHighlightId] = useState(highlightVehicleId);
 
     useEffect(() => {
-        setActiveHighlightId(highlightVehicleId);
+        const startTimeoutId = window.setTimeout(() => {
+            setActiveHighlightId(highlightVehicleId);
+        }, 0);
 
-        if (!highlightVehicleId) return;
+        if (!highlightVehicleId) {
+            return () => window.clearTimeout(startTimeoutId);
+        }
 
         const timeout = window.setTimeout(() => {
             setActiveHighlightId(null);
         }, 3000);
 
-        return () => window.clearTimeout(timeout);
+        return () => {
+            window.clearTimeout(startTimeoutId);
+            window.clearTimeout(timeout);
+        };
     }, [highlightVehicleId]);
 
     const filteredVehicles = useMemo(() => {

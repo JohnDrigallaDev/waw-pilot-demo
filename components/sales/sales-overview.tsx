@@ -35,17 +35,22 @@ import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MonthFilter } from "@/components/filters/month-filter";
+import { StatusFilter } from "@/components/filters/status-filter";
+import { matchesMonthFilter, normalizeMonthFilter } from "@/utils/month-filter";
 
 type SalesOverviewProps = {
     sales: SaleRow[];
     initialPaymentStatus?: string | null;
+    initialMonthFilter?: string | null;
 };
 
-type PaymentFilter = "all" | "open" | "paid";
+type PaymentFilter = "all" | "open" | "paid" | "proforma";
 
 function getInitialPaymentFilter(paymentStatus: string | null | undefined): PaymentFilter {
     if (paymentStatus === "open" || paymentStatus === "unpaid") return "open";
     if (paymentStatus === "paid") return "paid";
+    if (paymentStatus === "proforma") return "proforma";
 
     return "all";
 }
@@ -53,20 +58,27 @@ function getInitialPaymentFilter(paymentStatus: string | null | undefined): Paym
 export function SalesOverview({
                                   sales,
                                   initialPaymentStatus = null,
+                                  initialMonthFilter = null,
                               }: SalesOverviewProps) {
     const [query, setQuery] = useState("");
     const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>(() =>
         getInitialPaymentFilter(initialPaymentStatus),
+    );
+    const [monthFilter, setMonthFilter] = useState(() =>
+        normalizeMonthFilter(initialMonthFilter),
     );
 
     const filteredSales = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
 
         return sales.filter((sale) => {
+            if (!matchesMonthFilter(sale.sale_date, monthFilter)) return false;
+
             const matchesPaymentFilter =
                 paymentFilter === "all" ||
                 (paymentFilter === "open" && sale.payment_status !== "paid") ||
-                (paymentFilter === "paid" && sale.payment_status === "paid");
+                (paymentFilter === "paid" && sale.payment_status === "paid") ||
+                (paymentFilter === "proforma" && sale.has_proforma_invoice);
 
             if (!matchesPaymentFilter) return false;
 
@@ -88,23 +100,27 @@ export function SalesOverview({
 
             return searchableText.includes(normalizedQuery);
         });
-    }, [query, sales, paymentFilter]);
+    }, [query, sales, paymentFilter, monthFilter]);
 
-    const openPayments = sales.filter(
+    const monthFilteredSales = sales.filter((sale) =>
+        matchesMonthFilter(sale.sale_date, monthFilter),
+    );
+
+    const openPayments = monthFilteredSales.filter(
         (sale) => sale.payment_status !== "paid",
     ).length;
 
-    const incompleteDocuments = sales.filter(
+    const incompleteDocuments = monthFilteredSales.filter(
         (sale) => sale.missing_required_documents_count > 0,
     ).length;
 
-    const notSentToDatev = sales.filter(
+    const notSentToDatev = monthFilteredSales.filter(
         (sale) => sale.datev_status === "not_sent",
     ).length;
 
-    const totalRevenueNet = sales.reduce((sum, sale) => sum + sale.net_amount, 0);
+    const totalRevenueNet = monthFilteredSales.reduce((sum, sale) => sum + sale.net_amount, 0);
 
-    const totalProfitNet = sales.reduce(
+    const totalProfitNet = monthFilteredSales.reduce(
         (sum, sale) => sum + getSaleProfitNet(sale),
         0,
     );
@@ -131,7 +147,7 @@ export function SalesOverview({
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <SaleStatCard
                     label="Verkäufe gesamt"
-                    value={sales.length}
+                    value={monthFilteredSales.length}
                     description={formatCurrency(totalRevenueNet)}
                     icon={Receipt}
                 />
@@ -171,33 +187,36 @@ export function SalesOverview({
                                 </p>
                             </div>
 
-                            <div className="relative w-full xl:max-w-sm">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                                <Input
-                                    value={query}
-                                    onChange={(event) => setQuery(event.target.value)}
-                                    placeholder="Verkauf suchen..."
-                                    className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-medium"
+                            <div className="flex w-full flex-col gap-3 xl:max-w-2xl xl:flex-row xl:items-end">
+                                <MonthFilter
+                                    value={monthFilter}
+                                    onChange={(value) => setMonthFilter(normalizeMonthFilter(value))}
+                                    updateUrl
                                 />
+                                <div className="relative w-full">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                                    <Input
+                                        value={query}
+                                        onChange={(event) => setQuery(event.target.value)}
+                                        placeholder="Verkauf suchen..."
+                                        className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10 font-medium"
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        {paymentFilter !== "all" ? (
-                            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
-                                <p className="text-sm font-bold text-cyan-900">
-                                    Gefiltert: {paymentFilter === "open" ? "Offene Zahlungen" : "Bezahlte Verkäufe"}
-                                </p>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 rounded-xl border-cyan-200 bg-white font-bold text-cyan-800 hover:bg-cyan-50"
-                                    onClick={() => setPaymentFilter("all")}
-                                >
-                                    Filter zurücksetzen
-                                </Button>
-                            </div>
-                        ) : null}
+                        <div className="mt-5">
+                            <StatusFilter
+                                activeValue={paymentFilter}
+                                onChange={(value) => setPaymentFilter(value as PaymentFilter)}
+                                options={[
+                                    { value: "all", label: "Alle" },
+                                    { value: "open", label: "Offene Zahlungen" },
+                                    { value: "paid", label: "Bezahlt" },
+                                    { value: "proforma", label: "Proforma" },
+                                ]}
+                            />
+                        </div>
                     </div>
 
                     <div>

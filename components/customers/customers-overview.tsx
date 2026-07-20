@@ -51,15 +51,22 @@ export function CustomersOverview({
     );
 
     useEffect(() => {
-        setActiveHighlightId(highlightedCustomerId);
+        const startTimeoutId = window.setTimeout(() => {
+            setActiveHighlightId(highlightedCustomerId);
+        }, 0);
 
-        if (!highlightedCustomerId) return;
+        if (!highlightedCustomerId) {
+            return () => window.clearTimeout(startTimeoutId);
+        }
 
         const timeoutId = window.setTimeout(() => {
             setActiveHighlightId(undefined);
         }, 3000);
 
-        return () => window.clearTimeout(timeoutId);
+        return () => {
+            window.clearTimeout(startTimeoutId);
+            window.clearTimeout(timeoutId);
+        };
     }, [highlightedCustomerId]);
 
     const filteredCustomers = useMemo(() => {

@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
     ArrowUpRight,
     FileWarning,
     Plus,
     Search,
     ShoppingCart,
-    Truck,
-    UserRound,
     Wallet,
 } from "lucide-react";
 
@@ -62,7 +60,7 @@ export function PurchasesOverview({ purchases }: PurchasesOverviewProps) {
         0,
     );
 
-    const filteredPurchases = useMemo(() => {
+    const filteredPurchases = (() => {
         const normalizedQuery = query.trim().toLowerCase();
 
         return purchases.filter((purchase) => {
@@ -95,7 +93,7 @@ export function PurchasesOverview({ purchases }: PurchasesOverviewProps) {
 
             return searchableText.includes(normalizedQuery);
         });
-    }, [query, purchases, filter]);
+    })();
 
     return (
         <div className="space-y-6">

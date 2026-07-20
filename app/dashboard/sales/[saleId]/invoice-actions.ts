@@ -15,7 +15,7 @@ import {
     getInvoiceEmailTemplate,
     getZugferdInvoiceEmailTemplate,
 } from "@/lib/email/templates/invoice-email";
-import { getSuggestedEmailLanguage, normalizeEmailLanguage } from "@/lib/customers/email-languages";
+import { getSuggestedEmailLanguage } from "@/lib/customers/email-languages";
 import {
     EmailConfigurationError,
     sendEmailWithResend,

@@ -49,11 +49,13 @@ export function DocumentCard({
                             {icon ?? <FileText className="size-5" />}
                         </div>
                         <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="min-w-0 text-sm font-extrabold text-slate-950">{title}</h3>
-                                {status ? <span>{status}</span> : null}
-                                {badge ? <AppBadge tone={badgeTone}>{badge}</AppBadge> : null}
-                            </div>
+                            <h3 className="min-w-0 text-sm font-extrabold text-slate-950">{title}</h3>
+                            {status || badge ? (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    {status ? <span>{status}</span> : null}
+                                    {badge ? <AppBadge tone={badgeTone}>{badge}</AppBadge> : null}
+                                </div>
+                            ) : null}
                             {description ? (
                                 <p className="mt-1 text-sm font-medium leading-6 text-slate-600">{description}</p>
                             ) : null}

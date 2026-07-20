@@ -66,11 +66,13 @@ const THIRD_COUNTRY_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
 
 export function getRequiredDocumentsForSale({
                                                 saleType,
-                                                isCompanyCustomer: _isCompanyCustomer,
+                                                isCompanyCustomer,
                                             }: {
     saleType: SaleType;
     isCompanyCustomer: boolean;
 }): RequiredDocumentDefinition[] {
+    void isCompanyCustomer;
+
     const requiredDocuments = [...BASE_REQUIRED_DOCUMENTS];
 
     if (saleType === "inland") {

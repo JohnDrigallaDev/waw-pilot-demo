@@ -55,7 +55,11 @@ export function SaleDocumentUploadForm({
     const displayFileName = selectedFileName ?? existingFileName;
 
     useEffect(() => {
-        setCameraAvailable(Boolean(navigator.mediaDevices?.getUserMedia));
+        const timeoutId = window.setTimeout(() => {
+            setCameraAvailable(Boolean(navigator.mediaDevices?.getUserMedia));
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
     }, []);
 
     function uploadFile(file: File) {

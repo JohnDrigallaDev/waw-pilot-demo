@@ -21,14 +21,18 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { MonthFilter } from "@/components/filters/month-filter";
+import { normalizeMonthFilter } from "@/utils/month-filter";
 
 type DashboardOverviewProps = {
     data: DashboardData;
+    monthFilter?: string | null;
 };
 
-export function DashboardOverview({ data }: DashboardOverviewProps) {
+export function DashboardOverview({ data, monthFilter = null }: DashboardOverviewProps) {
     const activeLicensePlateCases =
         data.openLicensePlateCasesCount + data.requestedLicensePlateCasesCount;
+    const selectedMonthFilter = normalizeMonthFilter(monthFilter);
 
     return (
         <div className="space-y-6">
@@ -48,6 +52,10 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
                     </Button>
                 }
             />
+
+            <div className="flex justify-end">
+                <MonthFilter value={selectedMonthFilter} updateUrl />
+            </div>
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <DashboardStatCard
@@ -86,7 +94,7 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
                     value={data.documentsCount}
                     description={`${data.incompleteDocumentsCount} prüfen`}
                     icon={FileArchive}
-                    href="/dashboard/documents"
+                    href="/dashboard/documents?filter=needs_review"
                     danger={data.incompleteDocumentsCount > 0}
                 />
                 <DashboardStatCard
@@ -197,10 +205,6 @@ export function DashboardOverview({ data }: DashboardOverviewProps) {
                             <SummaryRow
                                 label="Offene Zahlungen"
                                 value={String(data.openInvoicesCount)}
-                            />
-                            <SummaryRow
-                                label="Aktive Kennzeichen"
-                                value={String(activeLicensePlateCases)}
                             />
                         </div>
                     </CardContent>

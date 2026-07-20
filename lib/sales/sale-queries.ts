@@ -4,6 +4,7 @@ import {
     getRequiredDocumentsForSale,
 } from "@/lib/sales/sale-required-documents";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 
 export type SaleType = "inland" | "eu" | "export_third_country";
 export type SaleStatus = "draft" | "active" | "completed" | "cancelled";
@@ -30,6 +31,7 @@ export type SaleRow = {
 
     invoice_id: string | null;
     invoice_number: string | null;
+    has_proforma_invoice: boolean;
 
     vehicle_internal_number: string;
     vehicle_name: string;
@@ -49,6 +51,7 @@ export type SaleRow = {
 type InvoiceRelation = {
     id: string;
     invoice_number: string;
+    invoice_type: InvoiceType | null;
 };
 
 type DocumentRelation = {
@@ -175,7 +178,8 @@ export async function getSales(): Promise<SaleRow[]> {
       ),
       invoices (
         id,
-        invoice_number
+        invoice_number,
+        invoice_type
       ),
       documents (
         document_type,
@@ -194,6 +198,7 @@ export async function getSales(): Promise<SaleRow[]> {
         const vehicle = sale.vehicles;
         const customer = sale.customers;
         const invoice = getSingleRelation(sale.invoices);
+        const invoices = getManyRelation(sale.invoices);
         const saleType = sale.sale_type ?? "inland";
 
         const relatedDocuments = getManyRelation(sale.documents);
@@ -237,6 +242,7 @@ export async function getSales(): Promise<SaleRow[]> {
 
             invoice_id: invoice?.id ?? null,
             invoice_number: invoice?.invoice_number ?? null,
+            has_proforma_invoice: invoices.some((item) => item.invoice_type === "proforma"),
 
             vehicle_internal_number: vehicle?.internal_number ?? "—",
             vehicle_name: vehicle
