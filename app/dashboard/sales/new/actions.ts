@@ -18,6 +18,11 @@ import {
     type EmailLanguage,
 } from "@/lib/customers/email-languages";
 import { isAllowedArrivalPeriod } from "@/lib/sales/export-date-rules";
+import {
+    getSaleTaxConfiguration,
+    normalizeVatId,
+    type SaleBuyerType,
+} from "@/utils/sale-tax-rules";
 
 type CreateSaleState = {
     success: boolean;
@@ -65,15 +70,31 @@ function requiresExportDetails(saleType: SaleType): boolean {
     return saleType === "eu" || saleType === "export_third_country";
 }
 
-function getDefaultVatRateForSaleType(saleType: SaleType): number {
-    return saleType === "inland" ? 19 : 0;
-}
+function resolveVatRate({
+                            formData,
+                            saleType,
+                            buyerType,
+                            billingCountry,
+                        }: {
+    formData: FormData;
+    saleType: SaleType;
+    buyerType: SaleBuyerType;
+    billingCountry?: string | null;
+}): number {
+    const taxConfiguration = getSaleTaxConfiguration({
+        buyerType,
+        deliveryType: saleType,
+        billingCountry,
+    });
 
-function resolveVatRate(formData: FormData, saleType: SaleType): number {
+    if (taxConfiguration.forceVatRate) {
+        return taxConfiguration.defaultVatRate;
+    }
+
     const submittedVatRate = getNumberValue(formData, "vat_rate");
 
     if (submittedVatRate === null || submittedVatRate < 0 || submittedVatRate > 100) {
-        return getDefaultVatRateForSaleType(saleType);
+        return taxConfiguration.defaultVatRate;
     }
 
     return submittedVatRate;
@@ -224,8 +245,15 @@ async function createBuyerCustomerFromSaleForm(
     const email = getStringValue(formData, "new_customer_email");
     const preferredLanguage = getNewCustomerEmailLanguage(formData);
     const phone = getStringValue(formData, "new_customer_phone");
-    const vatId = getStringValue(formData, "new_customer_vat_id");
+    const rawVatId = getStringValue(formData, "new_customer_vat_id");
     const taxNumber = getStringValue(formData, "new_customer_tax_number");
+    const taxConfiguration = getSaleTaxConfiguration({
+        buyerType: type,
+        deliveryType: saleType,
+        billingCountry: country,
+    });
+    const vatId = taxConfiguration.showVatId ? normalizeVatId(rawVatId) : null;
+    const relevantTaxNumber = taxConfiguration.showTaxNumber ? taxNumber : null;
 
     if (!street || !postalCode || !city) {
         return {
@@ -248,7 +276,7 @@ async function createBuyerCustomerFromSaleForm(
         };
     }
 
-    if (saleType === "inland" && !taxNumber) {
+    if (taxConfiguration.showTaxNumber && !relevantTaxNumber) {
         return {
             success: false,
             message:
@@ -256,7 +284,7 @@ async function createBuyerCustomerFromSaleForm(
         };
     }
 
-    if (saleType === "eu" && !vatId) {
+    if (taxConfiguration.showVatId && !vatId) {
         return {
             success: false,
             message:
@@ -287,7 +315,7 @@ async function createBuyerCustomerFromSaleForm(
             email,
             preferred_language: preferredLanguage,
             phone,
-            tax_number: taxNumber,
+            tax_number: relevantTaxNumber,
             vat_id: vatId,
             commercial_register_number: null,
             notes: "Direkt beim Verkauf angelegt.",
@@ -330,7 +358,7 @@ export async function createSaleAction(
     const saleDate = getStringValue(formData, "sale_date");
     const saleType = getSaleTypeValue(formData);
     const netAmount = getNumberValue(formData, "net_amount");
-    const vatRate = resolveVatRate(formData, saleType);
+    const newCustomerType = getNewCustomerType(formData);
     const notes = getStringValue(formData, "notes");
     const includeDamageNotesOnInvoice =
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
@@ -446,7 +474,7 @@ export async function createSaleAction(
 
     const { data: buyerCustomer, error: buyerCustomerLoadError } = await supabase
         .from("customers")
-        .select("tax_number, vat_id, city, country")
+        .select("type, tax_number, vat_id, city, country")
         .eq("id", buyerCustomerId)
         .eq("company_id", companyId)
         .single();
@@ -460,7 +488,21 @@ export async function createSaleAction(
         };
     }
 
-    if (saleType === "inland" && !buyerCustomer.tax_number) {
+    const buyerType =
+        buyerMode === "new" ? newCustomerType : (buyerCustomer.type as SaleBuyerType);
+    const taxConfiguration = getSaleTaxConfiguration({
+        buyerType,
+        deliveryType: saleType,
+        billingCountry: buyerCustomer.country,
+    });
+    const vatRate = resolveVatRate({
+        formData,
+        saleType,
+        buyerType,
+        billingCountry: buyerCustomer.country,
+    });
+
+    if (taxConfiguration.showTaxNumber && !buyerCustomer.tax_number) {
         return {
             success: false,
             message:
@@ -468,7 +510,7 @@ export async function createSaleAction(
         };
     }
 
-    if (saleType === "eu" && !buyerCustomer.vat_id) {
+    if (taxConfiguration.showVatId && !buyerCustomer.vat_id) {
         return {
             success: false,
             message:

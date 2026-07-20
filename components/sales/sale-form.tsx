@@ -29,6 +29,11 @@ import type { VehicleRow } from "@/lib/vehicles/vehicle-queries";
 import { getVehicleDisplayName } from "@/lib/vehicles/vehicle-helpers";
 import { formatCurrency } from "@/lib/format/currency";
 import { phoneInputPattern, sanitizePhoneInput } from "@/lib/validation/phone";
+import {
+    getSaleTaxConfiguration,
+    normalizeSaleBuyerType,
+    type SaleBuyerType,
+} from "@/utils/sale-tax-rules";
 import { CustomerCombobox } from "@/components/customers/customer-combobox";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -53,10 +58,6 @@ type SaleFormProps = {
     defaultCustomerId?: string | null;
 };
 
-function getDefaultVatRateForSaleType(saleType: SaleType): string {
-    return saleType === "inland" ? "19" : "0";
-}
-
 function parseDecimalInput(value: string): number | null {
     const normalizedValue = value.trim().replace(",", ".");
     const numberValue = Number(normalizedValue);
@@ -66,18 +67,6 @@ function parseDecimalInput(value: string): number | null {
 
 function roundMoney(value: number): number {
     return Math.round(value * 100) / 100;
-}
-
-function getTaxHint(saleType: SaleType): string {
-    if (saleType === "eu") {
-        return "EU-Verkauf: steuerfreie innergemeinschaftliche Lieferung möglich. Bitte USt-IdNr. und Nachweise prüfen.";
-    }
-
-    if (saleType === "export_third_country") {
-        return "Drittlandexport: steuerfreie Ausfuhrlieferung möglich. Bitte Ausfuhrnachweise/Zollnachweise prüfen.";
-    }
-
-    return "Inlandsverkauf mit deutscher Umsatzsteuer.";
 }
 
 export function SaleForm({
@@ -123,18 +112,29 @@ export function SaleForm({
         customers.find((customer) => customer.id === selectedCustomerId) ?? null;
     const selectedVehicle =
         vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+    const selectedBuyerType: SaleBuyerType =
+        buyerMode === "new"
+            ? newCustomerType
+            : normalizeSaleBuyerType(selectedCustomer?.type);
+    const taxConfiguration = getSaleTaxConfiguration({
+        buyerType: selectedBuyerType,
+        deliveryType: saleType,
+        billingCountry: selectedCustomer?.country,
+    });
     const selectedCustomerMissingTaxNumber =
         buyerMode === "existing" &&
-        saleType === "inland" &&
+        taxConfiguration.showTaxNumber &&
         Boolean(selectedCustomer) &&
         !selectedCustomer?.tax_number;
     const selectedCustomerMissingVatId =
         buyerMode === "existing" &&
-        saleType === "eu" &&
+        taxConfiguration.showVatId &&
         Boolean(selectedCustomer) &&
         !selectedCustomer?.vat_id;
-    const requiresNewCustomerTaxNumber = buyerMode === "new" && saleType === "inland";
-    const requiresNewCustomerVatId = buyerMode === "new" && saleType === "eu";
+    const requiresNewCustomerTaxNumber =
+        buyerMode === "new" && taxConfiguration.showTaxNumber;
+    const requiresNewCustomerVatId =
+        buyerMode === "new" && taxConfiguration.showVatId;
 
     const allowedArrivalPeriods = getAllowedArrivalPeriods(saleDate);
     const allowedArrivalYears = getArrivalYearOptions();
@@ -144,12 +144,48 @@ export function SaleForm({
     const previewGrossAmount = roundMoney(previewNetAmount + previewVatAmount);
 
     function handleSaleTypeChange(nextSaleType: SaleType) {
+        const nextTaxConfiguration = getSaleTaxConfiguration({
+            buyerType: selectedBuyerType,
+            deliveryType: nextSaleType,
+            billingCountry: selectedCustomer?.country,
+        });
+
         setSaleType(nextSaleType);
-        setVatRate(getDefaultVatRateForSaleType(nextSaleType));
+        setVatRate(String(nextTaxConfiguration.defaultVatRate));
 
         if (nextSaleType !== "inland" && selectedCustomer) {
             applyCustomerAddress(selectedCustomer);
         }
+    }
+
+    function handleBuyerModeChange(nextBuyerMode: BuyerMode) {
+        const nextBuyerType =
+            nextBuyerMode === "new"
+                ? newCustomerType
+                : normalizeSaleBuyerType(selectedCustomer?.type);
+
+        setBuyerMode(nextBuyerMode);
+        setVatRate(
+            String(
+                getSaleTaxConfiguration({
+                    buyerType: nextBuyerType,
+                    deliveryType: saleType,
+                    billingCountry: selectedCustomer?.country,
+                }).defaultVatRate,
+            ),
+        );
+    }
+
+    function handleNewCustomerTypeChange(nextCustomerType: NewCustomerType) {
+        setNewCustomerType(nextCustomerType);
+        setVatRate(
+            String(
+                getSaleTaxConfiguration({
+                    buyerType: nextCustomerType,
+                    deliveryType: saleType,
+                }).defaultVatRate,
+            ),
+        );
     }
 
     function applyCustomerAddress(customer: CustomerRow | null) {
@@ -167,6 +203,13 @@ export function SaleForm({
     function handleSelectedCustomerChange(customerId: string) {
         setSelectedCustomerId(customerId);
         const customer = customers.find((item) => item.id === customerId) ?? null;
+        const nextTaxConfiguration = getSaleTaxConfiguration({
+            buyerType: customer?.type,
+            deliveryType: saleType,
+            billingCountry: customer?.country,
+        });
+
+        setVatRate(String(nextTaxConfiguration.defaultVatRate));
 
         if (requiresExportDetails) {
             applyCustomerAddress(customer);
@@ -265,7 +308,7 @@ export function SaleForm({
                                     name="buyer_mode"
                                     value="existing"
                                     checked={buyerMode === "existing"}
-                                    onChange={() => setBuyerMode("existing")}
+                                    onChange={() => handleBuyerModeChange("existing")}
                                     className="sr-only"
                                 />
                                 <p className="font-extrabold text-slate-950">
@@ -282,7 +325,7 @@ export function SaleForm({
                                     name="buyer_mode"
                                     value="new"
                                     checked={buyerMode === "new"}
-                                    onChange={() => setBuyerMode("new")}
+                                    onChange={() => handleBuyerModeChange("new")}
                                     className="sr-only"
                                 />
                                 <p className="font-extrabold text-slate-950">
@@ -347,7 +390,7 @@ export function SaleForm({
                                             name="new_customer_type"
                                             value="company"
                                             checked={newCustomerType === "company"}
-                                            onChange={() => setNewCustomerType("company")}
+                                            onChange={() => handleNewCustomerTypeChange("company")}
                                             className="sr-only"
                                         />
                                         <div className="flex items-center gap-3">
@@ -369,7 +412,7 @@ export function SaleForm({
                                             name="new_customer_type"
                                             value="private"
                                             checked={newCustomerType === "private"}
-                                            onChange={() => setNewCustomerType("private")}
+                                            onChange={() => handleNewCustomerTypeChange("private")}
                                             className="sr-only"
                                         />
                                         <div className="flex items-center gap-3">
@@ -454,22 +497,26 @@ export function SaleForm({
                                             );
                                         }}
                                     />
-                                    <FormField
-                                        label={getRequiredLabel(
-                                            "USt-ID",
-                                            requiresNewCustomerVatId,
-                                        )}
-                                        name="new_customer_vat_id"
-                                        required={requiresNewCustomerVatId}
-                                    />
-                                    <FormField
-                                        label={getRequiredLabel(
-                                            "Steuernummer",
-                                            requiresNewCustomerTaxNumber,
-                                        )}
-                                        name="new_customer_tax_number"
-                                        required={requiresNewCustomerTaxNumber}
-                                    />
+                                    {taxConfiguration.showVatId ? (
+                                        <FormField
+                                            label={getRequiredLabel(
+                                                taxConfiguration.vatIdLabel,
+                                                requiresNewCustomerVatId,
+                                            )}
+                                            name="new_customer_vat_id"
+                                            required={requiresNewCustomerVatId}
+                                        />
+                                    ) : null}
+                                    {taxConfiguration.showTaxNumber ? (
+                                        <FormField
+                                            label={getRequiredLabel(
+                                                "Steuernummer",
+                                                requiresNewCustomerTaxNumber,
+                                            )}
+                                            name="new_customer_tax_number"
+                                            required={requiresNewCustomerTaxNumber}
+                                        />
+                                    ) : null}
                                 </div>
                             </div>
                         )}
@@ -512,7 +559,7 @@ export function SaleForm({
                             <div className="flex items-start gap-3">
                                 <Info className="mt-0.5 size-5 shrink-0 text-cyan-700" />
                                 <p className="text-sm font-semibold leading-6 text-slate-700">
-                                    {getTaxHint(saleType)}
+                                    {taxConfiguration.hint}
                                 </p>
                             </div>
                         </div>
@@ -739,7 +786,16 @@ export function SaleForm({
                                 type="number"
                                 step="0.01"
                                 value={vatRate}
-                                onChange={(event) => setVatRate(event.target.value)}
+                                onChange={(event) => {
+                                    if (taxConfiguration.forceVatRate) return;
+                                    setVatRate(event.target.value);
+                                }}
+                                readOnly={taxConfiguration.forceVatRate}
+                                description={
+                                    taxConfiguration.forceVatRate
+                                        ? "Der MwSt.-Satz wird für diese Kombination automatisch festgelegt."
+                                        : undefined
+                                }
                             />
                             <FormField
                                 label="Verkaufsdatum *"
@@ -1034,6 +1090,8 @@ function FormField({
                        step,
                        value,
                        onChange,
+                       readOnly,
+                       description,
                        pattern,
                        title,
                        onInput,
@@ -1047,6 +1105,8 @@ function FormField({
     step?: string;
     value?: string;
     onChange?: ChangeEventHandler<HTMLInputElement>;
+    readOnly?: boolean;
+    description?: string;
     pattern?: string;
     title?: string;
     onInput?: FormEventHandler<HTMLInputElement>;
@@ -1066,11 +1126,21 @@ function FormField({
                 step={step}
                 value={value}
                 onChange={onChange}
+                readOnly={readOnly}
                 pattern={pattern}
                 title={title}
                 onInput={onInput}
-                className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-medium"
+                className={
+                    readOnly
+                        ? "h-12 rounded-2xl border-slate-200 bg-slate-100 font-medium text-slate-600"
+                        : "h-12 rounded-2xl border-slate-200 bg-slate-50 font-medium"
+                }
             />
+            {description ? (
+                <p className="text-xs font-semibold leading-5 text-slate-500">
+                    {description}
+                </p>
+            ) : null}
         </div>
     );
 }

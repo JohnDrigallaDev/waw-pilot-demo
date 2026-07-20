@@ -13,6 +13,7 @@ import type {
 } from "@/lib/sales/sale-queries";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getSaleTaxConfiguration } from "@/utils/sale-tax-rules";
 
 type SupabaseRelation<T> = T | T[] | null;
 
@@ -462,11 +463,16 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         .filter((document) => !document.isAvailable)
         .map((document) => document.label);
 
+    const taxConfiguration = getSaleTaxConfiguration({
+        buyerType: sale.customers.type,
+        deliveryType: saleType,
+        billingCountry: sale.customers.country,
+    });
     const missingRequiredDataLabels = [
-        saleType === "inland" && !sale.customers.tax_number
+        taxConfiguration.showTaxNumber && !sale.customers.tax_number
             ? "Steuernummer beim Kunden fehlt."
             : null,
-        saleType === "eu" && !sale.customers.vat_id
+        taxConfiguration.showVatId && !sale.customers.vat_id
             ? "USt-IdNr. beim Kunden fehlt."
             : null,
     ].filter((label): label is string => Boolean(label));

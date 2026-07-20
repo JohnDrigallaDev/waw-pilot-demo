@@ -5,6 +5,7 @@ import {
 } from "@/lib/sales/sale-required-documents";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
+import { getSaleTaxConfiguration } from "@/utils/sale-tax-rules";
 
 export type SaleType = "inland" | "eu" | "export_third_country";
 export type SaleStatus = "draft" | "active" | "completed" | "cancelled";
@@ -212,11 +213,16 @@ export async function getSales(): Promise<SaleRow[]> {
             requiredDocuments,
             documents: relatedDocuments,
         });
+        const taxConfiguration = getSaleTaxConfiguration({
+            buyerType: customer?.type,
+            deliveryType: saleType,
+            billingCountry: customer?.country,
+        });
         const missingRequiredDataLabels = [
-            saleType === "inland" && !customer?.tax_number
+            taxConfiguration.showTaxNumber && !customer?.tax_number
                 ? "Steuernummer beim Kunden fehlt."
                 : null,
-            saleType === "eu" && !customer?.vat_id
+            taxConfiguration.showVatId && !customer?.vat_id
                 ? "USt-IdNr. beim Kunden fehlt."
                 : null,
         ].filter((label): label is string => Boolean(label));
