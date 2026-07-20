@@ -38,6 +38,11 @@ import {
     type ZugferdServiceValidationSummary,
 } from "@/lib/zugferd/zugferd-service-client";
 
+type SaleInvoiceVehicleRelation = {
+    damage_notes: string | null;
+    show_damage_on_invoice: boolean | null;
+};
+
 type SaleInvoiceSourceRow = {
     id: string;
     company_id: string;
@@ -50,14 +55,7 @@ type SaleInvoiceSourceRow = {
     gross_amount: number | string;
     invoice_notes: string | null;
     include_damage_notes_on_invoice: boolean | null;
-    vehicles:
-        | {
-        sale_price_net: number | string | null;
-    }
-        | {
-        sale_price_net: number | string | null;
-    }[]
-        | null;
+    vehicles: SaleInvoiceVehicleRelation | SaleInvoiceVehicleRelation[] | null;
 };
 
 type InvoiceEmailDocumentRelation = {
@@ -156,31 +154,6 @@ function getPaymentMethodLabel(paymentMethod: string): string {
     return paymentMethod;
 }
 
-function formatCurrency(value: number): string {
-    return new Intl.NumberFormat("de-DE", {
-        style: "currency",
-        currency: "EUR",
-    }).format(value);
-}
-
-function getPlannedNetSalePriceNote(plannedNetSalePrice: number | null): string | null {
-    if (plannedNetSalePrice === null || plannedNetSalePrice <= 0) return null;
-
-    return `Geplanter Netto-VK laut Fahrzeugbestand: ${formatCurrency(plannedNetSalePrice)} netto`;
-}
-
-function appendUniqueNote(existingNotes: string | null, note: string | null): string | null {
-    if (!note) return existingNotes;
-
-    const trimmedExistingNotes = existingNotes?.trim() ?? "";
-
-    if (trimmedExistingNotes.includes(note)) {
-        return trimmedExistingNotes;
-    }
-
-    return [trimmedExistingNotes, note].filter(Boolean).join("\n\n");
-}
-
 function removePlannedNetSalePriceNote(existingNotes: string | null): string | null {
     if (!existingNotes?.trim()) return existingNotes;
 
@@ -197,24 +170,11 @@ function removePlannedNetSalePriceNote(existingNotes: string | null): string | n
     return nextNotes.length > 0 ? nextNotes : null;
 }
 
-function resolvePlannedNetSalePriceNote({
-                                            existingNotes,
-                                            plannedNetSalePrice,
-                                            includeNote,
-                                        }: {
-    existingNotes: string | null;
-    plannedNetSalePrice: number | null;
-    includeNote: boolean;
-}): string | null {
-    const notesWithoutPlannedPrice = removePlannedNetSalePriceNote(existingNotes);
-
-    if (!includeNote) {
-        return notesWithoutPlannedPrice;
-    }
-
-    return appendUniqueNote(
-        notesWithoutPlannedPrice,
-        getPlannedNetSalePriceNote(plannedNetSalePrice),
+function canIncludeVehicleDamageNotes(vehicle: SaleInvoiceVehicleRelation | null): boolean {
+    return Boolean(
+        vehicle &&
+            vehicle.damage_notes?.trim() &&
+            vehicle.show_damage_on_invoice,
     );
 }
 
@@ -351,10 +311,8 @@ export async function createSaleInvoiceAction(formData: FormData) {
 
     const saleId = getStringValue(formData, "sale_id");
     const invoiceType = getInvoiceTypeValue(formData);
-    const includeDamageNotesOnInvoice =
+    const requestedIncludeDamageNotesOnInvoice =
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
-    const includePlannedNetSalePriceNote =
-        getStringValue(formData, "include_planned_net_sale_price_note") === "yes";
     const includeSignatureStamp =
         getStringValue(formData, "include_signature_stamp") === "yes";
 
@@ -382,7 +340,8 @@ export async function createSaleInvoiceAction(formData: FormData) {
       invoice_notes,
       include_damage_notes_on_invoice,
       vehicles (
-        sale_price_net
+        damage_notes,
+        show_damage_on_invoice
       )
     `,
         )
@@ -400,21 +359,10 @@ export async function createSaleInvoiceAction(formData: FormData) {
 
     const sale = saleData as SaleInvoiceSourceRow;
     const saleVehicle = getSingleRelation(sale.vehicles);
-
-    const plannedNetSalePrice =
-        saleVehicle?.sale_price_net === null ||
-        saleVehicle?.sale_price_net === undefined
-            ? null
-            : Number(saleVehicle.sale_price_net);
-    const validPlannedNetSalePrice =
-        plannedNetSalePrice !== null && Number.isFinite(plannedNetSalePrice)
-            ? plannedNetSalePrice
-            : null;
-    const nextInvoiceNotes = resolvePlannedNetSalePriceNote({
-        existingNotes: sale.invoice_notes,
-        plannedNetSalePrice: validPlannedNetSalePrice,
-        includeNote: includePlannedNetSalePriceNote,
-    });
+    const includeDamageNotesOnInvoice =
+        requestedIncludeDamageNotesOnInvoice &&
+        canIncludeVehicleDamageNotes(saleVehicle);
+    const nextInvoiceNotes = removePlannedNetSalePriceNote(sale.invoice_notes);
 
     if (
         Boolean(sale.include_damage_notes_on_invoice) !==
@@ -604,10 +552,8 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
     const invoiceId = getStringValue(formData, "invoice_id");
     const includeSignatureStamp =
         getStringValue(formData, "include_signature_stamp") === "yes";
-    const includeDamageNotesOnInvoice =
+    const requestedIncludeDamageNotesOnInvoice =
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
-    const includePlannedNetSalePriceNote =
-        getStringValue(formData, "include_planned_net_sale_price_note") === "yes";
 
     if (!saleId) {
         throw new Error("Verkauf fehlt.");
@@ -661,27 +607,14 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
         }
     }
 
-    const { error: saleOptionUpdateError } = await supabase
-        .from("sales")
-        .update({
-            include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
-        })
-        .eq("id", saleId)
-        .eq("company_id", companyId);
-
-    if (saleOptionUpdateError) {
-        throw new Error(
-            `Rechnungsoption konnte nicht gespeichert werden: ${saleOptionUpdateError.message}`,
-        );
-    }
-
     const { data: saleData, error: saleError } = await supabase
         .from("sales")
         .select(
             `
       invoice_notes,
       vehicles (
-        sale_price_net
+        damage_notes,
+        show_damage_on_invoice
       )
     `,
         )
@@ -699,20 +632,10 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
 
     const sale = saleData as Pick<SaleInvoiceSourceRow, "invoice_notes" | "vehicles">;
     const saleVehicle = getSingleRelation(sale.vehicles);
-    const plannedNetSalePrice =
-        saleVehicle?.sale_price_net === null ||
-        saleVehicle?.sale_price_net === undefined
-            ? null
-            : Number(saleVehicle.sale_price_net);
-    const validPlannedNetSalePrice =
-        plannedNetSalePrice !== null && Number.isFinite(plannedNetSalePrice)
-            ? plannedNetSalePrice
-            : null;
-    const nextInvoiceNotes = resolvePlannedNetSalePriceNote({
-        existingNotes: sale.invoice_notes,
-        plannedNetSalePrice: validPlannedNetSalePrice,
-        includeNote: includePlannedNetSalePriceNote,
-    });
+    const includeDamageNotesOnInvoice =
+        requestedIncludeDamageNotesOnInvoice &&
+        canIncludeVehicleDamageNotes(saleVehicle);
+    const nextInvoiceNotes = removePlannedNetSalePriceNote(sale.invoice_notes);
 
     if ((nextInvoiceNotes ?? null) !== (sale.invoice_notes ?? null)) {
         const { error: saleNotesUpdateError } = await supabase
@@ -728,6 +651,20 @@ export async function regenerateSaleInvoicePdfAction(formData: FormData) {
                 `Rechnungsnotiz konnte nicht gespeichert werden: ${saleNotesUpdateError.message}`,
             );
         }
+    }
+
+    const { error: saleOptionUpdateError } = await supabase
+        .from("sales")
+        .update({
+            include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
+        })
+        .eq("id", saleId)
+        .eq("company_id", companyId);
+
+    if (saleOptionUpdateError) {
+        throw new Error(
+            `Rechnungsoption konnte nicht gespeichert werden: ${saleOptionUpdateError.message}`,
+        );
     }
 
     const storedPdf = await generateAndStoreInvoicePdf(invoiceId);

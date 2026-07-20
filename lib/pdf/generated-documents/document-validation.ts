@@ -334,11 +334,6 @@ export const documentValidationRules: Record<
         ...vehicleBaseRules,
         ...saleBaseRules,
         ...invoiceRules,
-        {
-            field: "vehicle.firstRegistration",
-            label: "Fahrzeug: Erstzulassung",
-            message: "Die Erstzulassung fehlt.",
-        },
     ],
 
     entry_certificate: [

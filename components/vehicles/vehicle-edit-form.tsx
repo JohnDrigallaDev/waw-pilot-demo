@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
     ArrowLeft,
+    Download,
+    ExternalLink,
+    FileText,
     Save,
     Truck,
     Wallet,
@@ -20,6 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DocumentCard } from "@/components/shared/document-card";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { VehicleDocumentUploadForm } from "@/components/vehicles/vehicle-document-upload-form";
+import {
+    formatFileSize,
+    getDocumentSourceLabel,
+} from "@/lib/documents/document-helpers";
 
 type VehicleEditFormProps = {
     vehicle: VehicleDetail;
@@ -30,12 +40,6 @@ const initialState: UpdateVehicleState = {
     message: "",
 };
 
-function getDateInputValue(value: string | null): string {
-    if (!value) return "";
-
-    return value.slice(0, 10);
-}
-
 function getNumberInputValue(value: number | null): string {
     if (value === null) return "";
 
@@ -45,6 +49,27 @@ function getNumberInputValue(value: number | null): string {
 export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
     const updateVehicle = updateVehicleAction.bind(null, vehicle.id);
     const [state, formAction] = useActionState(updateVehicle, initialState);
+    const [damageNotes, setDamageNotes] = useState(vehicle.damage_notes ?? "");
+    const hasDamageNotes = damageNotes.trim().length > 0;
+    const primaryDocumentTypes = [
+        {
+            type: "vehicle_registration" as const,
+            label: "Fahrzeugschein",
+            description: "Zulassungsdokument des Fahrzeugs.",
+        },
+        {
+            type: "purchase_invoice" as const,
+            label: "Einkaufsrechnung",
+            description: "Rechnung oder Beleg zum Fahrzeugankauf.",
+        },
+    ];
+    const primaryDocuments = primaryDocumentTypes.map((definition) => ({
+        ...definition,
+        document:
+            vehicle.documents.find(
+                (document) => document.document_type === definition.type,
+            ) ?? null,
+    }));
 
     return (
         <div className="space-y-6">
@@ -140,9 +165,9 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
 
                                     <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
                                         <p className="text-sm font-extrabold text-slate-700">
-                                            Baujahr / Erstzulassung
+                                            Baujahr
                                         </p>
-                                        <div className="mt-3 grid gap-4 md:grid-cols-2">
+                                        <div className="mt-3">
                                             <FormField label="Baujahr" htmlFor="construction_year">
                                                 <Input
                                                     id="construction_year"
@@ -151,16 +176,6 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                                     min="1900"
                                                     max="2100"
                                                     defaultValue={getNumberInputValue(vehicle.construction_year)}
-                                                    className="h-12 rounded-2xl border-slate-200 bg-white font-semibold"
-                                                />
-                                            </FormField>
-
-                                            <FormField label="Erstzulassung" htmlFor="first_registration">
-                                                <Input
-                                                    id="first_registration"
-                                                    name="first_registration"
-                                                    type="date"
-                                                    defaultValue={getDateInputValue(vehicle.first_registration)}
                                                     className="h-12 rounded-2xl border-slate-200 bg-white font-semibold"
                                                 />
                                             </FormField>
@@ -218,22 +233,88 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                             className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
                                         />
                                     </FormField>
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                                    <FormField label="Geplanter Netto-VK" htmlFor="sale_price_net">
-                                        <Input
-                                            id="sale_price_net"
-                                            name="sale_price_net"
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            defaultValue={getNumberInputValue(vehicle.sale_price_net)}
-                                            className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"
-                                        />
-                                    </FormField>
-                                    <p className="text-xs font-semibold leading-5 text-slate-500 md:col-span-2">
-                                        Interner Ziel-Verkaufspreis netto. Dieser Wert dient als
-                                        Orientierung beim späteren Verkauf.
-                                    </p>
+                        <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                            <CardContent className="space-y-5 p-5">
+                                <SectionTitle
+                                    icon={FileText}
+                                    title="Dokumente"
+                                    description="Fahrzeugschein und Einkaufsrechnung öffnen, ersetzen oder entfernen."
+                                />
+
+                                <div className="space-y-4">
+                                    {primaryDocuments.map(
+                                        ({ type, label, description, document }) => (
+                                            <DocumentCard
+                                                key={type}
+                                                title={label}
+                                                description={description}
+                                                meta={
+                                                    document
+                                                        ? `${document.file_name} · ${formatFileSize(document.file_size)} · ${getDocumentSourceLabel(document.source as "generated" | "uploaded")}`
+                                                        : "Noch nicht hochgeladen"
+                                                }
+                                                status={
+                                                    <StatusBadge
+                                                        tone={
+                                                            document?.status === "available"
+                                                                ? "success"
+                                                                : "warning"
+                                                        }
+                                                    >
+                                                        {document?.status === "available"
+                                                            ? "Verfügbar"
+                                                            : "Fehlt"}
+                                                    </StatusBadge>
+                                                }
+                                                icon={<FileText className="size-5" />}
+                                                actions={
+                                                    <>
+                                                        {document?.file_path ? (
+                                                            <>
+                                                                <Button
+                                                                    asChild
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="rounded-xl font-bold"
+                                                                >
+                                                                    <Link
+                                                                        href={`/api/documents/${document.id}/file`}
+                                                                        target="_blank"
+                                                                    >
+                                                                        <ExternalLink className="mr-1 size-3.5" />
+                                                                        Öffnen
+                                                                    </Link>
+                                                                </Button>
+                                                                <Button
+                                                                    asChild
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="rounded-xl font-bold"
+                                                                >
+                                                                    <Link
+                                                                        href={`/api/documents/${document.id}/file?download=1`}
+                                                                    >
+                                                                        <Download className="mr-1 size-3.5" />
+                                                                        Download
+                                                                    </Link>
+                                                                </Button>
+                                                            </>
+                                                        ) : null}
+                                                        <VehicleDocumentUploadForm
+                                                            vehicleId={vehicle.id}
+                                                            documentType={type}
+                                                            documentLabel={label}
+                                                            existingDocumentId={document?.id ?? null}
+                                                        />
+                                                    </>
+                                                }
+                                            />
+                                        ),
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
@@ -259,7 +340,10 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                         <Textarea
                                             id="damage_notes"
                                             name="damage_notes"
-                                            defaultValue={vehicle.damage_notes ?? ""}
+                                            value={damageNotes}
+                                            onChange={(event) =>
+                                                setDamageNotes(event.currentTarget.value)
+                                            }
                                             rows={5}
                                             className="mt-2 rounded-3xl border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-7 text-slate-950"
                                             placeholder="Bekannte Schäden oder Mängel am Fahrzeug eintragen."
@@ -268,6 +352,38 @@ export function VehicleEditForm({ vehicle }: VehicleEditFormProps) {
                                             Bekannte Schäden oder Mängel am Fahrzeug eintragen.
                                         </p>
                                     </div>
+
+                                    <label
+                                        className={
+                                            hasDamageNotes
+                                                ? "mb-5 flex cursor-pointer items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4"
+                                                : "mb-5 flex cursor-not-allowed items-start gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 opacity-75"
+                                        }
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            name="show_damage_on_invoice"
+                                            value="yes"
+                                            defaultChecked={
+                                                vehicle.show_damage_on_invoice && hasDamageNotes
+                                            }
+                                            disabled={!hasDamageNotes}
+                                            className="mt-1 size-4 rounded border-amber-300 text-amber-700 disabled:cursor-not-allowed"
+                                        />
+                                        <span>
+                                            <span className="block font-extrabold text-slate-950">
+                                                Schadensangaben auf Rechnungen anzeigen
+                                            </span>
+                                            <span className="mt-1 block text-sm font-medium leading-6 text-slate-600">
+                                                Schäden bleiben intern, solange diese Option nicht aktiviert ist.
+                                            </span>
+                                            {!hasDamageNotes ? (
+                                                <span className="mt-1 block text-xs font-bold text-amber-700">
+                                                    Bitte erfasse zuerst eine Schadensbeschreibung.
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    </label>
 
                                     <label
                                         htmlFor="notes"

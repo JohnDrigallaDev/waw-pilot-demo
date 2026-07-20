@@ -76,15 +76,16 @@ export async function updateVehicleAction(
     const model = getStringValue(formData, "model");
     const vehicleType = getStringValue(formData, "vehicle_type");
     const constructionYear = getNumberValue(formData, "construction_year");
-    const firstRegistration = getStringValue(formData, "first_registration");
     const vin = getStringValue(formData, "vin");
     const licensePlate = getStringValue(formData, "license_plate");
     const purchasePriceNet = getNumberValue(formData, "purchase_price_net");
-    const salePriceNet = getNumberValue(formData, "sale_price_net");
     const additionalCostsNet = getNumberValue(formData, "additional_costs_net") ?? 0;
     const status = getStatusValue(formData);
     const notes = getStringValue(formData, "notes");
     const damageNotes = getStringValue(formData, "damage_notes");
+    const showDamageOnInvoice =
+        Boolean(damageNotes?.trim()) &&
+        getStringValue(formData, "show_damage_on_invoice") === "yes";
 
     if (!vehicleId) {
         return {
@@ -135,10 +136,13 @@ export async function updateVehicleAction(
         };
     }
 
-    if (salePriceNet !== null && salePriceNet < 0) {
+    if (
+        getStringValue(formData, "show_damage_on_invoice") === "yes" &&
+        !damageNotes?.trim()
+    ) {
         return {
             success: false,
-            message: "Bitte gib einen gültigen Verkaufspreis netto ein.",
+            message: "Bitte erfassen Sie zuerst eine Schadensbeschreibung.",
         };
     }
 
@@ -220,15 +224,14 @@ export async function updateVehicleAction(
             model,
             vehicle_type: vehicleType,
             construction_year: constructionYear,
-            first_registration: firstRegistration,
             vin,
             license_plate: licensePlate,
             purchase_price_net: purchasePriceNet,
-            sale_price_net: salePriceNet,
             additional_costs_net: additionalCostsNet,
             status,
             notes,
             damage_notes: damageNotes,
+            show_damage_on_invoice: showDamageOnInvoice,
         })
         .eq("id", vehicleId)
         .eq("company_id", companyId);

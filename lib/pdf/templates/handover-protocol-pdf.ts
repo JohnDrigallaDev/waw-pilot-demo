@@ -59,21 +59,12 @@ function getVehicleNumber(data: SaleGeneratedDocumentData): string {
         .join(" / ") || "—";
 }
 
-function getConstructionYearAndFirstRegistration(
-    data: SaleGeneratedDocumentData,
-): string {
+function getConstructionYearLabel(data: SaleGeneratedDocumentData): string {
     if (!data.vehicle) return "—";
 
-    return [
-        data.vehicle.constructionYear
-            ? `Baujahr ${data.vehicle.constructionYear}`
-            : null,
-        data.vehicle.firstRegistration
-            ? `Erstzulassung ${formatPdfDate(data.vehicle.firstRegistration)}`
-            : null,
-    ]
-        .filter(Boolean)
-        .join(" / ") || "—";
+    return data.vehicle.constructionYear
+        ? `Baujahr ${data.vehicle.constructionYear}`
+        : "—";
 }
 
 function getInvoiceNumber(data: SaleGeneratedDocumentData): string {
@@ -291,8 +282,8 @@ export async function generateHandoverProtocolPdf(
     });
 
     y = drawFormRow(ctx, {
-        label: "Baujahr/Erstzulassung:",
-        value: getConstructionYearAndFirstRegistration(data),
+        label: "Baujahr:",
+        value: getConstructionYearLabel(data),
         x: ctx.margin,
         y,
         rowHeight: 38,

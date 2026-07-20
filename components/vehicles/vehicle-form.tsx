@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { CalendarDays, Save, Truck } from "lucide-react";
+import { useActionState, useState } from "react";
+import { CalendarDays, FileText, Save, Truck } from "lucide-react";
 
 import { createVehicleAction } from "@/app/dashboard/vehicles/new/actions";
 import type { CustomerRow } from "@/lib/customers/customer-queries";
@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { VehicleDocumentUploadFields } from "@/components/vehicles/vehicle-document-upload-fields";
 
 const initialState = {
     success: false,
@@ -32,13 +33,15 @@ export function VehicleForm({
         createVehicleAction,
         initialState,
     );
+    const [damageNotes, setDamageNotes] = useState("");
+    const hasDamageNotes = damageNotes.trim().length > 0;
 
     return (
         <div className="space-y-6">
             <PageHeader
                 eyebrow="Neuer Fahrzeugankauf"
                 title="Fahrzeug ankaufen / erfassen"
-                description="Fahrzeugdaten, Einkaufspreis, geplanten Verkaufspreis und optional Verkäufer-Kunde speichern."
+                description="Fahrzeugdaten, Einkaufspreis, Dokumente und optional Verkäufer-Kunde speichern."
                 action={
                     <Button
                         asChild
@@ -89,28 +92,16 @@ export function VehicleForm({
                         <SectionTitle
                             icon={CalendarDays}
                             title="Zulassung & Zustand"
-                            description="Baujahr und Erstzulassung in einer Gruppe, bekannte Schäden separat erfassen."
+                            description="Baujahr und bekannte Schäden erfassen."
                         />
 
                         <div className="grid gap-4 md:grid-cols-2">
-                            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-                                <p className="mb-3 text-sm font-extrabold text-slate-700">
-                                    Baujahr / Erstzulassung
-                                </p>
-                                <div className="grid gap-4 md:grid-cols-2">
-                                    <FormField
-                                        label="Baujahr"
-                                        name="construction_year"
-                                        type="number"
-                                        placeholder="z. B. 2019"
-                                    />
-                                    <FormField
-                                        label="Erstzulassung"
-                                        name="first_registration"
-                                        type="date"
-                                    />
-                                </div>
-                            </div>
+                            <FormField
+                                label="Baujahr"
+                                name="construction_year"
+                                type="number"
+                                placeholder="z. B. 2019"
+                            />
                             <FormField
                                 label="Ankaufsdatum"
                                 name="purchase_date"
@@ -125,6 +116,8 @@ export function VehicleForm({
                             <Textarea
                                 id="damage_notes"
                                 name="damage_notes"
+                                value={damageNotes}
+                                onChange={(event) => setDamageNotes(event.target.value)}
                                 placeholder="Bekannte Schäden oder Mängel am Fahrzeug eintragen."
                                 className="min-h-28 rounded-2xl border-slate-200 bg-slate-50 font-medium"
                             />
@@ -132,6 +125,60 @@ export function VehicleForm({
                                 Bekannte Schäden oder Mängel am Fahrzeug eintragen.
                             </p>
                         </div>
+
+                        <label
+                            className={
+                                hasDamageNotes
+                                    ? "flex cursor-pointer items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4"
+                                    : "flex cursor-not-allowed items-start gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 opacity-75"
+                            }
+                        >
+                            <input
+                                type="checkbox"
+                                name="show_damage_on_invoice"
+                                value="yes"
+                                disabled={!hasDamageNotes}
+                                className="mt-1 size-4 rounded border-amber-300 text-amber-700 disabled:cursor-not-allowed"
+                            />
+                            <span>
+                                <span className="block font-extrabold text-slate-950">
+                                    Schadensangaben auf Rechnungen anzeigen
+                                </span>
+                                <span className="mt-1 block text-sm font-medium leading-6 text-slate-600">
+                                    Schäden bleiben intern, solange diese Option nicht aktiviert ist.
+                                </span>
+                                {!hasDamageNotes ? (
+                                    <span className="mt-1 block text-xs font-bold text-amber-700">
+                                        Bitte erfasse zuerst eine Schadensbeschreibung.
+                                    </span>
+                                ) : null}
+                            </span>
+                        </label>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                    <CardContent className="space-y-5 p-5">
+                        <SectionTitle
+                            icon={FileText}
+                            title="Dokumente"
+                            description="Fahrzeugschein und Einkaufsrechnung direkt mit dem Fahrzeug speichern."
+                        />
+
+                        <VehicleDocumentUploadFields
+                            fields={[
+                                {
+                                    name: "vehicle_registration_file",
+                                    label: "Fahrzeugschein",
+                                    description: "PDF, JPG, JPEG oder PNG auswählen.",
+                                },
+                                {
+                                    name: "purchase_invoice_file",
+                                    label: "Einkaufsrechnung",
+                                    description: "PDF, JPG, JPEG oder PNG auswählen.",
+                                },
+                            ]}
+                        />
                     </CardContent>
                 </Card>
 
@@ -142,7 +189,7 @@ export function VehicleForm({
                                 Preise & Verkäufer
                             </h2>
                             <p className="mt-1 text-sm font-medium text-slate-500">
-                                Einkaufspreis, geplanter Verkaufspreis und optionale Kundenzuordnung.
+                                Einkaufspreis und optionale Kundenzuordnung.
                             </p>
                         </div>
 
@@ -154,16 +201,6 @@ export function VehicleForm({
                                 step="0.01"
                                 required
                             />
-                            <FormField
-                                label="Geplanter Netto-VK"
-                                name="sale_price_net"
-                                type="number"
-                                step="0.01"
-                            />
-                            <p className="text-xs font-semibold leading-5 text-slate-500 md:col-span-2 xl:col-span-3">
-                                Interner Ziel-Verkaufspreis netto. Dieser Wert dient als
-                                Orientierung beim späteren Verkauf.
-                            </p>
                             <div className="space-y-2 md:col-span-2 xl:col-span-3">
                                 <Label
                                     htmlFor="seller_customer_id"

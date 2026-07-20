@@ -7,6 +7,9 @@ type VehicleDetailPageProps = {
     }>;
     searchParams: Promise<{
         vehicleSaved?: string;
+        vehicleDocumentUploaded?: string;
+        vehicleDocumentDeleted?: string;
+        vehicleDocumentUploadError?: string;
     }>;
 };
 
@@ -24,6 +27,13 @@ export default async function VehicleDetailPage({
         <VehicleDetail
             vehicle={vehicle}
             vehicleSaved={resolvedSearchParams.vehicleSaved === "1"}
+            vehicleDocumentUploaded={
+                resolvedSearchParams.vehicleDocumentUploaded === "1"
+            }
+            vehicleDocumentDeleted={resolvedSearchParams.vehicleDocumentDeleted === "1"}
+            vehicleDocumentUploadError={
+                resolvedSearchParams.vehicleDocumentUploadError ?? null
+            }
         />
     );
 }

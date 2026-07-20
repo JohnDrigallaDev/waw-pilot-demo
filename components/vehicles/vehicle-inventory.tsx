@@ -22,7 +22,6 @@ import {
     getVehicleStatusTone,
 } from "@/lib/vehicles/vehicle-helpers";
 import { formatCurrency } from "@/lib/format/currency";
-import { formatDate } from "@/lib/format/date";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -352,14 +351,6 @@ function VehicleTable({
                                     value={formatCurrency(vehicle.purchase_price_net)}
                                 />
                                 <MobileInfoBox
-                                    label="Verkauf"
-                                    value={
-                                        vehicle.sale_price_net
-                                            ? formatCurrency(vehicle.sale_price_net)
-                                            : "—"
-                                    }
-                                />
-                                <MobileInfoBox
                                     label="Gewinn"
                                     value={profit !== null ? formatCurrency(profit) : "—"}
                                     valueClassName={
@@ -451,7 +442,6 @@ function VehicleTable({
                         <th className="px-5 py-4">VIN</th>
                         <th className="px-5 py-4">Verkäufer</th>
                         <th className="px-5 py-4">Einkauf</th>
-                        <th className="px-5 py-4">Verkauf</th>
                         <th className="px-5 py-4">Gewinn</th>
                         <th className="px-5 py-4">Status</th>
                         <th className="px-5 py-4">Dokumente</th>
@@ -489,8 +479,7 @@ function VehicleTable({
                                         </p>
                                         <p className="mt-1 text-xs font-medium text-slate-500">
                                             {vehicle.vehicle_type} · BJ{" "}
-                                            {vehicle.construction_year ?? "—"} ·{" "}
-                                            {formatDate(vehicle.first_registration)}
+                                            {vehicle.construction_year ?? "—"}
                                         </p>
                                     </div>
                                 </td>
@@ -518,14 +507,6 @@ function VehicleTable({
                                 <td className="px-5 py-5">
                                     <p className="font-extrabold text-slate-950">
                                         {formatCurrency(vehicle.purchase_price_net)}
-                                    </p>
-                                </td>
-
-                                <td className="px-5 py-5">
-                                    <p className="font-extrabold text-slate-950">
-                                        {vehicle.sale_price_net
-                                            ? formatCurrency(vehicle.sale_price_net)
-                                            : "—"}
                                     </p>
                                 </td>
 

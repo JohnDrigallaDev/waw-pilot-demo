@@ -20,6 +20,7 @@ export type VehicleRow = {
     status: VehicleStatus;
     notes: string | null;
     damage_notes: string | null;
+    show_damage_on_invoice: boolean | null;
     created_at: string;
     seller_name: string | null;
     buyer_name: string | null;
@@ -61,6 +62,7 @@ export async function getVehicles(): Promise<VehicleRow[]> {
       status,
       notes,
       damage_notes,
+      show_damage_on_invoice,
       created_at
     `,
         )

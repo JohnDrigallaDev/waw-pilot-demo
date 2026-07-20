@@ -4,6 +4,13 @@ import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
+import {
+    getDocumentTooLargeMessage,
+    getDocumentUploadFailedMessage,
+    getUnsupportedVehicleDocumentTypeMessage,
+    isAllowedVehicleDocumentFile,
+    maxDocumentFileSizeBytes,
+} from "@/lib/documents/upload-validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
     getDuplicateInternalNumberMessage,
@@ -42,6 +49,33 @@ function getDateValue(formData: FormData, key: string): string | null {
     return getStringValue(formData, key);
 }
 
+function getFileValue(formData: FormData, key: string): File | null {
+    const value = formData.get(key);
+
+    if (!(value instanceof File) || value.size <= 0) return null;
+
+    return value;
+}
+
+function sanitizeFileName(fileName: string): string {
+    return fileName
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/ä/g, "ae")
+        .replace(/ö/g, "oe")
+        .replace(/ü/g, "ue")
+        .replace(/ß/g, "ss")
+        .replace(/[^a-z0-9.\-_]/g, "");
+}
+
+function getFileExtension(fileName: string): string {
+    const parts = fileName.split(".");
+    const extension = parts.length > 1 ? parts.pop() : null;
+
+    return extension ? `.${extension}` : "";
+}
+
 function getVehicleActivityName({
                                     internalNumber,
                                     manufacturer,
@@ -52,6 +86,95 @@ function getVehicleActivityName({
     model: string;
 }): string {
     return [internalNumber, manufacturer, model].filter(Boolean).join(" · ");
+}
+
+async function storeVehicleDocument({
+                                        supabase,
+                                        companyId,
+                                        vehicleId,
+                                        sellerCustomerId,
+                                        documentType,
+                                        label,
+                                        file,
+                                    }: {
+    supabase: ReturnType<typeof createServerSupabaseClient>;
+    companyId: string;
+    vehicleId: string;
+    sellerCustomerId: string | null;
+    documentType: "vehicle_registration" | "purchase_invoice";
+    label: string;
+    file: File;
+}): Promise<{ success: true } | { success: false; message: string }> {
+    if (!isAllowedVehicleDocumentFile(file)) {
+        return {
+            success: false,
+            message: getUnsupportedVehicleDocumentTypeMessage(),
+        };
+    }
+
+    if (file.size > maxDocumentFileSizeBytes) {
+        return {
+            success: false,
+            message: getDocumentTooLargeMessage(),
+        };
+    }
+
+    const originalFileName = sanitizeFileName(file.name);
+    const fileExtension = getFileExtension(originalFileName);
+    const fileName = `${documentType}-${Date.now()}${fileExtension}`;
+    const filePath = `vehicles/${vehicleId}/${fileName}`;
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+
+    const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, fileBuffer, {
+            contentType: file.type || "application/octet-stream",
+            upsert: false,
+        });
+
+    if (uploadError) {
+        console.error("[upload] vehicle document storage upload failed", uploadError);
+        return {
+            success: false,
+            message: getDocumentUploadFailedMessage(uploadError),
+        };
+    }
+
+    const { error: documentError } = await supabase.from("documents").insert({
+        company_id: companyId,
+        document_type: documentType,
+        source: "uploaded",
+        status: "available",
+        file_name: originalFileName || label,
+        file_path: filePath,
+        mime_type: file.type || null,
+        file_size: file.size,
+        customer_id: documentType === "purchase_invoice" ? sellerCustomerId : null,
+        vehicle_id: vehicleId,
+        sale_id: null,
+        invoice_id: null,
+        purchase_case_id: null,
+        generated_by_system: false,
+    });
+
+    if (documentError) {
+        await supabase.storage.from("documents").remove([filePath]);
+        console.error("[upload] vehicle document insert failed", documentError);
+
+        return {
+            success: false,
+            message:
+                "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
+        };
+    }
+
+    await logActivity({
+        action: `${label} für Fahrzeug hochgeladen`,
+        entityType: "document",
+        entityId: vehicleId,
+    });
+
+    return { success: true };
 }
 
 export async function createVehicleAction(
@@ -68,17 +191,33 @@ export async function createVehicleAction(
     const vin = getStringValue(formData, "vin");
 
     const constructionYear = getNumberValue(formData, "construction_year");
-    const firstRegistration = getDateValue(formData, "first_registration");
     const licensePlate = getStringValue(formData, "license_plate");
 
     const purchasePriceNet = getNumberValue(formData, "purchase_price_net");
-    const salePriceNet = getNumberValue(formData, "sale_price_net");
     const additionalCostsNet = getNumberValue(formData, "additional_costs_net") ?? 0;
 
     const sellerCustomerId = getStringValue(formData, "seller_customer_id");
     const purchaseDate = getDateValue(formData, "purchase_date");
     const notes = getStringValue(formData, "notes");
     const damageNotes = getStringValue(formData, "damage_notes");
+    const showDamageOnInvoice =
+        Boolean(damageNotes?.trim()) &&
+        getStringValue(formData, "show_damage_on_invoice") === "yes";
+    const vehicleRegistrationFile = getFileValue(
+        formData,
+        "vehicle_registration_file",
+    );
+    const purchaseInvoiceFile = getFileValue(formData, "purchase_invoice_file");
+
+    if (
+        getStringValue(formData, "show_damage_on_invoice") === "yes" &&
+        !damageNotes?.trim()
+    ) {
+        return {
+            success: false,
+            message: "Bitte erfassen Sie zuerst eine Schadensbeschreibung.",
+        };
+    }
 
     const internalNumber = submittedInternalNumber ?? (await getNextVehicleInternalNumber());
 
@@ -157,16 +296,17 @@ export async function createVehicleAction(
             model,
             vehicle_type: vehicleType,
             construction_year: constructionYear,
-            first_registration: firstRegistration,
+            first_registration: null,
             vin,
             license_plate: licensePlate,
             purchase_price_net: purchasePriceNet,
-            sale_price_net: salePriceNet,
+            sale_price_net: null,
             additional_costs_net: additionalCostsNet,
             status: "in_stock",
             seller_customer_id: sellerCustomerId || null,
             notes,
             damage_notes: damageNotes,
+            show_damage_on_invoice: showDamageOnInvoice,
         })
         .select("id")
         .single();
@@ -221,6 +361,44 @@ export async function createVehicleAction(
             entityType: "purchase",
             entityId: purchase.id as string,
         });
+
+    }
+
+    const documentUploads = [
+        vehicleRegistrationFile
+            ? {
+                  file: vehicleRegistrationFile,
+                  documentType: "vehicle_registration" as const,
+                  label: "Fahrzeugschein",
+              }
+            : null,
+        purchaseInvoiceFile
+            ? {
+                  file: purchaseInvoiceFile,
+                  documentType: "purchase_invoice" as const,
+                  label: "Einkaufsrechnung",
+              }
+            : null,
+    ].filter((upload): upload is NonNullable<typeof upload> => Boolean(upload));
+
+    for (const upload of documentUploads) {
+        const uploadResult = await storeVehicleDocument({
+            supabase,
+            companyId,
+            vehicleId,
+            sellerCustomerId,
+            documentType: upload.documentType,
+            label: upload.label,
+            file: upload.file,
+        });
+
+        if (!uploadResult.success) {
+            redirect(
+                `/dashboard/vehicles/${vehicleId}?vehicleSaved=1&vehicleDocumentUploadError=${encodeURIComponent(
+                    uploadResult.message,
+                )}`,
+            );
+        }
     }
 
     redirect(`/dashboard/vehicles?vehicleCreated=1&highlightVehicleId=${vehicleId}`);

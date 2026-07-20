@@ -503,7 +503,7 @@ function getThirdVehicleLineLabel(invoiceType: InvoiceType): string {
         return "Betriebsstunden:";
     }
 
-    return "Erstzulassung/Baujahr:";
+    return "Baujahr:";
 }
 
 function getThirdVehicleLineValue(data: InvoicePdfData): string {
@@ -511,9 +511,7 @@ function getThirdVehicleLineValue(data: InvoicePdfData): string {
         return "";
     }
 
-    return `${formatDate(data.vehicle.firstRegistration)} / ${safeText(
-        data.vehicle.constructionYear,
-    )}`;
+    return safeText(data.vehicle.constructionYear);
 }
 
 function getCustomerAddressLines(data: InvoicePdfData): string[] {
@@ -547,15 +545,6 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
         "Delivery terms: EXW (Ex Works) according to Incoterms",
         "Das KFZ wird unter Ausschluss jeder Gewährleistung, so wie es steht, verkauft. | Sold without warranty or guarantee .",
     ];
-    const damageNotes = data.vehicle.damageNotes?.trim();
-    const damageLines =
-        data.includeDamageNotesOnInvoice && damageNotes
-            ? [
-                  "",
-                  "Hinweis zu bekannten Schäden/Mängeln:",
-                  damageNotes,
-              ]
-            : [];
     const invoiceNoteLines = data.invoiceNotes?.trim()
         ? [
               "",
@@ -571,7 +560,6 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
         return [
             ...baseLines,
             ...invoiceNoteLines,
-            ...damageLines,
             "",
             "Steuerfreie innergemeinschaftliche Lieferung gemäß § 4 Nr. 1b UStG i.V.m. § 6a UStG. | Intra-Community supply exempt from VAT.",
         ];
@@ -581,13 +569,12 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
         return [
             ...baseLines,
             ...invoiceNoteLines,
-            ...damageLines,
             "",
             "Steuerfreie Ausfuhrlieferung gemäß § 4 Nr. 1a UStG. | Export delivery exempt from VAT according to § 4 No. 1a German VAT Act.",
         ];
     }
 
-    return [...baseLines, ...invoiceNoteLines, ...damageLines];
+    return [...baseLines, ...invoiceNoteLines];
 }
 
 function getTermsNotice(language: string | null | undefined): string {
@@ -606,6 +593,67 @@ function getTermsNotice(language: string | null | undefined): string {
     }
 
     return "Es gelten unsere Allgemeinen Geschäftsbedingungen. Die vollständigen AGB sind den nachfolgenden Seiten dieser Rechnung beigefügt.";
+}
+
+function drawDamageNotesPages(
+    pdfDoc: PDFDocument,
+    data: InvoicePdfData,
+    font: PDFFont,
+    boldFont: PDFFont,
+) {
+    const damageNotes = data.vehicle.damageNotes?.trim();
+
+    if (!data.includeDamageNotesOnInvoice || !damageNotes) return;
+
+    let damagePage = pdfDoc.addPage([pageWidth, pageHeight]);
+    let y = 780;
+
+    drawText(damagePage, "Fahrzeugzustand / bekannte Schäden", 42, y, {
+        font: boldFont,
+        size: 16,
+    });
+
+    y -= 34;
+
+    drawText(
+        damagePage,
+        `${safeText(data.vehicle.manufacturer)} ${safeText(data.vehicle.model)} · VIN ${safeText(data.vehicle.vin)}`,
+        42,
+        y,
+        {
+            font: boldFont,
+            size: 8,
+            color: gray,
+            maxWidth: 500,
+        },
+    );
+
+    y -= 28;
+
+    const paragraphs = damageNotes
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+    for (const paragraph of paragraphs.length > 0 ? paragraphs : [damageNotes]) {
+        const lines = wrapText(paragraph, font, 9, 500);
+
+        for (const line of lines) {
+            if (y < 72) {
+                damagePage = pdfDoc.addPage([pageWidth, pageHeight]);
+                y = 780;
+            }
+
+            drawText(damagePage, line, 42, y, {
+                font,
+                size: 9,
+                maxWidth: 500,
+            });
+            y -= 13;
+        }
+
+        y -= 7;
+    }
 }
 
 export async function generateInvoicePdf(
@@ -1054,6 +1102,8 @@ export async function generateInvoicePdf(
             color: gray,
         });
     }
+
+    drawDamageNotesPages(pdfDoc, data, helvetica, helveticaBold);
 
     return pdfDoc.save();
 }

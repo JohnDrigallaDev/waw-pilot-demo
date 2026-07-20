@@ -17,7 +17,6 @@ export function RegenerateInvoicePdfForm({
                                          }: RegenerateInvoicePdfFormProps) {
     const includeSignatureStampInputRef = useRef<HTMLInputElement>(null);
     const includeDamageNotesInputRef = useRef<HTMLInputElement>(null);
-    const includePlannedNetSalePriceNoteInputRef = useRef<HTMLInputElement>(null);
 
     function handleSubmit() {
         const signatureCheckbox = document.getElementById(
@@ -26,18 +25,12 @@ export function RegenerateInvoicePdfForm({
         const damageNotesCheckbox = document.getElementById(
             `sale-${saleId}-include-damage-notes`,
         );
-        const plannedNetSalePriceNoteCheckbox = document.getElementById(
-            `sale-${saleId}-include-planned-net-sale-price-note`,
-        );
         const includeSignatureStamp =
             signatureCheckbox instanceof HTMLInputElement &&
             signatureCheckbox.checked;
         const includeDamageNotes =
             damageNotesCheckbox instanceof HTMLInputElement &&
             damageNotesCheckbox.checked;
-        const includePlannedNetSalePriceNote =
-            plannedNetSalePriceNoteCheckbox instanceof HTMLInputElement &&
-            plannedNetSalePriceNoteCheckbox.checked;
 
         if (includeSignatureStampInputRef.current) {
             includeSignatureStampInputRef.current.value = includeSignatureStamp
@@ -51,10 +44,6 @@ export function RegenerateInvoicePdfForm({
                 : "no";
         }
 
-        if (includePlannedNetSalePriceNoteInputRef.current) {
-            includePlannedNetSalePriceNoteInputRef.current.value =
-                includePlannedNetSalePriceNote ? "yes" : "no";
-        }
     }
 
     return (
@@ -73,13 +62,6 @@ export function RegenerateInvoicePdfForm({
                 name="include_damage_notes_on_invoice"
                 value="no"
             />
-            <input
-                ref={includePlannedNetSalePriceNoteInputRef}
-                type="hidden"
-                name="include_planned_net_sale_price_note"
-                value="no"
-            />
-
             <Button
                 type="submit"
                 variant="outline"

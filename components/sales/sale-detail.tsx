@@ -369,8 +369,8 @@ export function SaleDetail({
                                     value={sale.vehicle.license_plate ?? "—"}
                                 />
                                 <InfoRow
-                                    label="Erstzulassung"
-                                    value={formatDate(sale.vehicle.first_registration)}
+                                    label="Baujahr"
+                                    value={sale.vehicle.construction_year?.toString() ?? "—"}
                                 />
                                 <InfoRow
                                     label="Einkauf netto"
@@ -447,11 +447,12 @@ export function SaleDetail({
                                 saleId={sale.id}
                                 existingInvoiceTypes={existingInvoiceTypes}
                                 damageNotes={sale.vehicle.damage_notes}
+                                allowDamageNotesOnInvoice={
+                                    sale.vehicle.show_damage_on_invoice
+                                }
                                 includeDamageNotesOnInvoice={
                                     sale.include_damage_notes_on_invoice
                                 }
-                                plannedNetSalePrice={sale.vehicle.sale_price_net}
-                                invoiceNotes={sale.invoice_notes}
                                 hasSignatureStampAssets={sale.has_signature_stamp_assets}
                                 initialIncludeSignatureStamp={sale.invoices.some(
                                     (invoice) => invoice.include_signature_stamp,

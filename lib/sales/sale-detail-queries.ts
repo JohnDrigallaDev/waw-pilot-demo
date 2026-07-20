@@ -95,6 +95,7 @@ type SaleDetailQueryRow = {
         sale_price_net: number | string | null;
         additional_costs_net: number | string;
         damage_notes: string | null;
+        show_damage_on_invoice: boolean | null;
     } | null;
 
     customers: {
@@ -210,6 +211,7 @@ export type SaleDetail = {
         sale_price_net: number | null;
         additional_costs_net: number;
         damage_notes: string | null;
+        show_damage_on_invoice: boolean;
     };
 
     invoice: SaleDetailInvoice | null;
@@ -299,7 +301,8 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         purchase_price_net,
         sale_price_net,
         additional_costs_net,
-        damage_notes
+        damage_notes,
+        show_damage_on_invoice
       ),
       customers:buyer_customer_id (
         type,
@@ -534,6 +537,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
                     : Number(sale.vehicles.sale_price_net),
             additional_costs_net: additionalCostsNet,
             damage_notes: sale.vehicles.damage_notes,
+            show_damage_on_invoice: Boolean(sale.vehicles.show_damage_on_invoice),
         },
 
         invoice: mainInvoice,

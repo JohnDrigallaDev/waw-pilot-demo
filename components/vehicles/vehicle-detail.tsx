@@ -17,6 +17,11 @@ import type { VehicleDetail as VehicleDetailType } from "@/lib/vehicles/vehicle-
 import { formatCurrency } from "@/lib/format/currency";
 import { formatDate } from "@/lib/format/date";
 import {
+    formatFileSize,
+    getDocumentSourceLabel,
+    getDocumentTypeLabel,
+} from "@/lib/documents/document-helpers";
+import {
     getPaymentStatusLabel,
     getPaymentStatusTone,
     getSaleStatusLabel,
@@ -28,15 +33,23 @@ import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FlashMessage } from "@/components/shared/flash-message";
+import { DocumentCard } from "@/components/shared/document-card";
+import { VehicleDocumentUploadForm } from "@/components/vehicles/vehicle-document-upload-form";
 
 type VehicleDetailProps = {
     vehicle: VehicleDetailType;
     vehicleSaved?: boolean;
+    vehicleDocumentUploaded?: boolean;
+    vehicleDocumentDeleted?: boolean;
+    vehicleDocumentUploadError?: string | null;
 };
 
 export function VehicleDetail({
                                   vehicle,
                                   vehicleSaved = false,
+                                  vehicleDocumentUploaded = false,
+                                  vehicleDocumentDeleted = false,
+                                  vehicleDocumentUploadError = null,
                               }: VehicleDetailProps) {
     const estimatedProfit =
         vehicle.sale_price_net === null
@@ -44,6 +57,31 @@ export function VehicleDetail({
             : vehicle.sale_price_net -
             vehicle.purchase_price_net -
             vehicle.additional_costs_net;
+    const primaryDocumentTypes = [
+        {
+            type: "vehicle_registration" as const,
+            label: "Fahrzeugschein",
+            description: "Zulassungsdokument des Fahrzeugs.",
+        },
+        {
+            type: "purchase_invoice" as const,
+            label: "Einkaufsrechnung",
+            description: "Rechnung oder Beleg zum Fahrzeugankauf.",
+        },
+    ];
+    const primaryDocuments = primaryDocumentTypes.map((definition) => ({
+        ...definition,
+        document:
+            vehicle.documents.find(
+                (document) => document.document_type === definition.type,
+            ) ?? null,
+    }));
+    const otherDocuments = vehicle.documents.filter(
+        (document) =>
+            !primaryDocumentTypes.some(
+                (definition) => definition.type === document.document_type,
+            ),
+    );
 
     return (
         <div className="space-y-6">
@@ -81,7 +119,22 @@ export function VehicleDetail({
                 <FlashMessage message="Fahrzeugdaten wurden gespeichert." />
             ) : null}
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {vehicleDocumentUploaded ? (
+                <FlashMessage message="Dokument wurde hochgeladen." />
+            ) : null}
+
+            {vehicleDocumentDeleted ? (
+                <FlashMessage message="Dokument wurde entfernt." />
+            ) : null}
+
+            {vehicleDocumentUploadError ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+                    Fahrzeug wurde gespeichert, aber ein Dokument konnte nicht hochgeladen werden:{" "}
+                    {vehicleDocumentUploadError}
+                </div>
+            ) : null}
+
+            <section className="grid gap-4 md:grid-cols-3">
                 <VehicleStatCard
                     label="Status"
                     value={getVehicleStatusLabel(vehicle.status)}
@@ -95,17 +148,6 @@ export function VehicleDetail({
                     description="Anschaffung"
                     icon={Wallet}
                     tone="neutral"
-                />
-                <VehicleStatCard
-                    label="Geplanter Netto-VK"
-                    value={
-                        vehicle.sale_price_net === null
-                            ? "—"
-                            : formatCurrency(vehicle.sale_price_net)
-                    }
-                    description="interner Zielpreis netto"
-                    icon={Receipt}
-                    tone={vehicle.sale_price_net ? "success" : "warning"}
                 />
                 <VehicleStatCard
                     label="Rohgewinn"
@@ -143,8 +185,8 @@ export function VehicleDetail({
                                     value={vehicle.license_plate ?? "—"}
                                 />
                                 <InfoRow
-                                    label="Baujahr / Erstzulassung"
-                                    value={`${vehicle.construction_year?.toString() ?? "—"} / ${formatDate(vehicle.first_registration)}`}
+                                    label="Baujahr"
+                                    value={vehicle.construction_year?.toString() ?? "—"}
                                 />
                                 <InfoRow
                                     label="Angelegt am"
@@ -165,6 +207,16 @@ export function VehicleDetail({
                             <p className="mt-5 rounded-3xl bg-slate-50 p-4 text-sm font-semibold leading-7 text-slate-700">
                                 {vehicle.damage_notes?.trim() || "Keine Schäden hinterlegt."}
                             </p>
+                            <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-sm font-extrabold text-slate-950">
+                                    Schadensangaben auf Rechnungen anzeigen
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-slate-600">
+                                    {vehicle.show_damage_on_invoice && vehicle.damage_notes?.trim()
+                                        ? "Aktiviert. Bei der Rechnungserstellung kann eine Variante mit Schadensangaben ausgewählt werden."
+                                        : "Deaktiviert. Schadensangaben bleiben intern."}
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -180,14 +232,6 @@ export function VehicleDetail({
                                 <InfoRow
                                     label="Einkauf netto"
                                     value={formatCurrency(vehicle.purchase_price_net)}
-                                />
-                                <InfoRow
-                                    label="Geplanter Netto-VK"
-                                    value={
-                                        vehicle.sale_price_net === null
-                                            ? "—"
-                                            : formatCurrency(vehicle.sale_price_net)
-                                    }
                                 />
                                 <InfoRow
                                     label="Rohgewinn netto"
@@ -290,34 +334,34 @@ export function VehicleDetail({
                                 />
                             </div>
 
-                            {vehicle.documents.length > 0 ? (
-                                <div className="divide-y divide-slate-100">
-                                    {vehicle.documents.map((document) => (
-                                        <div
-                                            key={document.id}
-                                            className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"
-                                        >
-                                            <div>
-                                                <p className="font-extrabold text-slate-950">
-                                                    {document.file_name}
-                                                </p>
-                                                <p className="mt-1 text-sm font-medium text-slate-500">
-                                                    {document.document_type} · {document.status}
-                                                </p>
-                                            </div>
-
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <StatusBadge
-                                                    tone={
-                                                        document.status === "available" ? "success" : "warning"
-                                                    }
-                                                >
-                                                    {document.status === "available"
-                                                        ? "Verfügbar"
-                                                        : "Prüfen"}
-                                                </StatusBadge>
-
-                                                {document.file_path ? (
+                            <div className="space-y-4 p-5">
+                                {primaryDocuments.map(({ type, label, description, document }) => (
+                                    <DocumentCard
+                                        key={type}
+                                        title={label}
+                                        description={description}
+                                        meta={
+                                            document
+                                                ? `${document.file_name} · ${formatFileSize(document.file_size)} · ${getDocumentSourceLabel(document.source as "generated" | "uploaded")}`
+                                                : "Noch nicht hochgeladen"
+                                        }
+                                        status={
+                                            <StatusBadge
+                                                tone={
+                                                    document?.status === "available"
+                                                        ? "success"
+                                                        : "warning"
+                                                }
+                                            >
+                                                {document?.status === "available"
+                                                    ? "Verfügbar"
+                                                    : "Fehlt"}
+                                            </StatusBadge>
+                                        }
+                                        icon={<FileText className="size-5" />}
+                                        actions={
+                                            <>
+                                                {document?.file_path ? (
                                                     <>
                                                         <Button
                                                             asChild
@@ -333,7 +377,6 @@ export function VehicleDetail({
                                                                 Öffnen
                                                             </Link>
                                                         </Button>
-
                                                         <Button
                                                             asChild
                                                             variant="outline"
@@ -349,15 +392,78 @@ export function VehicleDetail({
                                                         </Button>
                                                     </>
                                                 ) : null}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="p-5">
-                                    <EmptyBox text="Für dieses Fahrzeug sind noch keine Dokumente vorhanden." />
-                                </div>
-                            )}
+                                                <VehicleDocumentUploadForm
+                                                    vehicleId={vehicle.id}
+                                                    documentType={type}
+                                                    documentLabel={label}
+                                                    existingDocumentId={document?.id ?? null}
+                                                />
+                                            </>
+                                        }
+                                    />
+                                ))}
+
+                                {otherDocuments.length > 0 ? (
+                                    <div className="space-y-3">
+                                        <p className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
+                                            Weitere Dokumente
+                                        </p>
+                                        {otherDocuments.map((document) => (
+                                            <DocumentCard
+                                                key={document.id}
+                                                title={getDocumentTypeLabel(document.document_type)}
+                                                meta={`${document.file_name} · ${formatFileSize(document.file_size)}`}
+                                                status={
+                                                    <StatusBadge
+                                                        tone={
+                                                            document.status === "available"
+                                                                ? "success"
+                                                                : "warning"
+                                                        }
+                                                    >
+                                                        {document.status === "available"
+                                                            ? "Verfügbar"
+                                                            : "Prüfen"}
+                                                    </StatusBadge>
+                                                }
+                                                actions={
+                                                    document.file_path ? (
+                                                        <>
+                                                            <Button
+                                                                asChild
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="rounded-xl font-bold"
+                                                            >
+                                                                <Link
+                                                                    href={`/api/documents/${document.id}/file`}
+                                                                    target="_blank"
+                                                                >
+                                                                    <ExternalLink className="mr-1 size-3.5" />
+                                                                    Öffnen
+                                                                </Link>
+                                                            </Button>
+                                                            <Button
+                                                                asChild
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="rounded-xl font-bold"
+                                                            >
+                                                                <Link
+                                                                    href={`/api/documents/${document.id}/file?download=1`}
+                                                                >
+                                                                    <Download className="mr-1 size-3.5" />
+                                                                    Download
+                                                                </Link>
+                                                            </Button>
+                                                        </>
+                                                    ) : null
+                                                }
+                                            />
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </div>
                         </CardContent>
                     </Card>
 

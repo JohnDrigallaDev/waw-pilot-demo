@@ -120,31 +120,6 @@ function roundMoney(value: number): number {
     return Math.round(value * 100) / 100;
 }
 
-function formatCurrency(value: number): string {
-    return new Intl.NumberFormat("de-DE", {
-        style: "currency",
-        currency: "EUR",
-    }).format(value);
-}
-
-function getPlannedNetSalePriceNote(plannedNetSalePrice: number | null): string | null {
-    if (plannedNetSalePrice === null || plannedNetSalePrice <= 0) return null;
-
-    return `Geplanter Netto-VK laut Fahrzeugbestand: ${formatCurrency(plannedNetSalePrice)} netto`;
-}
-
-function appendUniqueNote(existingNotes: string | null, note: string | null): string | null {
-    if (!note) return existingNotes;
-
-    const trimmedExistingNotes = existingNotes?.trim() ?? "";
-
-    if (trimmedExistingNotes.includes(note)) {
-        return trimmedExistingNotes;
-    }
-
-    return [trimmedExistingNotes, note].filter(Boolean).join("\n\n");
-}
-
 function addDays(dateString: string, days: number): string {
     const date = new Date(dateString);
     date.setDate(date.getDate() + days);
@@ -360,10 +335,8 @@ export async function createSaleAction(
     const netAmount = getNumberValue(formData, "net_amount");
     const newCustomerType = getNewCustomerType(formData);
     const notes = getStringValue(formData, "notes");
-    const includeDamageNotesOnInvoice =
+    const requestedIncludeDamageNotesOnInvoice =
         getStringValue(formData, "include_damage_notes_on_invoice") === "yes";
-    const includePlannedNetSalePriceNote =
-        getStringValue(formData, "include_planned_net_sale_price_note") === "yes";
     const includeSignatureStamp =
         getStringValue(formData, "include_signature_stamp") === "yes";
 
@@ -419,7 +392,7 @@ export async function createSaleAction(
 
     const { data: vehicleData, error: vehicleLoadError } = await supabase
         .from("vehicles")
-        .select("internal_number, manufacturer, model, status, damage_notes, sale_price_net")
+        .select("internal_number, manufacturer, model, status, damage_notes, show_damage_on_invoice")
         .eq("id", vehicleId)
         .eq("company_id", companyId)
         .single();
@@ -571,20 +544,10 @@ export async function createSaleAction(
 
     const vatAmount = roundMoney(netAmount * (vatRate / 100));
     const grossAmount = roundMoney(netAmount + vatAmount);
-    const plannedNetSalePrice =
-        vehicleData.sale_price_net === null || vehicleData.sale_price_net === undefined
-            ? null
-            : Number(vehicleData.sale_price_net);
-    const validPlannedNetSalePrice =
-        plannedNetSalePrice !== null && Number.isFinite(plannedNetSalePrice)
-            ? plannedNetSalePrice
-            : null;
-    const invoiceNotes = includePlannedNetSalePriceNote
-        ? appendUniqueNote(
-              null,
-              getPlannedNetSalePriceNote(validPlannedNetSalePrice),
-          )
-        : null;
+    const includeDamageNotesOnInvoice =
+        requestedIncludeDamageNotesOnInvoice &&
+        Boolean(vehicleData.show_damage_on_invoice) &&
+        Boolean(vehicleData.damage_notes?.trim());
 
     let saleNumber: string;
 
@@ -618,7 +581,7 @@ export async function createSaleAction(
             document_check_status: "missing",
             datev_status: "not_sent",
             notes,
-            invoice_notes: invoiceNotes,
+            invoice_notes: null,
             include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
 
             export_destination_city: finalExportDestinationCity,

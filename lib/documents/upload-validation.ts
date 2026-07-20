@@ -1,9 +1,11 @@
 export const documentAcceptMimeTypes =
     "application/pdf,image/jpeg,image/png,image/webp";
+export const vehicleDocumentAcceptMimeTypes = "application/pdf,image/jpeg,image/png";
 export const imageAssetAcceptMimeTypes = "image/png,image/jpeg,image/webp";
 export const termsPdfAcceptMimeTypes = "application/pdf";
 export const maxImageAssetFileSizeBytes = 5 * 1024 * 1024;
 export const maxTermsPdfFileSizeBytes = 10 * 1024 * 1024;
+export const maxDocumentFileSizeBytes = 5 * 1024 * 1024;
 
 const allowedDocumentMimeTypes = new Set([
     "application/pdf",
@@ -13,6 +15,12 @@ const allowedDocumentMimeTypes = new Set([
 ]);
 
 const allowedDocumentExtensions = new Set(["pdf", "jpg", "jpeg", "png", "webp"]);
+const allowedVehicleDocumentMimeTypes = new Set([
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+]);
+const allowedVehicleDocumentExtensions = new Set(["pdf", "jpg", "jpeg", "png"]);
 
 export function isAllowedDocumentFile(file: Pick<File, "name" | "type">): boolean {
     if (file.type && allowedDocumentMimeTypes.has(file.type)) {
@@ -22,6 +30,18 @@ export function isAllowedDocumentFile(file: Pick<File, "name" | "type">): boolea
     const extension = file.name.split(".").pop()?.toLowerCase();
 
     return extension ? allowedDocumentExtensions.has(extension) : false;
+}
+
+export function isAllowedVehicleDocumentFile(
+    file: Pick<File, "name" | "type">,
+): boolean {
+    if (file.type && allowedVehicleDocumentMimeTypes.has(file.type)) {
+        return true;
+    }
+
+    const extension = file.name.split(".").pop()?.toLowerCase();
+
+    return extension ? allowedVehicleDocumentExtensions.has(extension) : false;
 }
 
 export function isAllowedImageAssetFile(file: Pick<File, "name" | "type">): boolean {
@@ -52,6 +72,14 @@ export function isAllowedTermsPdfFile(file: Pick<File, "name" | "type">): boolea
 
 export function getUnsupportedDocumentTypeMessage(): string {
     return "Dieser Dateityp wird nicht unterstützt. Bitte wähle PDF, JPG, PNG oder WEBP.";
+}
+
+export function getDocumentTooLargeMessage(): string {
+    return "Die Datei ist zu groß. Bitte wähle ein Dokument bis maximal 5 MB aus.";
+}
+
+export function getUnsupportedVehicleDocumentTypeMessage(): string {
+    return "Dieser Dateityp wird nicht unterstützt. Bitte wähle PDF, JPG oder PNG.";
 }
 
 export function getUnsupportedImageAssetTypeMessage(): string {

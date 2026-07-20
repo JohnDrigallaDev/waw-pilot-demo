@@ -200,10 +200,10 @@ export function PurchaseDetail({ purchase }: PurchaseDetailProps) {
                                         value={purchase.vehicle.license_plate ?? "—"}
                                     />
                                     <InfoRow
-                                        label="Erstzulassung"
-                                        value={formatDate(
-                                            purchase.vehicle.first_registration,
-                                        )}
+                                        label="Baujahr"
+                                        value={
+                                            purchase.vehicle.construction_year?.toString() ?? "—"
+                                        }
                                     />
                                     <InfoRow
                                         label="Fahrzeugstatus"
