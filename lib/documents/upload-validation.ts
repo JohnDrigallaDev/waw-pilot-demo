@@ -1,7 +1,9 @@
 export const documentAcceptMimeTypes =
     "application/pdf,image/jpeg,image/png,image/webp";
 export const imageAssetAcceptMimeTypes = "image/png,image/jpeg,image/webp";
+export const termsPdfAcceptMimeTypes = "application/pdf";
 export const maxImageAssetFileSizeBytes = 5 * 1024 * 1024;
+export const maxTermsPdfFileSizeBytes = 10 * 1024 * 1024;
 
 const allowedDocumentMimeTypes = new Set([
     "application/pdf",
@@ -42,6 +44,12 @@ export function isAllowedImageAssetFile(file: Pick<File, "name" | "type">): bool
         : false;
 }
 
+export function isAllowedTermsPdfFile(file: Pick<File, "name" | "type">): boolean {
+    const extension = file.name.split(".").pop()?.toLowerCase();
+
+    return file.type === "application/pdf" && extension === "pdf";
+}
+
 export function getUnsupportedDocumentTypeMessage(): string {
     return "Dieser Dateityp wird nicht unterstützt. Bitte wähle PDF, JPG, PNG oder WEBP.";
 }
@@ -52,6 +60,10 @@ export function getUnsupportedImageAssetTypeMessage(): string {
 
 export function getImageAssetTooLargeMessage(): string {
     return "Die Datei ist zu groß. Bitte wähle ein kleineres Bild bis 5 MB aus.";
+}
+
+export function getInvalidTermsPdfMessage(): string {
+    return "Bitte lade eine gültige PDF-Datei mit maximal 10 MB hoch.";
 }
 
 export function getDocumentUploadFailedMessage(error: unknown): string {

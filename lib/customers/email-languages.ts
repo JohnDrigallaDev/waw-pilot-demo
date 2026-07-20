@@ -65,3 +65,63 @@ export function getEmailLanguageLabel(
             ?.label ?? "Deutsch"
     );
 }
+
+function normalizeCountryText(value: string | null | undefined): string {
+    return (value ?? "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z]/g, "");
+}
+
+export function getSuggestedEmailLanguage({
+                                              countryCode,
+                                              country,
+                                              preferredLanguage,
+                                              selectedLanguage,
+                                          }: {
+    countryCode?: string | null;
+    country?: string | null;
+    preferredLanguage?: string | null;
+    selectedLanguage?: string | null;
+}): EmailLanguage {
+    if (selectedLanguage && EMAIL_LANGUAGE_VALUES.has(selectedLanguage)) {
+        return selectedLanguage as EmailLanguage;
+    }
+
+    if (preferredLanguage && EMAIL_LANGUAGE_VALUES.has(preferredLanguage)) {
+        return preferredLanguage as EmailLanguage;
+    }
+
+    const normalizedCountryCode = countryCode?.trim().toLowerCase();
+    const normalizedCountry = normalizeCountryText(country);
+
+    if (
+        normalizedCountryCode === "de" ||
+        normalizedCountryCode === "at" ||
+        normalizedCountryCode === "ch" ||
+        normalizedCountry === "deutschland" ||
+        normalizedCountry === "germany" ||
+        normalizedCountry === "osterreich" ||
+        normalizedCountry === "austria" ||
+        normalizedCountry === "schweiz" ||
+        normalizedCountry === "switzerland"
+    ) {
+        return "de";
+    }
+
+    if (normalizedCountryCode === "pl" || normalizedCountry === "polen" || normalizedCountry === "poland") {
+        return "pl";
+    }
+
+    if (
+        normalizedCountryCode === "bg" ||
+        normalizedCountry === "bulgarien" ||
+        normalizedCountry === "bulgaria"
+    ) {
+        return "bg";
+    }
+
+    return "en";
+}

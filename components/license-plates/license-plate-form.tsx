@@ -17,6 +17,7 @@ import { updateLicensePlateCaseAction } from "@/app/dashboard/plates/[plateCaseI
 import type { LicensePlateFormData } from "@/lib/license-plates/license-plate-form-data";
 import type { LicensePlateType } from "@/lib/license-plates/license-plate-queries";
 import { PageHeader } from "@/components/shared/page-header";
+import { CustomerCombobox } from "@/components/customers/customer-combobox";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -196,14 +197,16 @@ export function LicensePlateForm({
                                 defaultValue={initialValues?.vehicle_id ?? ""}
                                 required
                             />
-                            <SelectField
-                                label="Kunde *"
-                                name="customer_id"
-                                placeholder="Kunde auswählen"
-                                options={formData.customers}
-                                defaultValue={initialValues?.customer_id ?? ""}
-                                required
-                            />
+                            <div className="md:col-span-3">
+                                <CustomerCombobox
+                                    customers={formData.customers}
+                                    name="customer_id"
+                                    label="Kunde *"
+                                    value={initialValues?.customer_id ?? ""}
+                                    required
+                                    placeholder="Kunde nach Name, Firma, E-Mail oder Ort suchen..."
+                                />
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

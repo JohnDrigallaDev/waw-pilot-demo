@@ -50,6 +50,7 @@ import { DeleteSaleDocumentForm } from "@/components/sales/delete-sale-document-
 import { TemporaryHighlight } from "@/components/shared/temporary-highlight";
 import { RegenerateInvoicePdfForm } from "@/components/sales/regenerate-invoice-pdf-form";
 import { SendInvoiceEmailForm } from "@/components/sales/send-invoice-email-form";
+import { SendStampDocumentsDialog } from "@/components/sales/send-stamp-documents-dialog";
 import { ZugferdInvoiceActions } from "@/components/sales/zugferd-invoice-actions";
 
 type SaleDetailProps = {
@@ -72,6 +73,7 @@ type SaleDetailProps = {
     travelExpenseCreated?: boolean;
     exportDataSaved?: boolean;
     exportDataError?: boolean;
+    exportArrivalError?: boolean;
 };
 
 export function SaleDetail({
@@ -94,6 +96,7 @@ export function SaleDetail({
                                travelExpenseCreated = false,
                                exportDataSaved = false,
                                exportDataError = false,
+                               exportArrivalError = false,
                            }: SaleDetailProps) {
     const missingRequirementLabels = [
         ...sale.missing_required_labels,
@@ -254,6 +257,24 @@ export function SaleDetail({
                             <p className="mt-1 text-sm font-semibold text-red-800">
                                 Zielort, Zielland, Gelangensmonat, Gelangensjahr,
                                 Übergabedatum, Art der Verbringung und Empfänger sind erforderlich.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {exportArrivalError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
+                            <FileWarning className="size-5" />
+                        </div>
+                        <div>
+                            <p className="font-extrabold text-red-950">
+                                Monat des Gelangens ist ungültig.
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-red-800">
+                                Erlaubt ist nur der Verkaufsmonat oder der unmittelbar folgende Monat.
                             </p>
                         </div>
                     </div>
@@ -477,6 +498,21 @@ export function SaleDetail({
                                     title="Pflichtdokumente"
                                     description="Fehlende Unterlagen direkt hochladen und automatisch der Verkaufsakte zuordnen."
                                 />
+
+                                <div className="mt-4">
+                                    <SendStampDocumentsDialog
+                                        saleId={sale.id}
+                                        customer={{
+                                            name: sale.customer.name,
+                                            email: sale.customer.email,
+                                            preferred_language:
+                                                sale.customer.preferred_language,
+                                            country: sale.customer.country,
+                                        }}
+                                        vehicleLabel={`${sale.vehicle.internal_number} · ${sale.vehicle.name}`}
+                                        documents={sale.documents}
+                                    />
+                                </div>
 
                                 <div
                                     className={

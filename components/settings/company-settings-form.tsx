@@ -17,18 +17,25 @@ import {
 
 import {
     removeCompanySignatureAssetAction,
+    removeCompanyTermsPdfAction,
     updateCompanySettingsAction,
     uploadCompanySignatureAssetAction,
+    uploadCompanyTermsPdfAction,
     type UpdateCompanySettingsState,
 } from "@/app/dashboard/settings/actions";
 import type { CompanySettings } from "@/lib/settings/company-settings-queries";
 import {
     getImageAssetTooLargeMessage,
+    getInvalidTermsPdfMessage,
     getUnsupportedImageAssetTypeMessage,
     imageAssetAcceptMimeTypes,
+    isAllowedTermsPdfFile,
     isAllowedImageAssetFile,
     maxImageAssetFileSizeBytes,
+    maxTermsPdfFileSizeBytes,
+    termsPdfAcceptMimeTypes,
 } from "@/lib/documents/upload-validation";
+import { formatDate } from "@/lib/format/date";
 import { FlashMessage } from "@/components/shared/flash-message";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -41,6 +48,9 @@ type CompanySettingsFormProps = {
     signatureUploaded?: boolean;
     stampUploaded?: boolean;
     assetUploadError?: string;
+    termsUploaded?: boolean;
+    termsRemoved?: boolean;
+    termsUploadError?: string;
 };
 
 function createInitialState(company: CompanySettings): UpdateCompanySettingsState {
@@ -67,6 +77,9 @@ export function CompanySettingsForm({
     signatureUploaded = false,
     stampUploaded = false,
     assetUploadError,
+    termsUploaded = false,
+    termsRemoved = false,
+    termsUploadError,
 }: CompanySettingsFormProps) {
     const [state, formAction, isPending] = useActionState(
         updateCompanySettingsAction,
@@ -91,9 +104,23 @@ export function CompanySettingsForm({
                 <FlashMessage message="Firmenstempel wurde hochgeladen." />
             ) : null}
 
+            {termsUploaded ? (
+                <FlashMessage message="AGB-PDF wurde hochgeladen." />
+            ) : null}
+
+            {termsRemoved ? (
+                <FlashMessage message="AGB-PDF wurde entfernt." />
+            ) : null}
+
             {assetUploadError ? (
                 <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 shadow-sm">
                     {getAssetUploadErrorMessage(assetUploadError)}
+                </div>
+            ) : null}
+
+            {termsUploadError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 shadow-sm">
+                    {getTermsUploadErrorMessage(termsUploadError)}
                 </div>
             ) : null}
 
@@ -266,6 +293,18 @@ export function CompanySettingsForm({
                     </div>
                 </CardContent>
             </Card>
+
+            <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                <CardContent className="space-y-5 p-5">
+                    <SectionTitle
+                        icon={FileSignature}
+                        title="Allgemeine Geschäftsbedingungen"
+                        description="Hier können die aktuell gültigen AGB als PDF hinterlegt werden. Die Datei wird bei neu erzeugten Rechnungen hinter den Rechnungsseiten angefügt."
+                    />
+
+                    <CompanyTermsPdfCard company={company} />
+                </CardContent>
+            </Card>
         </div>
     );
 }
@@ -290,6 +329,119 @@ function SectionTitle({
                     {description}
                 </p>
             </div>
+        </div>
+    );
+}
+
+function CompanyTermsPdfCard({ company }: { company: CompanySettings }) {
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const hasTermsPdf = Boolean(company.terms_pdf_path);
+
+    function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+        const input = event.currentTarget;
+        const file = input.files?.[0];
+
+        setErrorMessage(null);
+
+        if (!file) {
+            setErrorMessage("Bitte wähle eine PDF-Datei aus.");
+            return;
+        }
+
+        if (file.size > maxTermsPdfFileSizeBytes || !isAllowedTermsPdfFile(file)) {
+            setErrorMessage(getInvalidTermsPdfMessage());
+            input.value = "";
+            return;
+        }
+
+        input.form?.requestSubmit();
+    }
+
+    return (
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                    <p className="text-sm font-black uppercase tracking-wide text-slate-400">
+                        Aktuelle Datei
+                    </p>
+                    {hasTermsPdf ? (
+                        <>
+                            <p className="mt-1 truncate text-lg font-extrabold text-slate-950">
+                                {company.terms_pdf_filename ?? "AGB.pdf"}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-500">
+                                Aktualisiert am{" "}
+                                {company.terms_pdf_uploaded_at
+                                    ? formatDate(company.terms_pdf_uploaded_at)
+                                    : "unbekannt"}
+                            </p>
+                        </>
+                    ) : (
+                        <p className="mt-1 text-sm font-bold text-slate-500">
+                            Es sind derzeit keine AGB hinterlegt.
+                        </p>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    {hasTermsPdf ? (
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="h-10 rounded-xl bg-white font-bold"
+                        >
+                            <a href="/api/company-assets/terms" target="_blank">
+                                Öffnen / Herunterladen
+                            </a>
+                        </Button>
+                    ) : null}
+
+                    <form action={uploadCompanyTermsPdfAction}>
+                        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-cyan-700 px-4 text-sm font-extrabold text-white transition hover:bg-cyan-800">
+                            <Upload className="mr-2 size-4" />
+                            {hasTermsPdf ? "AGB ersetzen" : "AGB-PDF hochladen"}
+                            <input
+                                name="file"
+                                type="file"
+                                accept={termsPdfAcceptMimeTypes}
+                                required
+                                className="sr-only"
+                                onChange={handleFileChange}
+                            />
+                        </label>
+                    </form>
+
+                    {hasTermsPdf ? (
+                        <form
+                            action={removeCompanyTermsPdfAction}
+                            onSubmit={(event) => {
+                                if (
+                                    !window.confirm(
+                                        "AGB-PDF wirklich entfernen? Neu erzeugte Rechnungen enthalten dann keine AGB-Seiten mehr.",
+                                    )
+                                ) {
+                                    event.preventDefault();
+                                }
+                            }}
+                        >
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                className="h-10 rounded-xl border-red-100 bg-white font-bold text-red-700 hover:bg-red-50"
+                            >
+                                <Trash2 className="mr-2 size-4" />
+                                AGB entfernen
+                            </Button>
+                        </form>
+                    ) : null}
+                </div>
+            </div>
+
+            {errorMessage ? (
+                <p className="mt-3 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+                    {errorMessage}
+                </p>
+            ) : null}
         </div>
     );
 }
@@ -454,4 +606,16 @@ function getAssetUploadErrorMessage(errorCode: string): string {
     }
 
     return "Unterschrift oder Stempel konnte nicht hochgeladen werden. Bitte versuche es erneut.";
+}
+
+function getTermsUploadErrorMessage(errorCode: string): string {
+    if (errorCode === "invalidFile") {
+        return getInvalidTermsPdfMessage();
+    }
+
+    if (errorCode === "removeFailed") {
+        return "AGB-PDF konnte nicht entfernt werden. Bitte versuche es erneut.";
+    }
+
+    return "AGB-PDF konnte nicht hochgeladen werden. Bitte versuche es erneut.";
 }

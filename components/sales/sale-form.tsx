@@ -21,11 +21,15 @@ import {
 import { createSaleAction } from "@/app/dashboard/sales/new/actions";
 import type { CustomerRow } from "@/lib/customers/customer-queries";
 import { EMAIL_LANGUAGE_OPTIONS } from "@/lib/customers/email-languages";
-import { getCustomerDisplayName } from "@/lib/customers/customer-helpers";
+import {
+    getAllowedArrivalPeriods,
+    getArrivalYearOptions,
+} from "@/lib/sales/export-date-rules";
 import type { VehicleRow } from "@/lib/vehicles/vehicle-queries";
 import { getVehicleDisplayName } from "@/lib/vehicles/vehicle-helpers";
 import { formatCurrency } from "@/lib/format/currency";
 import { phoneInputPattern, sanitizePhoneInput } from "@/lib/validation/phone";
+import { CustomerCombobox } from "@/components/customers/customer-combobox";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,33 +41,6 @@ const initialState = {
     success: false,
     message: "",
 };
-
-const monthOptions = [
-    { value: "", label: "Bitte wählen" },
-    { value: "01", label: "Januar" },
-    { value: "02", label: "Februar" },
-    { value: "03", label: "März" },
-    { value: "04", label: "April" },
-    { value: "05", label: "Mai" },
-    { value: "06", label: "Juni" },
-    { value: "07", label: "Juli" },
-    { value: "08", label: "August" },
-    { value: "09", label: "September" },
-    { value: "10", label: "Oktober" },
-    { value: "11", label: "November" },
-    { value: "12", label: "Dezember" },
-];
-
-function getYearOptions() {
-    const currentYear = new Date().getFullYear();
-
-    return [
-        "",
-        String(currentYear - 1),
-        String(currentYear),
-        String(currentYear + 1),
-    ];
-}
 
 type BuyerMode = "existing" | "new";
 type NewCustomerType = "company" | "private";
@@ -121,13 +98,23 @@ export function SaleForm({
     const [newCustomerType, setNewCustomerType] =
         useState<NewCustomerType>("company");
 
+    const today = new Date().toISOString().slice(0, 10);
     const [saleType, setSaleType] = useState<SaleType>("inland");
+    const [saleDate, setSaleDate] = useState(today);
     const [selectedCustomerId, setSelectedCustomerId] = useState(
         defaultCustomerId ?? "",
     );
     const [selectedVehicleId, setSelectedVehicleId] = useState(
         defaultVehicleId ?? "",
     );
+    const [exportDestinationCity, setExportDestinationCity] = useState("");
+    const [exportDestinationCountry, setExportDestinationCountry] = useState("");
+    const [destinationCityManuallyChanged, setDestinationCityManuallyChanged] =
+        useState(false);
+    const [
+        destinationCountryManuallyChanged,
+        setDestinationCountryManuallyChanged,
+    ] = useState(false);
     const [netAmount, setNetAmount] = useState("");
     const [vatRate, setVatRate] = useState("19");
     const requiresExportDetails =
@@ -149,7 +136,8 @@ export function SaleForm({
     const requiresNewCustomerTaxNumber = buyerMode === "new" && saleType === "inland";
     const requiresNewCustomerVatId = buyerMode === "new" && saleType === "eu";
 
-    const today = new Date().toISOString().slice(0, 10);
+    const allowedArrivalPeriods = getAllowedArrivalPeriods(saleDate);
+    const allowedArrivalYears = getArrivalYearOptions();
     const previewNetAmount = parseDecimalInput(netAmount) ?? 0;
     const previewVatRate = parseDecimalInput(vatRate) ?? 0;
     const previewVatAmount = roundMoney(previewNetAmount * (previewVatRate / 100));
@@ -158,6 +146,31 @@ export function SaleForm({
     function handleSaleTypeChange(nextSaleType: SaleType) {
         setSaleType(nextSaleType);
         setVatRate(getDefaultVatRateForSaleType(nextSaleType));
+
+        if (nextSaleType !== "inland" && selectedCustomer) {
+            applyCustomerAddress(selectedCustomer);
+        }
+    }
+
+    function applyCustomerAddress(customer: CustomerRow | null) {
+        if (!customer) return;
+
+        if (!destinationCityManuallyChanged) {
+            setExportDestinationCity(customer.city ?? "");
+        }
+
+        if (!destinationCountryManuallyChanged) {
+            setExportDestinationCountry(customer.country ?? "");
+        }
+    }
+
+    function handleSelectedCustomerChange(customerId: string) {
+        setSelectedCustomerId(customerId);
+        const customer = customers.find((item) => item.id === customerId) ?? null;
+
+        if (requiresExportDetails) {
+            applyCustomerAddress(customer);
+        }
     }
 
     return (
@@ -283,30 +296,15 @@ export function SaleForm({
 
                         {buyerMode === "existing" ? (
                             <div className="space-y-2">
-                                <Label
-                                    htmlFor="buyer_customer_id"
-                                    className="font-bold text-slate-700"
-                                >
-                                    Käufer *
-                                </Label>
-
-                                <select
-                                    id="buyer_customer_id"
+                                <CustomerCombobox
+                                    customers={customers}
                                     name="buyer_customer_id"
-                                    required
-                                    className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
+                                    label="Käufer *"
                                     value={selectedCustomerId}
-                                    onChange={(event) =>
-                                        setSelectedCustomerId(event.target.value)
-                                    }
-                                >
-                                    <option value="">Käufer auswählen</option>
-                                    {customers.map((customer) => (
-                                        <option key={customer.id} value={customer.id}>
-                                            {getCustomerDisplayName(customer)}
-                                        </option>
-                                    ))}
-                                </select>
+                                    required
+                                    placeholder="Käufer nach Name, Firma, E-Mail oder Ort suchen..."
+                                    onChange={handleSelectedCustomerChange}
+                                />
 
                                 {customers.length === 0 ? (
                                     <p className="text-sm font-bold text-amber-700">
@@ -570,6 +568,11 @@ export function SaleForm({
                                 )}
                                 name="export_destination_city"
                                 required={requiresExportDetails}
+                                value={exportDestinationCity}
+                                onChange={(event) => {
+                                    setDestinationCityManuallyChanged(true);
+                                    setExportDestinationCity(event.target.value);
+                                }}
                                 placeholder="z. B. Wien"
                             />
 
@@ -580,8 +583,31 @@ export function SaleForm({
                                 )}
                                 name="export_destination_country"
                                 required={requiresExportDetails}
+                                value={exportDestinationCountry}
+                                onChange={(event) => {
+                                    setDestinationCountryManuallyChanged(true);
+                                    setExportDestinationCountry(event.target.value);
+                                }}
                                 placeholder="z. B. Österreich"
                             />
+
+                            {requiresExportDetails && selectedCustomer ? (
+                                <div className="md:col-span-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-10 rounded-2xl border-cyan-200 bg-white font-bold text-cyan-800 hover:bg-cyan-50"
+                                        onClick={() => {
+                                            setDestinationCityManuallyChanged(false);
+                                            setDestinationCountryManuallyChanged(false);
+                                            setExportDestinationCity(selectedCustomer.city ?? "");
+                                            setExportDestinationCountry(selectedCustomer.country ?? "");
+                                        }}
+                                    >
+                                        Aus Rechnungsadresse übernehmen
+                                    </Button>
+                                </div>
+                            ) : null}
 
                             <div className="space-y-2">
                                 <Label
@@ -600,9 +626,10 @@ export function SaleForm({
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                                     defaultValue=""
                                 >
-                                    {monthOptions.map((option) => (
-                                        <option key={option.value || "empty"} value={option.value}>
-                                            {option.label}
+                                    <option value="">Bitte wählen</option>
+                                    {allowedArrivalPeriods.map((period) => (
+                                        <option key={`${period.month}-${period.year}`} value={period.month}>
+                                            {period.label}
                                         </option>
                                     ))}
                                 </select>
@@ -625,9 +652,10 @@ export function SaleForm({
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                                     defaultValue=""
                                 >
-                                    {getYearOptions().map((year) => (
+                                    <option value="">Bitte wählen</option>
+                                    {allowedArrivalYears.map((year) => (
                                         <option key={year || "empty"} value={year}>
-                                            {year || "Bitte wählen"}
+                                            {year}
                                         </option>
                                     ))}
                                 </select>
@@ -717,7 +745,8 @@ export function SaleForm({
                                 label="Verkaufsdatum *"
                                 name="sale_date"
                                 type="date"
-                                defaultValue={today}
+                                value={saleDate}
+                                onChange={(event) => setSaleDate(event.target.value)}
                                 required
                             />
                         </div>

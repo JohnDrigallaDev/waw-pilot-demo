@@ -8,6 +8,9 @@ type SettingsPageProps = {
         signatureUploaded?: string;
         stampUploaded?: string;
         assetUploadError?: string;
+        termsUploaded?: string;
+        termsRemoved?: string;
+        termsUploadError?: string;
     }>;
 };
 
@@ -23,6 +26,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             signatureUploaded={resolvedSearchParams.signatureUploaded === "1"}
             stampUploaded={resolvedSearchParams.stampUploaded === "1"}
             assetUploadError={resolvedSearchParams.assetUploadError}
+            termsUploaded={resolvedSearchParams.termsUploaded === "1"}
+            termsRemoved={resolvedSearchParams.termsRemoved === "1"}
+            termsUploadError={resolvedSearchParams.termsUploadError}
         />
     );
 }

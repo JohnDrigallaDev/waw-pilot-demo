@@ -7,7 +7,7 @@ RUN mvn -B dependency:go-offline
 COPY src ./src
 RUN mvn -B package -DskipTests
 
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:21-jre-noble
 
 ARG VERAPDF_VERSION=1.30.2
 ARG VERAPDF_MINOR=1.30

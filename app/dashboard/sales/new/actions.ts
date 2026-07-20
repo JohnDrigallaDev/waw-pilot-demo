@@ -17,6 +17,7 @@ import {
     normalizeEmailLanguage,
     type EmailLanguage,
 } from "@/lib/customers/email-languages";
+import { isAllowedArrivalPeriod } from "@/lib/sales/export-date-rules";
 
 type CreateSaleState = {
     success: boolean;
@@ -381,23 +382,6 @@ export async function createSaleAction(
         };
     }
 
-    if (
-        requiresExportDetails(saleType) &&
-        (!exportDestinationCity ||
-            !exportDestinationCountry ||
-            !exportArrivalMonth ||
-            !exportArrivalYear ||
-            !exportTransportDate ||
-            !exportTransportType ||
-            !exportReceiverName)
-    ) {
-        return {
-            success: false,
-            message:
-                "Bitte fülle alle Export-/EU-Lieferdaten aus, da der Verkaufstyp EU-Verkauf oder Drittlandexport gewählt wurde.",
-        };
-    }
-
     if (!vehicleId) {
         return {
             success: false,
@@ -462,7 +446,7 @@ export async function createSaleAction(
 
     const { data: buyerCustomer, error: buyerCustomerLoadError } = await supabase
         .from("customers")
-        .select("tax_number, vat_id")
+        .select("tax_number, vat_id, city, country")
         .eq("id", buyerCustomerId)
         .eq("company_id", companyId)
         .single();
@@ -496,6 +480,43 @@ export async function createSaleAction(
         return {
             success: false,
             message: "Bitte wähle ein Verkaufsdatum aus.",
+        };
+    }
+
+    const finalExportDestinationCity =
+        exportDestinationCity ?? buyerCustomer.city ?? null;
+    const finalExportDestinationCountry =
+        exportDestinationCountry ?? buyerCustomer.country ?? null;
+
+    if (
+        requiresExportDetails(saleType) &&
+        (!finalExportDestinationCity ||
+            !finalExportDestinationCountry ||
+            !exportArrivalMonth ||
+            !exportArrivalYear ||
+            !exportTransportDate ||
+            !exportTransportType ||
+            !exportReceiverName)
+    ) {
+        return {
+            success: false,
+            message:
+                "Bitte fülle alle Export-/EU-Lieferdaten aus. Zielort und Zielland können aus der Rechnungsadresse übernommen werden.",
+        };
+    }
+
+    if (
+        requiresExportDetails(saleType) &&
+        !isAllowedArrivalPeriod({
+            saleDate,
+            month: exportArrivalMonth,
+            year: exportArrivalYear,
+        })
+    ) {
+        return {
+            success: false,
+            message:
+                "Der Monat des Gelangens darf nur der Verkaufsmonat oder der unmittelbar folgende Monat sein.",
         };
     }
 
@@ -558,8 +579,8 @@ export async function createSaleAction(
             invoice_notes: invoiceNotes,
             include_damage_notes_on_invoice: includeDamageNotesOnInvoice,
 
-            export_destination_city: exportDestinationCity,
-            export_destination_country: exportDestinationCountry,
+            export_destination_city: finalExportDestinationCity,
+            export_destination_country: finalExportDestinationCountry,
             export_arrival_month: exportArrivalMonth,
             export_arrival_year: exportArrivalYear,
             export_transport_date: exportTransportDate,

@@ -1,7 +1,14 @@
+"use client";
+
+import { useState, type ChangeEventHandler } from "react";
 import { Globe2, Save, Truck } from "lucide-react";
 
 import { updateSaleExportDetailsAction } from "@/app/dashboard/sales/[saleId]/export-details-actions";
 import type { SaleExportDetails } from "@/lib/sales/sale-export-details-queries";
+import {
+    getAllowedArrivalPeriods,
+    getArrivalYearOptions,
+} from "@/lib/sales/export-date-rules";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -11,36 +18,17 @@ type SaleExportDetailsFormProps = {
     details: SaleExportDetails;
 };
 
-const monthOptions = [
-    { value: "", label: "Bitte wählen" },
-    { value: "01", label: "Januar" },
-    { value: "02", label: "Februar" },
-    { value: "03", label: "März" },
-    { value: "04", label: "April" },
-    { value: "05", label: "Mai" },
-    { value: "06", label: "Juni" },
-    { value: "07", label: "Juli" },
-    { value: "08", label: "August" },
-    { value: "09", label: "September" },
-    { value: "10", label: "Oktober" },
-    { value: "11", label: "November" },
-    { value: "12", label: "Dezember" },
-];
-
-function getYearOptions() {
-    const currentYear = new Date().getFullYear();
-
-    return [
-        "",
-        String(currentYear - 1),
-        String(currentYear),
-        String(currentYear + 1),
-    ];
-}
-
 export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
     const requiresExportDetails =
         details.sale_type === "eu" || details.sale_type === "export_third_country";
+    const [destinationCity, setDestinationCity] = useState(
+        details.export_destination_city ?? details.buyer_city ?? "",
+    );
+    const [destinationCountry, setDestinationCountry] = useState(
+        details.export_destination_country ?? details.buyer_country ?? "",
+    );
+    const allowedArrivalPeriods = getAllowedArrivalPeriods(details.sale_date);
+    const allowedArrivalYears = getArrivalYearOptions();
 
     return (
         <Card
@@ -74,7 +62,8 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                                 requiresExportDetails,
                             )}
                             name="export_destination_city"
-                            defaultValue={details.export_destination_city ?? ""}
+                            value={destinationCity}
+                            onChange={(event) => setDestinationCity(event.target.value)}
                             placeholder="z. B. Wien"
                             required={requiresExportDetails}
                         />
@@ -85,10 +74,27 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                                 requiresExportDetails,
                             )}
                             name="export_destination_country"
-                            defaultValue={details.export_destination_country ?? ""}
+                            value={destinationCountry}
+                            onChange={(event) => setDestinationCountry(event.target.value)}
                             placeholder="z. B. Österreich"
                             required={requiresExportDetails}
                         />
+
+                        {details.buyer_city || details.buyer_country ? (
+                            <div className="md:col-span-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-10 rounded-2xl border-cyan-200 bg-white font-bold text-cyan-800 hover:bg-cyan-50"
+                                    onClick={() => {
+                                        setDestinationCity(details.buyer_city ?? "");
+                                        setDestinationCountry(details.buyer_country ?? "");
+                                    }}
+                                >
+                                    Aus Rechnungsadresse übernehmen
+                                </Button>
+                            </div>
+                        ) : null}
 
                         <div className="space-y-2">
                             <Label
@@ -107,9 +113,10 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                                 defaultValue={details.export_arrival_month ?? ""}
                                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                             >
-                                {monthOptions.map((option) => (
-                                    <option key={option.value || "empty"} value={option.value}>
-                                        {option.label}
+                                <option value="">Bitte wählen</option>
+                                {allowedArrivalPeriods.map((period) => (
+                                    <option key={`${period.month}-${period.year}`} value={period.month}>
+                                        {period.label}
                                     </option>
                                 ))}
                             </select>
@@ -132,9 +139,10 @@ export function SaleExportDetailsForm({ details }: SaleExportDetailsFormProps) {
                                 defaultValue={details.export_arrival_year ?? ""}
                                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                             >
-                                {getYearOptions().map((year) => (
+                                <option value="">Bitte wählen</option>
+                                {allowedArrivalYears.map((year) => (
                                     <option key={year || "empty"} value={year}>
-                                        {year || "Bitte wählen"}
+                                        {year}
                                     </option>
                                 ))}
                             </select>
@@ -231,13 +239,17 @@ function FormField({
                        defaultValue,
                        placeholder,
                        required = false,
+                       value,
+                       onChange,
                    }: {
     label: string;
     name: string;
     type?: string;
-    defaultValue: string;
+    defaultValue?: string;
     placeholder?: string;
     required?: boolean;
+    value?: string;
+    onChange?: ChangeEventHandler<HTMLInputElement>;
 }) {
     return (
         <div className="space-y-2">
@@ -249,6 +261,8 @@ function FormField({
                 name={name}
                 type={type}
                 defaultValue={defaultValue}
+                value={value}
+                onChange={onChange}
                 placeholder={placeholder}
                 required={required}
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-semibold"

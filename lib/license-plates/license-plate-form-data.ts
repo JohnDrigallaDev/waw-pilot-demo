@@ -8,7 +8,15 @@ export type LicensePlateFormVehicle = {
 
 export type LicensePlateFormCustomer = {
     id: string;
-    label: string;
+    type: "company" | "private";
+    company_name: string | null;
+    owner_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    postal_code: string | null;
+    city: string | null;
+    country: string | null;
+    email: string | null;
 };
 
 export type LicensePlateFormSale = {
@@ -28,8 +36,13 @@ type CustomerRow = {
     id: string;
     type: "company" | "private";
     company_name: string | null;
+    owner_name: string | null;
     first_name: string | null;
     last_name: string | null;
+    postal_code: string | null;
+    city: string | null;
+    country: string | null;
+    email: string | null;
 };
 
 type SaleRow = {
@@ -83,7 +96,7 @@ export async function getLicensePlateFormData(): Promise<LicensePlateFormData> {
 
             supabase
                 .from("customers")
-                .select("id, type, company_name, first_name, last_name")
+                .select("id, type, company_name, owner_name, first_name, last_name, postal_code, city, country, email")
                 .eq("company_id", companyId)
                 .order("created_at", { ascending: false }),
 
@@ -129,7 +142,15 @@ export async function getLicensePlateFormData(): Promise<LicensePlateFormData> {
 
     const customers = ((customersData ?? []) as CustomerRow[]).map((customer) => ({
         id: customer.id,
-        label: getCustomerName(customer),
+        type: customer.type,
+        company_name: customer.company_name,
+        owner_name: customer.owner_name,
+        first_name: customer.first_name,
+        last_name: customer.last_name,
+        postal_code: customer.postal_code,
+        city: customer.city,
+        country: customer.country,
+        email: customer.email,
     }));
 
     const sales = ((salesData ?? []) as unknown as SaleRow[]).map((sale) => {

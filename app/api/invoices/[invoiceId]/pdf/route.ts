@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { buildFinalInvoicePdf, getCompanyTermsPdf } from "@/lib/pdf/company-terms";
 import { generateInvoicePdf } from "@/lib/pdf/invoice-pdf";
 import { getInvoicePdfData } from "@/lib/pdf/invoice-pdf-data";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -96,8 +97,18 @@ export async function GET(_request: Request, context: RouteContext) {
     }
 
     try {
-        const pdfData = await getInvoicePdfData(invoiceId);
-        const pdfBytes = await generateInvoicePdf(pdfData);
+        const [pdfData, termsPdf] = await Promise.all([
+            getInvoicePdfData(invoiceId),
+            getCompanyTermsPdf(),
+        ]);
+        const invoicePdfBytes = await generateInvoicePdf({
+            ...pdfData,
+            termsAttached: Boolean(termsPdf),
+        });
+        const pdfBytes = await buildFinalInvoicePdf({
+            invoicePdf: invoicePdfBytes,
+            termsPdf: termsPdf?.bytes ?? null,
+        });
 
         return new NextResponse(Buffer.from(pdfBytes), {
             headers: {

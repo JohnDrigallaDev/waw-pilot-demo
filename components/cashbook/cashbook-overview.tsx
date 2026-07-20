@@ -337,7 +337,7 @@ export function CashbookOverview({
                                     </p>
                                 </div>
 
-                                <div className="grid w-full gap-3 sm:grid-cols-2 2xl:w-auto 2xl:min-w-[48rem] 2xl:grid-cols-[11rem_13rem_1fr_auto]">
+                                <div className="grid w-full gap-3 sm:grid-cols-2 2xl:w-auto 2xl:min-w-[52rem] 2xl:grid-cols-[10rem_11rem_minmax(14rem,1fr)_auto]">
                                     <div className="space-y-1.5">
                                         <label
                                             htmlFor="payment-filter"
@@ -408,7 +408,8 @@ export function CashbookOverview({
                                             aria-label="Kassenbuch drucken"
                                             title="Drucken"
                                         >
-                                            <Printer className="size-4" />
+                                            <Printer className="mr-2 size-4" />
+                                            Drucken
                                         </Button>
 
                                         <Button
@@ -416,9 +417,10 @@ export function CashbookOverview({
                                             onClick={handleCsvExport}
                                             className="h-11 rounded-2xl bg-slate-950 px-4 font-bold text-white hover:bg-slate-800"
                                             aria-label="Kassenbuch als CSV exportieren"
-                                            title="CSV exportieren"
+                                            title="Herunterladen"
                                         >
-                                            <Download className="size-4" />
+                                            <Download className="mr-2 size-4" />
+                                            Herunterladen
                                         </Button>
                                     </div>
                                 </div>

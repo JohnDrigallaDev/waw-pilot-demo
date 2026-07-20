@@ -2,14 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { PDFDocument } from "pdf-lib";
 
 import { getCurrentCompanyId } from "@/lib/company";
 import {
     getDocumentUploadFailedMessage,
     getImageAssetTooLargeMessage,
+    getInvalidTermsPdfMessage,
     getUnsupportedImageAssetTypeMessage,
+    isAllowedTermsPdfFile,
     isAllowedImageAssetFile,
     maxImageAssetFileSizeBytes,
+    maxTermsPdfFileSizeBytes,
 } from "@/lib/documents/upload-validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -33,6 +37,10 @@ export type UpdateCompanySettingsState = {
 type CompanyAssetPathRow = {
     signature_image_path: string | null;
     stamp_image_path: string | null;
+};
+
+type CompanyTermsPathRow = {
+    terms_pdf_path: string | null;
 };
 
 function getStringValue(formData: FormData, key: string): string {
@@ -102,6 +110,10 @@ function getAssetField(assetType: string | null) {
 
 function redirectWithAssetUploadError(errorCode: string): never {
     redirect(`/dashboard/settings?assetUploadError=${encodeURIComponent(errorCode)}`);
+}
+
+function redirectWithTermsUploadError(errorCode: string): never {
+    redirect(`/dashboard/settings?termsUploadError=${encodeURIComponent(errorCode)}`);
 }
 
 export async function updateCompanySettingsAction(
@@ -235,6 +247,16 @@ export async function uploadCompanySignatureAssetAction(formData: FormData) {
     )}`;
     const fileBuffer = Buffer.from(await fileValue.arrayBuffer());
 
+    try {
+        const pdfDocument = await PDFDocument.load(fileBuffer);
+
+        if (pdfDocument.getPageCount() < 1) {
+            redirectWithTermsUploadError("invalidFile");
+        }
+    } catch {
+        redirectWithTermsUploadError("invalidFile");
+    }
+
     const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(filePath, fileBuffer, {
@@ -334,4 +356,122 @@ export async function removeCompanySignatureAssetAction(formData: FormData) {
     revalidatePath("/dashboard/invoices");
 
     redirect("/dashboard/settings?assetRemoved=1");
+}
+
+export async function uploadCompanyTermsPdfAction(formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+    const fileValue = formData.get("file");
+
+    if (!(fileValue instanceof File) || fileValue.size <= 0) {
+        redirectWithTermsUploadError("invalidFile");
+    }
+
+    if (
+        fileValue.size > maxTermsPdfFileSizeBytes ||
+        !isAllowedTermsPdfFile(fileValue)
+    ) {
+        redirectWithTermsUploadError("invalidFile");
+    }
+
+    const { data: companyData, error: companyError } = await supabase
+        .from("companies")
+        .select("terms_pdf_path")
+        .eq("id", companyId)
+        .single();
+
+    if (companyError || !companyData) {
+        console.error("[settings] company terms lookup failed", companyError);
+        redirectWithTermsUploadError("uploadFailed");
+    }
+
+    const oldPath = (companyData as CompanyTermsPathRow).terms_pdf_path;
+    const originalFileName = sanitizeFileName(fileValue.name) || "agb.pdf";
+    const filePath = `company-assets/${companyId}/terms/${Date.now()}-${originalFileName}`;
+    const fileBuffer = Buffer.from(await fileValue.arrayBuffer());
+
+    const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, fileBuffer, {
+            contentType: "application/pdf",
+            upsert: false,
+        });
+
+    if (uploadError) {
+        console.error("[settings] terms PDF upload failed", uploadError);
+        redirectWithTermsUploadError("uploadFailed");
+    }
+
+    const uploadedAt = new Date().toISOString();
+    const { error: updateError } = await supabase
+        .from("companies")
+        .update({
+            terms_pdf_path: filePath,
+            terms_pdf_filename: fileValue.name,
+            terms_pdf_mime_type: "application/pdf",
+            terms_pdf_size: fileValue.size,
+            terms_pdf_uploaded_at: uploadedAt,
+            updated_at: uploadedAt,
+        })
+        .eq("id", companyId);
+
+    if (updateError) {
+        await supabase.storage.from("documents").remove([filePath]);
+        console.error("[settings] terms PDF metadata update failed", updateError);
+        redirectWithTermsUploadError("uploadFailed");
+    }
+
+    if (oldPath && oldPath !== filePath) {
+        await supabase.storage.from("documents").remove([oldPath]);
+    }
+
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/sales");
+    revalidatePath("/dashboard/invoices");
+
+    redirect("/dashboard/settings?termsUploaded=1");
+}
+
+export async function removeCompanyTermsPdfAction(_formData: FormData) {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const { data: companyData, error: companyError } = await supabase
+        .from("companies")
+        .select("terms_pdf_path")
+        .eq("id", companyId)
+        .single();
+
+    if (companyError || !companyData) {
+        console.error("[settings] company terms lookup failed", companyError);
+        redirectWithTermsUploadError("removeFailed");
+    }
+
+    const oldPath = (companyData as CompanyTermsPathRow).terms_pdf_path;
+    const { error: updateError } = await supabase
+        .from("companies")
+        .update({
+            terms_pdf_path: null,
+            terms_pdf_filename: null,
+            terms_pdf_mime_type: null,
+            terms_pdf_size: null,
+            terms_pdf_uploaded_at: null,
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", companyId);
+
+    if (updateError) {
+        console.error("[settings] terms PDF remove failed", updateError);
+        redirectWithTermsUploadError("removeFailed");
+    }
+
+    if (oldPath) {
+        await supabase.storage.from("documents").remove([oldPath]);
+    }
+
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/sales");
+    revalidatePath("/dashboard/invoices");
+
+    redirect("/dashboard/settings?termsRemoved=1");
 }

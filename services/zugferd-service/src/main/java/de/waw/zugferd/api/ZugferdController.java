@@ -8,6 +8,8 @@ import de.waw.zugferd.model.ValidationResponse;
 import de.waw.zugferd.service.ZugferdPipelineService;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class ZugferdController {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ZugferdController.class);
     private final ZugferdPipelineService pipelineService;
 
     public ZugferdController(ZugferdPipelineService pipelineService) {
@@ -50,6 +53,8 @@ public class ZugferdController {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ValidationResponse> generalError(Exception exception) {
+        LOGGER.error("Unexpected ZUGFeRD service error", exception);
+
         ValidationIssue issue = new ValidationIssue(
                 "FACTUR_X",
                 "error",

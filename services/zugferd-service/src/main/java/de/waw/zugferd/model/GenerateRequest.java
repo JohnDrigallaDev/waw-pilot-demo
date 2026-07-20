@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 public record GenerateRequest(
         @NotBlank String standardVersion,
         @NotBlank String profile,
+        String invoiceProfile,
         @Valid @NotNull CanonicalInvoice invoice,
         @NotBlank String visiblePdfBase64
 ) {

@@ -14,11 +14,15 @@ type RouteContext = {
 type CompanyAssetQueryResult = {
     signature_image_path: string | null;
     stamp_image_path: string | null;
+    terms_pdf_path: string | null;
+    terms_pdf_filename: string | null;
+    terms_pdf_mime_type: string | null;
 };
 
 function getAssetPath(company: CompanyAssetQueryResult, asset: string) {
     if (asset === "signature") return company.signature_image_path;
     if (asset === "stamp") return company.stamp_image_path;
+    if (asset === "terms") return company.terms_pdf_path;
 
     return null;
 }
@@ -26,7 +30,7 @@ function getAssetPath(company: CompanyAssetQueryResult, asset: string) {
 export async function GET(_request: Request, context: RouteContext) {
     const { asset } = await context.params;
 
-    if (asset !== "signature" && asset !== "stamp") {
+    if (asset !== "signature" && asset !== "stamp" && asset !== "terms") {
         return NextResponse.json({ message: "Unbekannter Asset-Typ." }, { status: 404 });
     }
 
@@ -35,7 +39,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     const { data, error } = await supabase
         .from("companies")
-        .select("signature_image_path, stamp_image_path")
+        .select("signature_image_path, stamp_image_path, terms_pdf_path, terms_pdf_filename, terms_pdf_mime_type")
         .eq("id", companyId)
         .single();
 
@@ -50,7 +54,8 @@ export async function GET(_request: Request, context: RouteContext) {
         );
     }
 
-    const filePath = getAssetPath(data as CompanyAssetQueryResult, asset);
+    const company = data as CompanyAssetQueryResult;
+    const filePath = getAssetPath(company, asset);
 
     if (!filePath) {
         return NextResponse.json(
@@ -74,10 +79,21 @@ export async function GET(_request: Request, context: RouteContext) {
         );
     }
 
+    const headers: Record<string, string> = {
+        "Content-Type":
+            asset === "terms"
+                ? company.terms_pdf_mime_type ?? "application/pdf"
+                : fileData.type || "application/octet-stream",
+        "Cache-Control": "no-store",
+    };
+
+    if (asset === "terms") {
+        headers["Content-Disposition"] = `attachment; filename="${company.terms_pdf_filename ?? "agb.pdf"}"`;
+    }
+
     return new NextResponse(Buffer.from(await fileData.arrayBuffer()), {
         headers: {
-            "Content-Type": fileData.type || "application/octet-stream",
-            "Cache-Control": "no-store",
+            ...headers,
         },
     });
 }

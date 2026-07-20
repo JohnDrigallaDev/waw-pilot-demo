@@ -15,12 +15,13 @@ import {
     getInvoiceEmailTemplate,
     getZugferdInvoiceEmailTemplate,
 } from "@/lib/email/templates/invoice-email";
-import { normalizeEmailLanguage } from "@/lib/customers/email-languages";
+import { getSuggestedEmailLanguage, normalizeEmailLanguage } from "@/lib/customers/email-languages";
 import {
     EmailConfigurationError,
     sendEmailWithResend,
 } from "@/lib/email/resend";
 import { assertCompanySignatureStampConfigured } from "@/lib/pdf/company-signature-assets";
+import { buildFinalInvoicePdf, getCompanyTermsPdf } from "@/lib/pdf/company-terms";
 import { generateInvoicePdf } from "@/lib/pdf/invoice-pdf";
 import { getInvoicePdfData } from "@/lib/pdf/invoice-pdf-data";
 import { generateAndStoreInvoicePdf } from "@/lib/pdf/invoice-storage";
@@ -72,6 +73,7 @@ type InvoiceEmailCustomerRelation = {
     last_name: string | null;
     email: string | null;
     preferred_language: string | null;
+    country: string | null;
 };
 
 type InvoiceEmailQueryRow = {
@@ -313,6 +315,9 @@ function getZugferdValidationSummaryForStorage(
         pdfAValid: validation.pdfAValid,
         consistencyValid: validation.consistencyValid,
         issues: validation.issues,
+        blockingErrors: validation.blockingErrors ?? [],
+        warnings: validation.warnings ?? [],
+        profileNotices: validation.profileNotices ?? [],
     };
 }
 
@@ -796,7 +801,8 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
         first_name,
         last_name,
         email,
-        preferred_language
+        preferred_language,
+        country
       ),
       documents:pdf_document_id (
         file_name,
@@ -837,7 +843,10 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
     }
 
     const pdfBytes = Buffer.from(await fileData.arrayBuffer());
-    const language = normalizeEmailLanguage(customer.preferred_language, "en");
+    const language = getSuggestedEmailLanguage({
+        country: customer.country,
+        preferredLanguage: customer.preferred_language,
+    });
     const template = getInvoiceEmailTemplate(language, {
         invoiceNumber: invoice.invoice_number,
         customerName: getCustomerNameForEmail(customer),
@@ -956,9 +965,19 @@ export async function createZugferdInvoiceAction(formData: FormData) {
     } | null = null;
 
     try {
-        const pdfData = await getInvoicePdfData(invoiceId);
+        const [pdfData, termsPdf] = await Promise.all([
+            getInvoicePdfData(invoiceId),
+            getCompanyTermsPdf(),
+        ]);
         const canonicalInvoice = buildCanonicalInvoiceData(pdfData);
-        const visiblePdfBytes = await generateInvoicePdf(pdfData);
+        const invoicePdfBytes = await generateInvoicePdf({
+            ...pdfData,
+            termsAttached: Boolean(termsPdf),
+        });
+        const visiblePdfBytes = await buildFinalInvoicePdf({
+            invoicePdf: invoicePdfBytes,
+            termsPdf: termsPdf?.bytes ?? null,
+        });
         const serviceResult = await generateValidatedZugferdPdf({
             invoice: canonicalInvoice,
             visiblePdfBase64: Buffer.from(visiblePdfBytes).toString("base64"),
@@ -1163,7 +1182,8 @@ export async function sendZugferdInvoiceEmailAction(formData: FormData) {
         first_name,
         last_name,
         email,
-        preferred_language
+        preferred_language,
+        country
       )
     `,
         )
@@ -1201,7 +1221,10 @@ export async function sendZugferdInvoiceEmailAction(formData: FormData) {
         redirect(getZugferdErrorRedirect(saleId, invoiceId, "missingZugferd"));
     }
 
-    const language = normalizeEmailLanguage(customer.preferred_language, "de");
+    const language = getSuggestedEmailLanguage({
+        country: customer.country,
+        preferredLanguage: customer.preferred_language,
+    });
     const template = getZugferdInvoiceEmailTemplate(language, {
         invoiceNumber: invoice.invoice_number,
         customerName: getCustomerNameForEmail(customer),

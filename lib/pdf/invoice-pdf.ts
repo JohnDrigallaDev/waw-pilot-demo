@@ -2,23 +2,25 @@ import { readFile } from "fs/promises";
 import path from "path";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 import type { SaleType } from "@/lib/sales/sale-queries";
+import { normalizeEmailLanguage } from "@/lib/customers/email-languages";
 import {
     embedCompanyPdfImage,
     type CompanySignatureStampAssets,
 } from "@/lib/pdf/company-signature-assets";
 import {
     PDFDocument,
-    StandardFonts,
     rgb,
     type PDFFont,
     type PDFPage,
 } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 
 export type InvoicePdfData = {
     invoiceType: InvoiceType;
     saleType: SaleType;
     invoiceNumber: string;
     invoiceDate: string;
+    termsAttached?: boolean;
     signatureStamp?: CompanySignatureStampAssets & {
         include: boolean;
     };
@@ -43,6 +45,7 @@ export type InvoicePdfData = {
         city: string | null;
         country: string | null;
         vatId: string | null;
+        preferredLanguage?: string | null;
     };
 
     vehicle: {
@@ -75,6 +78,16 @@ const gray = rgb(0.55, 0.55, 0.55);
 const lightGray = rgb(0.86, 0.86, 0.86);
 const tableGray = rgb(0.72, 0.72, 0.72);
 const red = rgb(0.9, 0.05, 0.05);
+const pdfFontPath = path.join(
+    process.cwd(),
+    "node_modules",
+    "next",
+    "dist",
+    "compiled",
+    "@vercel",
+    "og",
+    "Geist-Regular.ttf",
+);
 
 function formatDate(value: string | null): string {
     if (!value) return "-";
@@ -577,14 +590,35 @@ function getPaymentAndTaxLines(data: InvoicePdfData): string[] {
     return [...baseLines, ...invoiceNoteLines, ...damageLines];
 }
 
+function getTermsNotice(language: string | null | undefined): string {
+    const normalizedLanguage = normalizeEmailLanguage(language, "de");
+
+    if (normalizedLanguage === "en") {
+        return "Our General Terms and Conditions apply. The full terms are attached on the following pages of this invoice.";
+    }
+
+    if (normalizedLanguage === "pl") {
+        return "Obowiązują nasze Ogólne Warunki Handlowe. Pełna treść warunków została dołączona na kolejnych stronach niniejszej faktury.";
+    }
+
+    if (normalizedLanguage === "bg") {
+        return "Прилагат се нашите Общи условия. Пълният текст на условията е приложен на следващите страници към настоящата фактура.";
+    }
+
+    return "Es gelten unsere Allgemeinen Geschäftsbedingungen. Die vollständigen AGB sind den nachfolgenden Seiten dieser Rechnung beigefügt.";
+}
+
 export async function generateInvoicePdf(
     data: InvoicePdfData,
 ): Promise<Uint8Array> {
     const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
     const page = pdfDoc.addPage([pageWidth, pageHeight]);
 
-    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const embeddedFontBytes = await readFile(pdfFontPath);
+    const embeddedFont = await pdfDoc.embedFont(embeddedFontBytes, { subset: false });
+    const helvetica = embeddedFont;
+    const helveticaBold = embeddedFont;
 
     const logoPath = path.join(process.cwd(), "public", "brand", "waw-logo.png");
     const logoBytes = await readFile(logoPath);
@@ -1009,6 +1043,17 @@ export async function generateInvoicePdf(
     );
 
     await drawSignatureStampImages(page, pdfDoc, data.signatureStamp);
+
+    if (data.termsAttached) {
+        drawWrappedText(page, getTermsNotice(data.customer.preferredLanguage), 42, 52, {
+            font: helvetica,
+            size: 5.8,
+            lineHeight: 7,
+            maxWidth: 500,
+            maxLines: 3,
+            color: gray,
+        });
+    }
 
     return pdfDoc.save();
 }

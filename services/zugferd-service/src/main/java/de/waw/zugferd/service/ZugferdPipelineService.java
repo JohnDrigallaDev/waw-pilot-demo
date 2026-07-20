@@ -4,6 +4,7 @@ import de.waw.zugferd.model.CanonicalInvoice;
 import de.waw.zugferd.model.GenerateRequest;
 import de.waw.zugferd.model.GenerateResponse;
 import de.waw.zugferd.model.HealthResponse;
+import de.waw.zugferd.model.InvoiceProfile;
 import de.waw.zugferd.model.ValidationIssue;
 import de.waw.zugferd.model.ValidationResponse;
 import de.waw.zugferd.model.ValidationSummary;
@@ -34,16 +35,20 @@ import org.mustangproject.LegalOrganisation;
 import org.mustangproject.Product;
 import org.mustangproject.TradeParty;
 import org.mustangproject.ZUGFeRD.IZUGFeRDExporter;
+import org.mustangproject.ZUGFeRD.PDFAConformanceLevel;
 import org.mustangproject.ZUGFeRD.Profiles;
 import org.mustangproject.ZUGFeRD.ZUGFeRD2PullProvider;
-import org.mustangproject.ZUGFeRD.ZUGFeRDExporterFromPDFA;
+import org.mustangproject.ZUGFeRD.ZUGFeRDExporterFromA3;
 import org.mustangproject.validator.ZUGFeRDValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 
 @Service
 public class ZugferdPipelineService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ZugferdPipelineService.class);
     private static final String MUSTANG_VERSION = "2.24.0";
     private static final String VERAPDF_VERSION = "1.30.2";
     private static final String STANDARD_VERSION = "ZUGFeRD 2.5 / Factur-X 1.09";
@@ -84,6 +89,7 @@ public class ZugferdPipelineService {
 
         try {
             validateRequest(request);
+            InvoiceProfile invoiceProfile = getInvoiceProfile(request);
 
             byte[] visiblePdf = decodePdf(request.visiblePdfBase64());
             Path inputPdf = workDir.resolve("visible.pdf");
@@ -92,13 +98,19 @@ public class ZugferdPipelineService {
             Path outputPdf = workDir.resolve("zugferd.pdf");
 
             Files.write(inputPdf, visiblePdf);
-            convertToPdfA3b(inputPdf, pdfaPdf);
+            convertToPdfA3b(inputPdf, pdfaPdf, workDir);
 
             byte[] xmlBytes = generateXml(request.invoice());
             Files.write(xml, xmlBytes);
 
             List<ValidationIssue> issues = new ArrayList<>();
-            boolean xmlValid = validateWithMustang(xml, issues, "xml");
+            boolean convertedPdfAValid = validateWithVeraPdf(pdfaPdf, issues, "VERAPDF_CONVERTED_PDFA3B");
+
+            if (!convertedPdfAValid) {
+                throw new ValidationFailedException(issues);
+            }
+
+            boolean xmlValid = validateWithMustang(xml, issues, "xml", invoiceProfile);
 
             if (!xmlValid) {
                 throw new ValidationFailedException(issues);
@@ -106,8 +118,8 @@ public class ZugferdPipelineService {
 
             embedXmlWithMustang(pdfaPdf, xmlBytes, outputPdf);
 
-            boolean mustangValid = validateWithMustang(outputPdf, issues, "mustang");
-            boolean pdfAValid = validateWithVeraPdf(outputPdf, issues);
+            boolean mustangValid = validateWithMustang(outputPdf, issues, "mustang", invoiceProfile);
+            boolean pdfAValid = validateWithVeraPdf(outputPdf, issues, "VERAPDF_FINAL_PDFA3B");
             boolean consistencyValid = validateConsistency(xml, request.invoice(), issues);
 
             if (!mustangValid || !pdfAValid || !consistencyValid) {
@@ -123,7 +135,7 @@ public class ZugferdPipelineService {
                     sha256,
                     STANDARD_VERSION,
                     PROFILE,
-                    new ValidationSummary(
+                    ValidationSummary.of(
                             "valid",
                             MUSTANG_VERSION,
                             VERAPDF_VERSION,
@@ -156,6 +168,12 @@ public class ZugferdPipelineService {
 
         if (!PROFILE.equals(request.profile())) {
             issues.add(error("PROFILE", "Es wird nur das Profil EN16931 unterstützt."));
+        }
+
+        try {
+            getInvoiceProfile(request);
+        } catch (IllegalArgumentException error) {
+            issues.add(error("INVOICE_PROFILE", "Das angeforderte E-Rechnungsprofil wird nicht unterstützt."));
         }
 
         CanonicalInvoice invoice = request.invoice();
@@ -217,6 +235,14 @@ public class ZugferdPipelineService {
         if (!issues.isEmpty()) {
             throw new ValidationFailedException(issues);
         }
+    }
+
+    private static InvoiceProfile getInvoiceProfile(GenerateRequest request) {
+        if (request.invoiceProfile() == null || request.invoiceProfile().isBlank()) {
+            return InvoiceProfile.ZUGFERD_EN16931;
+        }
+
+        return InvoiceProfile.valueOf(request.invoiceProfile().trim().toUpperCase());
     }
 
     private byte[] decodePdf(String visiblePdfBase64) {
@@ -304,44 +330,134 @@ public class ZugferdPipelineService {
         return tradeParty;
     }
 
-    private void convertToPdfA3b(Path inputPdf, Path outputPdf) throws IOException, InterruptedException {
+    private void convertToPdfA3b(Path inputPdf, Path outputPdf, Path workDir) throws IOException, InterruptedException {
+        Path iccProfile = Path.of(iccProfilePath).toAbsolutePath().normalize();
+
+        if (!Files.exists(iccProfile)) {
+            throw new ValidationFailedException(List.of(error(
+                    "PDFA_ICC_PROFILE",
+                    "Das Farbprofil für die PDF/A-3b-Konvertierung wurde im ZUGFeRD-Service nicht gefunden."
+            )));
+        }
+
+        Path pdfaDefinition = workDir.resolve("PDFA_def.ps");
+        writePdfADefinition(pdfaDefinition);
+
         List<String> command = List.of(
                 ghostscriptCommand,
                 "-dBATCH",
                 "-dNOPAUSE",
                 "-dNOOUTERSAVE",
                 "-dSAFER",
+                "-dNOINTERPOLATE",
+                "--permit-file-read=" + iccProfile,
+                "--permit-file-read=" + inputPdf.toAbsolutePath().normalize(),
+                "--permit-file-read=" + pdfaDefinition.toAbsolutePath().normalize(),
                 "-sDEVICE=pdfwrite",
+                "-dCompatibilityLevel=1.7",
                 "-dPDFA=3",
                 "-dPDFACompatibilityPolicy=1",
+                "-dEmbedAllFonts=true",
+                "-dSubsetFonts=false",
+                "-dCompressFonts=true",
+                "-dNoOutputFonts",
                 "-sColorConversionStrategy=RGB",
                 "-sProcessColorModel=DeviceRGB",
-                "-sOutputICCProfile=" + iccProfilePath,
+                "-sOutputICCProfile=" + iccProfile,
                 "-sOutputFile=" + outputPdf,
+                pdfaDefinition.toString(),
                 inputPdf.toString()
         );
 
-        ProcessRunner.ProcessResult result = processRunner.run(command, Duration.ofSeconds(60));
+        ProcessRunner.ProcessResult result;
+
+        try {
+            result = processRunner.run(command, Duration.ofSeconds(60));
+        } catch (IOException error) {
+            LOGGER.warn("PDF/A-3b conversion failed before validation: {}", error.getMessage(), error);
+            throw new ValidationFailedException(List.of(error(
+                    isProcessTimeout(error) ? "PDFA_CONVERSION_TIMEOUT" : "PDFA_CONVERSION",
+                    isProcessTimeout(error)
+                            ? "Die PDF/A-3b-Konvertierung hat zu lange gedauert. Bitte prüfe, ob die Rechnungs-PDF oder angehängte AGB-Datei zu groß ist."
+                            : "Die sichtbare PDF konnte nicht zuverlässig in PDF/A-3b konvertiert werden."
+            )));
+        }
 
         if (result.exitCode() != 0 || !Files.exists(outputPdf)) {
+            LOGGER.warn(
+                    "PDF/A-3b conversion failed with exit code {}: {}",
+                    result.exitCode(),
+                    sanitizeValidatorReport(result.output())
+            );
             throw new ValidationFailedException(List.of(error("PDFA_CONVERSION", "Die sichtbare PDF konnte nicht zuverlässig in PDF/A-3b konvertiert werden.")));
         }
     }
 
+    private void writePdfADefinition(Path outputPath) throws IOException {
+        String escapedIccPath = Path.of(iccProfilePath).toAbsolutePath().normalize().toString()
+                .replace("\\", "/")
+                .replace("(", "\\(")
+                .replace(")", "\\)");
+        String content = """
+                %%!
+                %% PDF/A-3b output intent for Ghostscript.
+                [ /Title (WAW Pilot ZUGFeRD Invoice)
+                  /Creator (WAW Pilot)
+                  /Producer (WAW Pilot ZUGFeRD Service)
+                  /DOCINFO pdfmark
+                /ICCProfile (%s) def
+                [/_objdef {icc_PDFA} /type /stream /OBJ pdfmark
+                [{icc_PDFA} << /N 3 >> /PUT pdfmark
+                [
+                {icc_PDFA}
+                {ICCProfile (r) file} stopped
+                {
+                  (Failed to open ICC profile for PDF/A conversion.) =
+                  cleartomark
+                }
+                {
+                  /PUT pdfmark
+                  [/_objdef {OutputIntent_PDFA} /type /dict /OBJ pdfmark
+                  [{OutputIntent_PDFA} <<
+                    /Type /OutputIntent
+                    /S /GTS_PDFA1
+                    /DestOutputProfile {icc_PDFA}
+                    /OutputConditionIdentifier (sRGB IEC61966-2.1)
+                    /Info (sRGB IEC61966-2.1)
+                    /RegistryName (http://www.color.org)
+                  >> /PUT pdfmark
+                  [{Catalog} <</OutputIntents [ {OutputIntent_PDFA} ]>> /PUT pdfmark
+                } ifelse
+                """.formatted(escapedIccPath);
+
+        Files.writeString(outputPath, content, StandardCharsets.UTF_8);
+    }
+
     private void embedXmlWithMustang(Path pdfaPdf, byte[] xml, Path outputPdf) throws Exception {
-        try (IZUGFeRDExporter exporter = new ZUGFeRDExporterFromPDFA()) {
+        try (IZUGFeRDExporter exporter = new ZUGFeRDExporterFromA3().ignorePDFAErrors()) {
             exporter.load(pdfaPdf.toString());
             exporter
                     .setProducer("WAW Pilot ZUGFeRD Service")
                     .setCreator("WAW Pilot")
+                    .setConformanceLevel(PDFAConformanceLevel.BASIC)
                     .setZUGFeRDVersion(2)
                     .setProfile(Profiles.getByName("EN16931"));
             exporter.setXML(xml);
             exporter.export(outputPdf.toString());
+        } catch (Exception error) {
+            LOGGER.warn("ZUGFeRD XML embedding failed: {}", error.getMessage(), error);
+            throw new ValidationFailedException(List.of(new ValidationIssue(
+                    "FACTUR_X",
+                    "error",
+                    "ZUGFERD_EMBED",
+                    "Die XML-Rechnungsdaten konnten nicht in die PDF eingebettet werden.",
+                    null,
+                    true
+            )));
         }
     }
 
-    private boolean validateWithMustang(Path file, List<ValidationIssue> issues, String phase) {
+    private boolean validateWithMustang(Path file, List<ValidationIssue> issues, String phase, InvoiceProfile invoiceProfile) {
         ZUGFeRDValidator validator = new ZUGFeRDValidator();
         String result = validator.validate(file.toString());
 
@@ -349,19 +465,37 @@ public class ZugferdPipelineService {
             return true;
         }
 
-        List<ValidationIssue> reportIssues = classifyMustangReport(result, phase);
+        List<ValidationIssue> reportIssues = classifyMustangReport(result, phase, invoiceProfile);
         issues.addAll(reportIssues);
 
         return reportIssues.stream().noneMatch(ValidationIssue::blocking);
     }
 
-    private boolean validateWithVeraPdf(Path file, List<ValidationIssue> issues) throws IOException, InterruptedException {
-        ProcessRunner.ProcessResult result = processRunner.run(
-                List.of(veraPdfCommand, "--format", "xml", "--flavour", "3b", file.toString()),
-                Duration.ofSeconds(60)
-        );
+    private boolean validateWithVeraPdf(Path file, List<ValidationIssue> issues, String ruleId) throws IOException, InterruptedException {
+        ProcessRunner.ProcessResult result;
+
+        try {
+            result = processRunner.run(
+                    List.of(veraPdfCommand, "--format", "xml", "--flavour", "3b", file.toString()),
+                    Duration.ofSeconds(60)
+            );
+        } catch (IOException error) {
+            LOGGER.warn("veraPDF PDF/A-3b validation could not finish in {}: {}", ruleId, error.getMessage(), error);
+            issues.add(new ValidationIssue(
+                    "PDF_A",
+                    "error",
+                    isProcessTimeout(error) ? "VERAPDF_TIMEOUT" : ruleId,
+                    isProcessTimeout(error)
+                            ? "veraPDF konnte die PDF/A-3b-Prüfung nicht rechtzeitig abschließen. Bitte prüfe, ob die Rechnungs-PDF oder angehängte AGB-Datei zu groß ist."
+                            : "veraPDF konnte die PDF/A-3b-Prüfung nicht ausführen.",
+                    null,
+                    true
+            ));
+            return false;
+        }
 
         String output = result.output();
+        String sanitizedOutput = sanitizeValidatorReport(output);
         boolean compliant = result.exitCode() == 0 &&
                 (output.contains("isCompliant=\"true\"") ||
                         output.contains("<isCompliant>true</isCompliant>") ||
@@ -371,11 +505,12 @@ public class ZugferdPipelineService {
             return true;
         }
 
+        LOGGER.warn("veraPDF PDF/A-3b validation failed in {}: {}", ruleId, sanitizedOutput);
         issues.add(new ValidationIssue(
                 "PDF_A",
                 "error",
-                "VERAPDF_3B",
-                "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt.",
+                ruleId,
+                getFriendlyVeraPdfMessage(output),
                 null,
                 true
         ));
@@ -383,12 +518,58 @@ public class ZugferdPipelineService {
                 "PDF_A",
                 "notice",
                 "VERAPDF_REPORT",
-                sanitizeValidatorReport(output),
+                sanitizedOutput,
                 null,
                 false
         ));
 
         return false;
+    }
+
+    private static boolean isProcessTimeout(IOException error) {
+        return error.getMessage() != null && error.getMessage().contains("Process timed out");
+    }
+
+    private static String getFriendlyVeraPdfMessage(String report) {
+        if (report == null || report.isBlank()) {
+            return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt.";
+        }
+
+        if (report.contains("OutputIntent") ||
+                report.contains("ICC") ||
+                report.contains("color profile") ||
+                report.contains("DeviceGray") ||
+                report.contains("DeviceRGB") ||
+                report.contains("colour space")) {
+            return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt. Vermutlich fehlt ein gültiges Farbprofil oder OutputIntent.";
+        }
+
+        if (report.contains("Interpolate key") || report.contains("Interpolate == false")) {
+            return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt. Mindestens ein Bild verwendet eine für PDF/A nicht erlaubte Interpolation.";
+        }
+
+        if (report.contains("CIDSet") ||
+                report.contains("font") ||
+                report.contains("Font")) {
+            return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt. Vermutlich sind Schriftarten nicht vollständig eingebettet.";
+        }
+
+        if (report.contains("streamKeywordCRLFCompliant") ||
+                report.contains("spacingCompliesPDFA") ||
+                report.contains("stream") ||
+                report.contains("endstream")) {
+            return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt. Die PDF-Struktur konnte nicht vollständig PDF/A-konform normalisiert werden.";
+        }
+
+        if (report.contains("XMP") || report.contains("metadata")) {
+            return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt. Vermutlich sind die PDF/A- oder Factur-X-Metadaten unvollständig.";
+        }
+
+        if (report.contains("embedded file") || report.contains("Associated") || report.contains("AFRelationship")) {
+            return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt. Vermutlich ist die XML-Datei nicht PDF/A-konform als Anlage eingebettet.";
+        }
+
+        return "veraPDF hat die Datei nicht als PDF/A-3b-konform bestätigt. Details stehen im technischen Validierungsbericht.";
     }
 
     private boolean validateConsistency(Path xml, CanonicalInvoice invoice, List<ValidationIssue> issues) {
@@ -463,7 +644,7 @@ public class ZugferdPipelineService {
         return new ValidationIssue("EN16931", "error", ruleId, message, null, true);
     }
 
-    private static List<ValidationIssue> classifyMustangReport(String report, String phase) {
+    static List<ValidationIssue> classifyMustangReport(String report, String phase, InvoiceProfile invoiceProfile) {
         if (report == null || report.isBlank()) {
             return List.of(new ValidationIssue(
                     "FACTUR_X",
@@ -486,6 +667,12 @@ public class ZugferdPipelineService {
         );
         List<String> blockingFacturXRules = List.of("BR-CO-09", "BR-CO-26");
         List<String> detectedRuleIds = extractRuleIds(report);
+        boolean isXmlOnlyValidation = "xml".equals(phase);
+        boolean parsedPdfAbsent = report.contains("Parsed PDF:absent");
+        boolean xrechnungSourceDetected =
+                report.contains("/xslt/XR_30/XRechnung-CII-validation.xslt") ||
+                        report.contains("XR_30") ||
+                        report.contains("XRechnung-CII-validation.xslt");
 
         for (String rule : blockingFacturXRules) {
             if (!report.contains(rule)) {
@@ -507,13 +694,16 @@ public class ZugferdPipelineService {
                 continue;
             }
 
+            boolean blocking = invoiceProfile == InvoiceProfile.XRECHNUNG;
             issues.add(new ValidationIssue(
                     "XRECHNUNG",
-                    "notice",
+                    blocking ? "error" : "notice",
                     rule,
-                    "XRechnung-spezifischer Hinweis aus der Mustang-Validierung; für Factur-X EN16931 nicht blockierend.",
+                    blocking
+                            ? "XRechnung-Regel verletzt: " + rule
+                            : "XRechnung-spezifischer Hinweis aus der Mustang-Validierung; für Factur-X EN16931 nicht blockierend.",
                     null,
-                    false
+                    blocking
             ));
         }
 
@@ -521,10 +711,41 @@ public class ZugferdPipelineService {
         boolean onlyKnownXrechnungNotices =
                 !detectedRuleIds.isEmpty() &&
                         detectedRuleIds.stream().allMatch(xrechnungNoticeRules::contains);
+        boolean unknownXrechnungRulesDetected =
+                xrechnungSourceDetected &&
+                        detectedRuleIds.stream().anyMatch((rule) -> !xrechnungNoticeRules.contains(rule));
+
+        if (isXmlOnlyValidation && parsedPdfAbsent) {
+            issues.add(new ValidationIssue(
+                    "FACTUR_X",
+                    "notice",
+                    "MUSTANG_XML_ONLY",
+                    "Mustang hat in dieser Phase nur das XML geprüft; die finale PDF wird nach dem Einbetten separat validiert.",
+                    null,
+                    false
+            ));
+        }
 
         if (hasBlocking) {
             issues.add(new ValidationIssue(
                     "FACTUR_X",
+                    "notice",
+                    "MUSTANG_REPORT",
+                    sanitizedReport,
+                    null,
+                    false
+            ));
+        } else if (invoiceProfile == InvoiceProfile.ZUGFERD_EN16931 && unknownXrechnungRulesDetected) {
+            issues.add(new ValidationIssue(
+                    "XRECHNUNG",
+                    "error",
+                    "XRECHNUNG_UNKNOWN_RULE",
+                    "Mustang hat unbekannte XRechnung-Hinweise gemeldet. Diese werden nicht automatisch für Factur-X freigegeben.",
+                    null,
+                    true
+            ));
+            issues.add(new ValidationIssue(
+                    "XRECHNUNG",
                     "notice",
                     "MUSTANG_REPORT",
                     sanitizedReport,
@@ -610,7 +831,7 @@ public class ZugferdPipelineService {
         }
 
         String compact = report.replaceAll("\\s+", " ").trim();
-        return compact.length() > 800 ? compact.substring(0, 800) + "..." : compact;
+        return compact.length() > 3000 ? compact.substring(0, 3000) + "..." : compact;
     }
 
     private static String safeFilePart(String value) {

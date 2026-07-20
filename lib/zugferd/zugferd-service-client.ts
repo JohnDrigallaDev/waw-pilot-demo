@@ -13,6 +13,9 @@ export type ZugferdServiceValidationSummary = {
     pdfAValid: boolean;
     consistencyValid: boolean;
     issues: ZugferdValidationIssue[];
+    blockingErrors?: ZugferdValidationIssue[];
+    warnings?: ZugferdValidationIssue[];
+    profileNotices?: ZugferdValidationIssue[];
 };
 
 export type ZugferdServiceResult = {
@@ -84,14 +87,20 @@ async function fetchWithTimeout(
 
 function assertValidServiceResult(result: ZugferdServiceResult): void {
     const validation = result.validation;
+    const blockingErrors =
+        validation.blockingErrors ??
+        validation.issues.filter((issue) => issue.blocking);
 
     if (
         validation.status !== "valid" ||
         !validation.xmlValid ||
         !validation.pdfAValid ||
-        !validation.consistencyValid
+        !validation.consistencyValid ||
+        blockingErrors.length > 0
     ) {
-        throw new ZugferdServiceValidationError(validation.issues);
+        throw new ZugferdServiceValidationError(
+            blockingErrors.length > 0 ? blockingErrors : validation.issues,
+        );
     }
 }
 
@@ -114,6 +123,7 @@ export async function generateValidatedZugferdPdf({
             body: JSON.stringify({
                 standardVersion: "ZUGFeRD 2.5 / Factur-X 1.09",
                 profile: "EN16931",
+                invoiceProfile: "ZUGFERD_EN16931",
                 invoice,
                 visiblePdfBase64,
             }),

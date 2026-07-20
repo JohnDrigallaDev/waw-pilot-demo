@@ -24,6 +24,7 @@ type SaleDetailPageProps = {
         travelExpenseCreated?: string;
         exportDataSaved?: string;
         exportDataError?: string;
+        exportArrivalError?: string;
     }>;
 };
 
@@ -67,6 +68,7 @@ export default async function SaleDetailPage({
             travelExpenseCreated={resolvedSearchParams.travelExpenseCreated === "1"}
             exportDataSaved={resolvedSearchParams.exportDataSaved === "1"}
             exportDataError={resolvedSearchParams.exportDataError === "1"}
+            exportArrivalError={resolvedSearchParams.exportArrivalError === "1"}
         />
     );
 }

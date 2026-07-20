@@ -405,6 +405,8 @@ export function DocumentsOverview({
                     description="Dokumente mit Prüfbedarf"
                     icon={FileWarning}
                     danger={needsReviewDocuments > 0}
+                    href="/dashboard/documents?filter=needs_review"
+                    active={documentFilter === "needs_review"}
                 />
                 <DocumentStatCard
                     label="Automatisch"
@@ -485,27 +487,6 @@ export function DocumentsOverview({
                             </div>
                         </div>
 
-                        {documentFilter !== "all" || initialVehicleId ? (
-                            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
-                                <p className="text-sm font-bold text-cyan-900">
-                                    Gefiltert:
-                                    {documentFilter === "needs_review"
-                                        ? " Dokumente mit Prüfbedarf"
-                                        : documentFilter !== "all"
-                                            ? ` ${documentGroupLabels[getFilterGroup(documentFilter)]}`
-                                            : ""}
-                                    {initialVehicleId ? " · Fahrzeugdokumente" : ""}
-                                </p>
-                                <Button
-                                    asChild
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 rounded-xl border-cyan-200 bg-white font-bold text-cyan-800 hover:bg-cyan-50"
-                                >
-                                    <Link href="/dashboard/documents">Filter zurücksetzen</Link>
-                                </Button>
-                            </div>
-                        ) : null}
                     </div>
 
                     <div>
@@ -676,17 +657,6 @@ export function DocumentsOverview({
     );
 }
 
-function getFilterGroup(filter: DocumentFilter): DocumentGroupKey {
-    if (filter === "invoices") return "invoice";
-    if (filter === "vehicle_documents") return "vehicle";
-    if (filter === "purchase_documents") return "purchase";
-    if (filter === "license_plates") return "license_plate";
-    if (filter === "cashbook") return "cashbook";
-    if (filter === "needs_review") return "review";
-
-    return "other";
-}
-
 function DocumentFilterButton({
                                   active,
                                   onClick,
@@ -830,21 +800,40 @@ function DocumentStatCard({
                               description,
                               icon: Icon,
                               danger = false,
+                              href,
+                              active = false,
                           }: {
     label: string;
     value: string | number;
     description: string;
     icon: typeof FileArchive;
     danger?: boolean;
+    href?: string;
+    active?: boolean;
 }) {
-    return (
+    const card = (
         <CompactStatCard
             label={label}
             value={value}
             description={description}
             icon={Icon}
-            tone={danger ? "warning" : "info"}
+            tone={active || danger ? "warning" : "info"}
         />
+    );
+
+    if (!href) return card;
+
+    return (
+        <Link
+            href={href}
+            className={
+                active
+                    ? "block rounded-[1.25rem] ring-2 ring-amber-300 ring-offset-2"
+                    : "block rounded-[1.25rem] transition hover:-translate-y-0.5 hover:shadow-md"
+            }
+        >
+            {card}
+        </Link>
     );
 }
 

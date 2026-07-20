@@ -17,6 +17,11 @@ export type CompanySettings = {
     commercial_register_number: string | null;
     signature_image_path: string | null;
     stamp_image_path: string | null;
+    terms_pdf_path: string | null;
+    terms_pdf_filename: string | null;
+    terms_pdf_mime_type: string | null;
+    terms_pdf_size: number | null;
+    terms_pdf_uploaded_at: string | null;
 };
 
 export async function getCompanySettings(): Promise<CompanySettings> {
@@ -41,7 +46,12 @@ export async function getCompanySettings(): Promise<CompanySettings> {
             tax_number,
             commercial_register_number,
             signature_image_path,
-            stamp_image_path
+            stamp_image_path,
+            terms_pdf_path,
+            terms_pdf_filename,
+            terms_pdf_mime_type,
+            terms_pdf_size,
+            terms_pdf_uploaded_at
         `,
         )
         .eq("id", companyId)

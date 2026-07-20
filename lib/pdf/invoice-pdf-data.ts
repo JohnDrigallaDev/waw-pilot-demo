@@ -28,6 +28,7 @@ type CustomerRelation = {
     city: string | null;
     country: string | null;
     vat_id: string | null;
+    preferred_language: string | null;
 };
 
 type VehicleRelation = {
@@ -142,7 +143,8 @@ export async function getInvoicePdfData(
         postal_code,
         city,
         country,
-        vat_id
+        vat_id,
+        preferred_language
       ),
       vehicles (
         internal_number,
@@ -216,6 +218,7 @@ export async function getInvoicePdfData(
             city: customer.city,
             country: customer.country,
             vatId: customer.vat_id,
+            preferredLanguage: customer.preferred_language,
         },
         vehicle: {
             internalNumber: vehicle.internal_number,

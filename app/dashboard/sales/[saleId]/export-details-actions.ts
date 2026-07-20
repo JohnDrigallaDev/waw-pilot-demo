@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
+import { isAllowedArrivalPeriod } from "@/lib/sales/export-date-rules";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function getStringValue(formData: FormData, key: string): string | null {
@@ -14,6 +15,12 @@ function getStringValue(formData: FormData, key: string): string | null {
     const trimmedValue = value.trim();
 
     return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function getSingleRelation<T>(relation: T | T[] | null | undefined): T | null {
+    if (!relation) return null;
+
+    return Array.isArray(relation) ? relation[0] ?? null : relation;
 }
 
 export async function updateSaleExportDetailsAction(formData: FormData) {
@@ -28,7 +35,16 @@ export async function updateSaleExportDetailsAction(formData: FormData) {
 
     const { data: saleData, error: saleLoadError } = await supabase
         .from("sales")
-        .select("sale_type")
+        .select(
+            `
+            sale_type,
+            sale_date,
+            customers:buyer_customer_id (
+                city,
+                country
+            )
+        `,
+        )
         .eq("id", saleId)
         .eq("company_id", companyId)
         .single();
@@ -54,11 +70,16 @@ export async function updateSaleExportDetailsAction(formData: FormData) {
     const requiresExportDetails =
         saleData.sale_type === "eu" ||
         saleData.sale_type === "export_third_country";
+    const buyerCustomer = getSingleRelation(saleData.customers);
+    const finalDestinationCity =
+        destinationCity ?? buyerCustomer?.city ?? null;
+    const finalDestinationCountry =
+        destinationCountry ?? buyerCustomer?.country ?? null;
 
     if (
         requiresExportDetails &&
-        (!destinationCity ||
-            !destinationCountry ||
+        (!finalDestinationCity ||
+            !finalDestinationCountry ||
             !arrivalMonth ||
             !arrivalYear ||
             !transportDate ||
@@ -68,11 +89,22 @@ export async function updateSaleExportDetailsAction(formData: FormData) {
         redirect(`/dashboard/sales/${saleId}?exportDataError=1#export-details`);
     }
 
+    if (
+        requiresExportDetails &&
+        !isAllowedArrivalPeriod({
+            saleDate: saleData.sale_date,
+            month: arrivalMonth,
+            year: arrivalYear,
+        })
+    ) {
+        redirect(`/dashboard/sales/${saleId}?exportArrivalError=1#export-details`);
+    }
+
     const { data, error } = await supabase
         .from("sales")
         .update({
-            export_destination_city: destinationCity,
-            export_destination_country: destinationCountry,
+            export_destination_city: finalDestinationCity,
+            export_destination_country: finalDestinationCountry,
             export_arrival_month: arrivalMonth,
             export_arrival_year: arrivalYear,
             export_transport_date: transportDate,
