@@ -40,38 +40,25 @@ type PurchaseDetailProps = {
 
 const purchaseRequiredDocuments = [
     {
+        documentType: "vehicle_registration",
+        label: "Fahrzeugschein",
+        required: false,
+    },
+    {
         documentType: "purchase_invoice",
         label: "Einkaufsrechnung",
-        required: true,
-    },
-    {
-        documentType: "purchase_contract",
-        label: "Ankaufsvertrag",
-        required: true,
-    },
-    {
-        documentType: "seller_id",
-        label: "Ausweis Verkäufer",
-        required: true,
-    },
-    {
-        documentType: "purchase_payment_proof",
-        label: "Zahlungsnachweis Ankauf",
-        required: false,
-    },
-    {
-        documentType: "purchase_receipt",
-        label: "Ankaufsbeleg",
-        required: false,
-    },
-    {
-        documentType: "seller_commercial_register",
-        label: "Handelsregister Verkäufer",
         required: false,
     },
 ];
 
 export function PurchaseDetail({ purchase }: PurchaseDetailProps) {
+    const primaryDocumentTypes = purchaseRequiredDocuments.map(
+        (document) => document.documentType,
+    );
+    const archivedDocuments = purchase.documents.filter(
+        (document) => !primaryDocumentTypes.includes(document.document_type),
+    );
+
     return (
         <div className="space-y-6">
             <PageHeader
@@ -260,7 +247,7 @@ export function PurchaseDetail({ purchase }: PurchaseDetailProps) {
                             <SectionTitle
                                 icon={FileText}
                                 title="Ankaufsdokumente"
-                                description="Einkaufsrechnung, Ankaufsvertrag, Ausweis Verkäufer und Zahlungsnachweise hochladen."
+                                description="Fahrzeugschein und Einkaufsrechnung mit Ankauf und Fahrzeug verknüpfen."
                             />
 
                             <div className="mt-5 space-y-4">
@@ -362,14 +349,14 @@ export function PurchaseDetail({ purchase }: PurchaseDetailProps) {
                                 })}
                             </div>
 
-                            {purchase.documents.length > 0 ? (
+                            {archivedDocuments.length > 0 ? (
                                 <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-4">
                                     <p className="text-sm font-extrabold text-slate-950">
-                                        Alle Ankaufsdokumente
+                                        Weitere / archivierte Ankaufsdokumente
                                     </p>
 
                                     <div className="mt-3 space-y-3">
-                                        {purchase.documents.map((document) => (
+                                        {archivedDocuments.map((document) => (
                                             <div
                                                 key={document.id}
                                                 className="flex flex-col gap-3 rounded-2xl bg-slate-50 p-3 md:flex-row md:items-center md:justify-between"

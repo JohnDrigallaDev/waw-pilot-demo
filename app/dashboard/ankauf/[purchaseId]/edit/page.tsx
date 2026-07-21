@@ -2,6 +2,8 @@ import { PurchaseForm } from "@/components/purchases/purchase-form";
 import { getPurchaseCaseDetail } from "@/lib/purchases/purchase-detail-queries";
 import { getPurchaseFormData } from "@/lib/purchases/purchase-form-data";
 
+export const dynamic = "force-dynamic";
+
 type EditPurchasePageProps = {
     params: Promise<{
         purchaseId: string;

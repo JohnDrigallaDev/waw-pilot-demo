@@ -48,6 +48,7 @@ function getFileExtension(fileName: string): string {
 
 function isAllowedDocumentType(documentType: string): boolean {
     return [
+        "vehicle_registration",
         "purchase_invoice",
         "purchase_contract",
         "purchase_receipt",
@@ -59,6 +60,7 @@ function isAllowedDocumentType(documentType: string): boolean {
 
 function getPurchaseDocumentLabel(documentType: string): string {
     const labels: Record<string, string> = {
+        vehicle_registration: "Fahrzeugschein",
         purchase_invoice: "Einkaufsrechnung",
         purchase_contract: "Ankaufsvertrag",
         purchase_receipt: "Ankaufsbeleg",
@@ -253,12 +255,11 @@ export async function uploadPurchaseDocumentAction(
         .from("documents")
         .select("document_type, status")
         .eq("company_id", companyId)
-        .eq("purchase_case_id", purchaseId);
+        .or(`purchase_case_id.eq.${purchaseId},vehicle_id.eq.${purchaseCase.vehicle_id}`);
 
     const requiredDocumentTypes = [
+        "vehicle_registration",
         "purchase_invoice",
-        "purchase_contract",
-        "seller_id",
     ];
 
     const hasAllRequiredDocuments = requiredDocumentTypes.every((requiredType) =>

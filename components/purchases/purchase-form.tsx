@@ -1,21 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
     ArrowLeft,
     CalendarDays,
     ClipboardList,
+    FileText,
     Save,
-    ShoppingCart,
     Truck,
-    Wallet,
+    UserRound,
 } from "lucide-react";
 
 import { createPurchaseCaseAction } from "@/app/dashboard/ankauf/new/actions";
 import { updatePurchaseCaseAction } from "@/app/dashboard/ankauf/[purchaseId]/edit/actions";
 import type { PurchaseFormData } from "@/lib/purchases/purchase-form-data";
 import type { PurchaseCasePaymentStatus } from "@/lib/purchases/purchase-queries";
+import { EMAIL_LANGUAGE_OPTIONS } from "@/lib/customers/email-languages";
+import { SearchCombobox, type SearchComboboxOption } from "@/components/ui/search-combobox";
+import { VehicleDocumentUploadFields } from "@/components/vehicles/vehicle-document-upload-fields";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,36 +48,80 @@ type PurchaseFormProps = {
     initialValues?: PurchaseFormInitialValues;
 };
 
+type SelectionMode = "existing" | "new";
+
 export function PurchaseForm({
-                                 formData,
-                                 mode = "create",
-                                 initialValues,
-                             }: PurchaseFormProps) {
+    formData,
+    mode = "create",
+    initialValues,
+}: PurchaseFormProps) {
     const action =
         mode === "edit" ? updatePurchaseCaseAction : createPurchaseCaseAction;
-
     const [state, formAction, isPending] = useActionState(action, initialState);
-
+    const [vehicleMode, setVehicleMode] = useState<SelectionMode>("existing");
+    const [sellerMode, setSellerMode] = useState<SelectionMode>("existing");
+    const [sellerType, setSellerType] = useState<"company" | "private">("company");
     const today = new Date().toISOString().slice(0, 10);
-
     const backHref =
         mode === "edit" && initialValues?.id
             ? `/dashboard/ankauf/${initialValues.id}`
             : "/dashboard/ankauf";
 
+    const vehicleOptions = useMemo<SearchComboboxOption[]>(
+        () =>
+            formData.vehicles.map((vehicle) => ({
+                value: vehicle.id,
+                label: vehicle.label,
+                description: vehicle.description,
+                disabled: vehicle.disabled,
+                keywords: [
+                    vehicle.internal_number,
+                    vehicle.manufacturer,
+                    vehicle.model,
+                    vehicle.vehicle_type,
+                    vehicle.vin,
+                    vehicle.construction_year?.toString() ?? "",
+                ],
+            })),
+        [formData.vehicles],
+    );
+    const sellerOptions = useMemo<SearchComboboxOption[]>(
+        () =>
+            formData.sellers.map((seller) => ({
+                value: seller.id,
+                label: seller.label,
+                description: [
+                    seller.city,
+                    seller.country,
+                    seller.email,
+                    seller.type === "company" ? "Unternehmen" : "Privatperson",
+                ]
+                    .filter(Boolean)
+                    .join(" · "),
+                keywords: [
+                    seller.company_name,
+                    seller.owner_name,
+                    seller.first_name,
+                    seller.last_name,
+                    seller.city,
+                    seller.country,
+                    seller.email,
+                    seller.phone,
+                    seller.vat_id,
+                ].filter((value): value is string => Boolean(value)),
+            })),
+        [formData.sellers],
+    );
+
     return (
         <div className="space-y-6">
             <PageHeader
                 eyebrow="Fahrzeug ankaufen"
-                title={
-                    mode === "edit"
-                        ? "Fahrzeugankauf bearbeiten"
-                        : "Fahrzeug ankaufen"
-                }
+                title={mode === "edit" ? "Fahrzeugankauf bearbeiten" : "Ankauf erfassen"}
                 description={
                     mode === "edit"
-                        ? "Bearbeite Verkäufer, Fahrzeug, Einkaufspreis, Zahlungsstatus und Notizen."
-                        : "Erfasse ein gekauftes Fahrzeug mit Verkäuferdaten, Einkaufspreis und Zahlungsstatus."
+                        ? "Bearbeite Ankaufsdaten, Verkäufer, Fahrzeug und Dokumente."
+                        : "Erfasse Fahrzeug, Verkäufer, Ankauf und Dokumente in einem Ablauf."
                 }
                 action={
                     <Button
@@ -94,6 +141,8 @@ export function PurchaseForm({
                 {initialValues?.id ? (
                     <input type="hidden" name="purchase_id" value={initialValues.id} />
                 ) : null}
+                <input type="hidden" name="vehicle_mode" value={vehicleMode} />
+                <input type="hidden" name="seller_mode" value={sellerMode} />
 
                 {state.message ? (
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
@@ -101,33 +150,76 @@ export function PurchaseForm({
                     </div>
                 ) : null}
 
+                {mode === "create" ? (
+                    <ProgressBar />
+                ) : null}
+
                 <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
-                            icon={ShoppingCart}
-                            title="Fahrzeug & Verkäufer"
-                            description="Wähle das gekaufte Fahrzeug und den Verkäufer aus."
+                            icon={Truck}
+                            title="1. Fahrzeug auswählen oder anlegen"
+                            description="Wähle ein bestehendes geeignetes Fahrzeug oder erfasse es direkt neu."
                         />
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <SelectField
-                                label="Fahrzeug *"
+                        {mode === "create" ? (
+                            <ModeTabs
+                                name="vehicle-mode-ui"
+                                value={vehicleMode}
+                                firstLabel="Bestehendes Fahrzeug"
+                                secondLabel="Neues Fahrzeug"
+                                onChange={setVehicleMode}
+                            />
+                        ) : null}
+                        {vehicleMode === "existing" || mode === "edit" ? (
+                            <SearchCombobox
                                 name="vehicle_id"
-                                placeholder="Fahrzeug auswählen"
-                                options={formData.vehicles}
+                                label="Fahrzeug"
+                                options={vehicleOptions}
                                 defaultValue={initialValues?.vehicle_id ?? ""}
                                 required
+                                placeholder="Interne Nummer, VIN, Hersteller oder Modell suchen..."
+                                emptyText="Kein geeignetes Fahrzeug gefunden."
+                                maxVisibleItems={60}
                             />
+                        ) : (
+                            <VehicleCreateFields />
+                        )}
+                    </CardContent>
+                </Card>
 
-                            <SelectField
-                                label="Verkäufer *"
+                <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                    <CardContent className="space-y-5 p-5">
+                        <SectionTitle
+                            icon={UserRound}
+                            title="2. Verkäufer auswählen oder anlegen"
+                            description="Verkäufer werden im bestehenden Kunden-/Geschäftspartnerbestand geführt."
+                        />
+                        {mode === "create" ? (
+                            <ModeTabs
+                                name="seller-mode-ui"
+                                value={sellerMode}
+                                firstLabel="Bestehender Verkäufer"
+                                secondLabel="Neuer Verkäufer"
+                                onChange={setSellerMode}
+                            />
+                        ) : null}
+                        {sellerMode === "existing" || mode === "edit" ? (
+                            <SearchCombobox
                                 name="seller_customer_id"
-                                placeholder="Verkäufer auswählen"
-                                options={formData.sellers}
+                                label="Verkäufer"
+                                options={sellerOptions}
                                 defaultValue={initialValues?.seller_customer_id ?? ""}
                                 required
+                                placeholder="Name, Firma, Ort, E-Mail oder USt-ID suchen..."
+                                emptyText="Kein Verkäufer gefunden."
+                                maxVisibleItems={60}
                             />
-                        </div>
+                        ) : (
+                            <SellerCreateFields
+                                sellerType={sellerType}
+                                onSellerTypeChange={setSellerType}
+                            />
+                        )}
                     </CardContent>
                 </Card>
 
@@ -135,8 +227,8 @@ export function PurchaseForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={CalendarDays}
-                            title="Datum & Zahlung"
-                            description="Ankaufsdatum und Zahlungsstatus festlegen."
+                            title="3. Ankauf erfassen"
+                            description="Ankaufsdatum, Betrag, Steuer und interne Hinweise."
                         />
 
                         <div className="grid gap-4 md:grid-cols-2">
@@ -147,12 +239,33 @@ export function PurchaseForm({
                                 defaultValue={initialValues?.purchase_date ?? today}
                                 required
                             />
-
+                            <FormField
+                                label="Einkaufspreis netto *"
+                                name="net_amount"
+                                type="number"
+                                defaultValue={
+                                    initialValues?.net_amount !== undefined &&
+                                    initialValues.net_amount !== null
+                                        ? String(initialValues.net_amount)
+                                        : ""
+                                }
+                                placeholder="z. B. 25000"
+                                required
+                            />
+                            <FormField
+                                label="MwSt. %"
+                                name="vat_rate"
+                                type="number"
+                                defaultValue={
+                                    initialValues?.vat_rate !== undefined &&
+                                    initialValues.vat_rate !== null
+                                        ? String(initialValues.vat_rate)
+                                        : "19"
+                                }
+                                placeholder="19"
+                            />
                             <div className="space-y-2">
-                                <Label
-                                    htmlFor="payment_status"
-                                    className="font-bold text-slate-700"
-                                >
+                                <Label htmlFor="payment_status" className="font-bold text-slate-700">
                                     Zahlungsstatus *
                                 </Label>
                                 <select
@@ -170,53 +283,43 @@ export function PurchaseForm({
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
-                    <CardContent className="space-y-5 p-5">
-                        <SectionTitle
-                            icon={Wallet}
-                            title="Beträge"
-                            description="Netto-Betrag und Mehrwertsteuer erfassen."
-                        />
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <FormField
-                                label="Einkaufspreis netto *"
-                                name="net_amount"
-                                type="number"
-                                defaultValue={
-                                    initialValues?.net_amount !== undefined &&
-                                    initialValues?.net_amount !== null
-                                        ? String(initialValues.net_amount)
-                                        : ""
-                                }
-                                placeholder="z. B. 25000"
-                                required
+                {mode === "create" ? (
+                    <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                        <CardContent className="space-y-5 p-5">
+                            <SectionTitle
+                                icon={FileText}
+                                title="4. Dokumente hochladen"
+                                description="Fahrzeugschein und Einkaufsrechnung werden mit Ankauf und Fahrzeug verknüpft."
                             />
-
-                            <FormField
-                                label="MwSt. %"
-                                name="vat_rate"
-                                type="number"
-                                defaultValue={
-                                    initialValues?.vat_rate !== undefined &&
-                                    initialValues?.vat_rate !== null
-                                        ? String(initialValues.vat_rate)
-                                        : "19"
-                                }
-                                placeholder="19"
+                            <VehicleDocumentUploadFields
+                                fields={[
+                                    {
+                                        name: "vehicle_registration_file",
+                                        label: "Fahrzeugschein",
+                                        description: "PDF, JPG oder PNG.",
+                                    },
+                                    {
+                                        name: "purchase_invoice_file",
+                                        label: "Einkaufsrechnung",
+                                        description: "PDF, JPG oder PNG.",
+                                    },
+                                ]}
                             />
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                ) : null}
 
                 <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={ClipboardList}
-                            title="Notizen"
-                            description="Interne Hinweise zur Ankaufsakte."
+                            title={mode === "create" ? "5. Zusammenfassung & Notizen" : "Notizen"}
+                            description="Prüfe die Angaben und speichere den Ankauf erst am Ende."
                         />
-
+                        <SummaryGrid
+                            vehicleMode={mode === "edit" ? "existing" : vehicleMode}
+                            sellerMode={mode === "edit" ? "existing" : sellerMode}
+                        />
                         <Textarea
                             id="notes"
                             name="notes"
@@ -237,7 +340,6 @@ export function PurchaseForm({
                         >
                             <Link href={backHref}>Abbrechen</Link>
                         </Button>
-
                         <Button
                             type="submit"
                             disabled={isPending}
@@ -247,8 +349,8 @@ export function PurchaseForm({
                             {isPending
                                 ? "Speichert..."
                                 : mode === "edit"
-                                    ? "Änderungen speichern"
-                                    : "Fahrzeug ankaufen"}
+                                  ? "Änderungen speichern"
+                                  : "Ankauf speichern"}
                         </Button>
                     </div>
                 </div>
@@ -257,11 +359,203 @@ export function PurchaseForm({
     );
 }
 
+function VehicleCreateFields() {
+    return (
+        <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Interne Nummer" name="new_vehicle_internal_number" />
+            <FormField label="Hersteller *" name="new_vehicle_manufacturer" required />
+            <FormField label="Modell *" name="new_vehicle_model" required />
+            <FormField label="Typ *" name="new_vehicle_type" required />
+            <FormField label="Fahrgestellnummer / VIN *" name="new_vehicle_vin" required />
+            <FormField label="Baujahr" name="new_vehicle_construction_year" type="number" />
+            <FormField label="Kilometerstand" name="new_vehicle_mileage" type="number" />
+            <FormField label="Farbe" name="new_vehicle_color" />
+            <FormField label="Fahrzeugkategorie" name="new_vehicle_category" />
+            <div className="md:col-span-2">
+                <Label htmlFor="new_vehicle_damage_notes" className="font-bold text-slate-700">
+                    Schäden
+                </Label>
+                <Textarea
+                    id="new_vehicle_damage_notes"
+                    name="new_vehicle_damage_notes"
+                    placeholder="Bekannte Schäden oder Mängel am Fahrzeug eintragen."
+                    className="mt-2 min-h-24 rounded-2xl border-slate-200 bg-slate-50 font-medium"
+                />
+                <label className="mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+                    <input
+                        type="checkbox"
+                        name="new_vehicle_show_damage_on_invoice"
+                        value="yes"
+                        className="mt-1 size-4 rounded border-amber-300"
+                    />
+                    Schäden auf Rechnung ausweisen
+                </label>
+            </div>
+        </div>
+    );
+}
+
+function SellerCreateFields({
+    sellerType,
+    onSellerTypeChange,
+}: {
+    sellerType: "company" | "private";
+    onSellerTypeChange: (type: "company" | "private") => void;
+}) {
+    return (
+        <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+                <ModeCard
+                    active={sellerType === "company"}
+                    label="Unternehmen"
+                    onClick={() => onSellerTypeChange("company")}
+                />
+                <ModeCard
+                    active={sellerType === "private"}
+                    label="Privatperson"
+                    onClick={() => onSellerTypeChange("private")}
+                />
+            </div>
+            <input type="hidden" name="new_seller_type" value={sellerType} />
+            <div className="grid gap-4 md:grid-cols-2">
+                {sellerType === "company" ? (
+                    <>
+                        <FormField label="Firma *" name="new_seller_company_name" required />
+                        <FormField label="Ansprechpartner" name="new_seller_owner_name" />
+                    </>
+                ) : (
+                    <>
+                        <FormField label="Vorname *" name="new_seller_first_name" required />
+                        <FormField label="Nachname *" name="new_seller_last_name" required />
+                    </>
+                )}
+                <FormField label="Straße und Hausnummer *" name="new_seller_street" required />
+                <FormField label="PLZ *" name="new_seller_postal_code" required />
+                <FormField label="Ort *" name="new_seller_city" required />
+                <FormField label="Land" name="new_seller_country" defaultValue="Deutschland" />
+                <FormField label="E-Mail" name="new_seller_email" type="email" />
+                <FormField label="Telefon" name="new_seller_phone" type="tel" />
+                <div className="space-y-2">
+                    <Label htmlFor="new_seller_preferred_language" className="font-bold text-slate-700">
+                        Sprache
+                    </Label>
+                    <select
+                        id="new_seller_preferred_language"
+                        name="new_seller_preferred_language"
+                        defaultValue="de"
+                        className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
+                    >
+                        {EMAIL_LANGUAGE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <FormField label="USt-ID | VAT | NIP" name="new_seller_vat_id" />
+                <FormField label="Steuernummer" name="new_seller_tax_number" />
+                <FormField label="Handelsregister" name="new_seller_commercial_register_number" />
+            </div>
+        </div>
+    );
+}
+
+function ProgressBar() {
+    const steps = ["Fahrzeug", "Verkäufer", "Ankauf", "Dokumente", "Speichern"];
+
+    return (
+        <div className="grid gap-2 rounded-[1.75rem] border border-cyan-100 bg-cyan-50 p-3 text-xs font-extrabold text-cyan-800 md:grid-cols-5">
+            {steps.map((step, index) => (
+                <div key={step} className="rounded-2xl bg-white px-3 py-2">
+                    {index + 1}. {step}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ModeTabs({
+    value,
+    firstLabel,
+    secondLabel,
+    onChange,
+}: {
+    name: string;
+    value: SelectionMode;
+    firstLabel: string;
+    secondLabel: string;
+    onChange: (value: SelectionMode) => void;
+}) {
+    return (
+        <div className="grid gap-3 md:grid-cols-2">
+            <ModeCard
+                active={value === "existing"}
+                label={firstLabel}
+                onClick={() => onChange("existing")}
+            />
+            <ModeCard
+                active={value === "new"}
+                label={secondLabel}
+                onClick={() => onChange("new")}
+            />
+        </div>
+    );
+}
+
+function ModeCard({
+    active,
+    label,
+    onClick,
+}: {
+    active: boolean;
+    label: string;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={
+                active
+                    ? "rounded-3xl border border-cyan-300 bg-cyan-50 p-4 text-left font-extrabold text-cyan-900 ring-4 ring-cyan-100"
+                    : "rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left font-extrabold text-slate-700 hover:border-cyan-200 hover:bg-cyan-50"
+            }
+        >
+            {label}
+        </button>
+    );
+}
+
+function SummaryGrid({
+    vehicleMode,
+    sellerMode,
+}: {
+    vehicleMode: SelectionMode;
+    sellerMode: SelectionMode;
+}) {
+    return (
+        <div className="grid gap-3 text-sm md:grid-cols-3">
+            <SummaryBox label="Fahrzeug" value={vehicleMode === "new" ? "wird neu angelegt" : "bestehendes Fahrzeug"} />
+            <SummaryBox label="Verkäufer" value={sellerMode === "new" ? "wird neu angelegt" : "bestehender Verkäufer"} />
+            <SummaryBox label="Dokumente" value="Fahrzeugschein / Einkaufsrechnung optional" />
+        </div>
+    );
+}
+
+function SummaryBox({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
+            <p className="mt-1 font-extrabold text-slate-950">{value}</p>
+        </div>
+    );
+}
+
 function SectionTitle({
-                          icon: Icon,
-                          title,
-                          description,
-                      }: {
+    icon: Icon,
+    title,
+    description,
+}: {
     icon: typeof Truck;
     title: string;
     description: string;
@@ -282,18 +576,18 @@ function SectionTitle({
 }
 
 function FormField({
-                       label,
-                       name,
-                       type = "text",
-                       required = false,
-                       defaultValue,
-                       placeholder,
-                   }: {
+    label,
+    name,
+    type = "text",
+    required = false,
+    defaultValue,
+    placeholder,
+}: {
     label: string;
     name: string;
     type?: string;
     required?: boolean;
-    defaultValue?: string;
+    defaultValue?: string | number;
     placeholder?: string;
 }) {
     return (
@@ -311,44 +605,6 @@ function FormField({
                 placeholder={placeholder}
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50 font-medium"
             />
-        </div>
-    );
-}
-
-function SelectField({
-                         label,
-                         name,
-                         placeholder,
-                         options,
-                         defaultValue = "",
-                         required = false,
-                     }: {
-    label: string;
-    name: string;
-    placeholder: string;
-    options: { id: string; label: string }[];
-    defaultValue?: string;
-    required?: boolean;
-}) {
-    return (
-        <div className="space-y-2">
-            <Label htmlFor={name} className="font-bold text-slate-700">
-                {label}
-            </Label>
-            <select
-                id={name}
-                name={name}
-                required={required}
-                defaultValue={defaultValue}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
-            >
-                <option value="">{placeholder}</option>
-                {options.map((option) => (
-                    <option key={option.id} value={option.id}>
-                        {option.label}
-                    </option>
-                ))}
-            </select>
         </div>
     );
 }

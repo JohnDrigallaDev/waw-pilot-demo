@@ -124,10 +124,33 @@ export async function updatePurchaseCaseAction(
 
     const { data: vehicleData } = await supabase
         .from("vehicles")
-        .select("internal_number, manufacturer, model")
+        .select("internal_number, manufacturer, model, status")
         .eq("id", vehicleId)
         .eq("company_id", companyId)
         .maybeSingle();
+
+    if (!vehicleData) {
+        return {
+            success: false,
+            message: "Das Fahrzeug wurde nicht gefunden.",
+        };
+    }
+
+    const { data: existingVehiclePurchase } = await supabase
+        .from("purchase_cases")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("vehicle_id", vehicleId)
+        .neq("id", purchaseId)
+        .limit(1)
+        .maybeSingle();
+
+    if (vehicleData.status === "sold" || existingVehiclePurchase) {
+        return {
+            success: false,
+            message: "Dieses Fahrzeug ist bereits verkauft oder mit einem anderen Ankauf verknüpft.",
+        };
+    }
 
     const purchaseNumber = existingPurchase?.purchase_number ?? purchaseId;
     const vehicleActivityName = getVehicleActivityName(vehicleData);

@@ -162,12 +162,10 @@ export async function getPurchaseCaseDetail(
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
 
-    const [{ data, error }, { data: documentsData, error: documentsError }] =
-        await Promise.all([
-            supabase
-                .from("purchase_cases")
-                .select(
-                    `
+    const { data, error } = await supabase
+        .from("purchase_cases")
+        .select(
+            `
       id,
       vehicle_id,
       seller_customer_id,
@@ -209,15 +207,25 @@ export async function getPurchaseCaseDetail(
         status
       )
     `,
-                )
-                .eq("id", purchaseId)
-                .eq("company_id", companyId)
-                .single(),
+        )
+        .eq("id", purchaseId)
+        .eq("company_id", companyId)
+        .single();
 
-            supabase
-                .from("documents")
-                .select(
-                    `
+    if (error || !data) {
+        notFound();
+    }
+
+    const purchase = data as unknown as PurchaseCaseDetailQueryRow;
+
+    const documentRelationFilter = purchase.vehicle_id
+        ? `purchase_case_id.eq.${purchaseId},vehicle_id.eq.${purchase.vehicle_id}`
+        : `purchase_case_id.eq.${purchaseId}`;
+
+    const { data: documentsData, error: documentsError } = await supabase
+        .from("documents")
+        .select(
+            `
       id,
       document_type,
       source,
@@ -228,23 +236,16 @@ export async function getPurchaseCaseDetail(
       file_size,
       created_at
     `,
-                )
-                .eq("company_id", companyId)
-                .eq("purchase_case_id", purchaseId)
-                .order("created_at", { ascending: false }),
-        ]);
-
-    if (error || !data) {
-        notFound();
-    }
+        )
+        .eq("company_id", companyId)
+        .or(documentRelationFilter)
+        .order("created_at", { ascending: false });
 
     if (documentsError) {
         throw new Error(
             `Ankaufsdokumente konnten nicht geladen werden: ${documentsError.message}`,
         );
     }
-
-    const purchase = data as unknown as PurchaseCaseDetailQueryRow;
 
     const seller = getSingleRelation(purchase.customers);
     const vehicle = getSingleRelation(purchase.vehicles);
