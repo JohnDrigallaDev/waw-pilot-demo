@@ -25,23 +25,12 @@ import {
     getUnsupportedDocumentTypeMessage,
     isAllowedDocumentFile,
 } from "@/lib/documents/upload-validation";
+import { financialCategories } from "@/lib/accounting/financial-categories";
 
 const initialState = {
     success: false,
     message: "",
 };
-
-const categories = [
-    { value: "vehicle_sale", label: "Fahrzeugverkauf" },
-    { value: "vehicle_purchase", label: "Fahrzeugankauf" },
-    { value: "repair", label: "Reparatur / Werkstatt" },
-    { value: "fuel", label: "Kraftstoff" },
-    { value: "registration", label: "Zulassung / Kennzeichen" },
-    { value: "insurance", label: "Versicherung" },
-    { value: "tax", label: "Steuern / Gebühren" },
-    { value: "office", label: "Büro / Verwaltung" },
-    { value: "other", label: "Sonstiges" },
-];
 
 export function CashbookEntryForm() {
     const [state, formAction, isPending] = useActionState(
@@ -83,8 +72,8 @@ export function CashbookEntryForm() {
         <div className="space-y-6">
             <PageHeader
                 eyebrow="Kassenbuch"
-                title="Buchung erfassen"
-                description="Erfasse eine manuelle Einnahme oder Ausgabe für Bar oder Bank."
+                title="Finanzvorgang erfassen"
+                description="Erfasse sonstige Bar- oder Bankvorgänge. Verkaufszahlungen werden in der Verkaufsakte erfasst."
                 action={
                     <Button
                         asChild
@@ -111,7 +100,7 @@ export function CashbookEntryForm() {
                         <SectionTitle
                             icon={Wallet}
                             title="Buchungstyp"
-                            description="Wähle, ob es sich um eine Einnahme oder Ausgabe handelt."
+                            description="Wähle, ob es sich um eine Einnahme, Ausgabe, Bareinlage oder Barentnahme handelt."
                         />
 
                         <div className="grid gap-3 md:grid-cols-2">
@@ -119,13 +108,13 @@ export function CashbookEntryForm() {
                                 name="entry_type"
                                 value="income"
                                 title="Einnahme"
-                                description="Geldeingang, z. B. Zahlung oder sonstige Einnahme."
+                                description="Sonstiger Geldeingang außerhalb einer Verkaufszahlung."
                                 defaultChecked
                             />
                             <RadioBox
                                 name="entry_type"
                                 value="expense"
-                                title="Ausgabe"
+                                title="Ausgabe / Entnahme"
                                 description="Geldausgang, z. B. Reparatur, Gebühren oder Einkauf."
                             />
                         </div>
@@ -178,8 +167,8 @@ export function CashbookEntryForm() {
                                     defaultValue="other"
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
                                 >
-                                    {categories.map((category) => (
-                                        <option key={category.value} value={category.value}>
+                                    {financialCategories.map((category) => (
+                                        <option key={category.code} value={category.code}>
                                             {category.label}
                                         </option>
                                     ))}

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { logActivity } from "@/lib/activity/activity-log";
+import { syncSalePaymentFinancialEntry } from "@/lib/accounting/financial-sync";
 import { getCurrentCompanyId } from "@/lib/company";
 import { isPaymentMethod } from "@/lib/payments/payment-methods";
 import { createAuthServerSupabaseClient } from "@/lib/supabase/auth-server";
@@ -266,6 +267,10 @@ export async function createSalePaymentAction(formData: FormData) {
     });
 
     await syncLegacyPaymentStatus(saleId);
+    await syncSalePaymentFinancialEntry({
+        companyId,
+        paymentId,
+    });
 
     await logActivity({
         action: `Zahlung ${paymentReference} angelegt`,
@@ -276,6 +281,7 @@ export async function createSalePaymentAction(formData: FormData) {
     revalidatePath(`/dashboard/sales/${saleId}`);
     revalidatePath("/dashboard/sales");
     revalidatePath("/dashboard/invoices");
+    revalidatePath("/dashboard/cashbook");
     revalidatePath("/dashboard/dashboard");
     revalidatePath("/dashboard/activities");
 
@@ -354,6 +360,10 @@ export async function updateSalePaymentAction(formData: FormData) {
     });
 
     await syncLegacyPaymentStatus(saleId);
+    await syncSalePaymentFinancialEntry({
+        companyId,
+        paymentId,
+    });
 
     await logActivity({
         action: `Zahlung ${previousValues.payment_reference} geändert`,
@@ -364,6 +374,7 @@ export async function updateSalePaymentAction(formData: FormData) {
     revalidatePath(`/dashboard/sales/${saleId}`);
     revalidatePath("/dashboard/sales");
     revalidatePath("/dashboard/invoices");
+    revalidatePath("/dashboard/cashbook");
     revalidatePath("/dashboard/activities");
 
     redirect(getPaymentRedirect(saleId, { paymentSaved: "updated" }));
@@ -434,6 +445,10 @@ export async function voidSalePaymentAction(formData: FormData) {
     });
 
     await syncLegacyPaymentStatus(saleId);
+    await syncSalePaymentFinancialEntry({
+        companyId,
+        paymentId,
+    });
 
     await logActivity({
         action: `Zahlung ${existingPayment.payment_reference} storniert`,
@@ -444,6 +459,7 @@ export async function voidSalePaymentAction(formData: FormData) {
     revalidatePath(`/dashboard/sales/${saleId}`);
     revalidatePath("/dashboard/sales");
     revalidatePath("/dashboard/invoices");
+    revalidatePath("/dashboard/cashbook");
     revalidatePath("/dashboard/activities");
 
     redirect(getPaymentRedirect(saleId, { paymentSaved: "voided" }));

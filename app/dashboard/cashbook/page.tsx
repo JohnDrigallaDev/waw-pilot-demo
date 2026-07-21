@@ -1,12 +1,16 @@
 export const dynamic = "force-dynamic";
 
-import { CashbookOverview } from "@/components/cashbook/cashbook-overview";
-import { getCashbookEntries } from "@/lib/cashbook/cashbook-queries";
+import { FinancialOverview } from "@/components/cashbook/financial-overview";
+import {
+    getCashRegisterSummary,
+    getFinancialEntries,
+} from "@/lib/accounting/financial-queries";
 
 type CashbookPageProps = {
     searchParams: Promise<{
         from?: string;
         to?: string;
+        tab?: string;
     }>;
 };
 
@@ -18,14 +22,19 @@ export default async function CashbookPage({ searchParams }: CashbookPageProps) 
     const resolvedSearchParams = await searchParams;
     const dateFrom = normalizeDateParam(resolvedSearchParams.from);
     const dateTo = normalizeDateParam(resolvedSearchParams.to);
-    const entries = await getCashbookEntries({
+    const activeTab =
+        resolvedSearchParams.tab === "accounting" ? "accounting" : "cash";
+    const entries = await getFinancialEntries({
         from: dateFrom,
         to: dateTo,
     });
+    const cashSummary = await getCashRegisterSummary(entries);
 
     return (
-        <CashbookOverview
+        <FinancialOverview
             entries={entries}
+            cashSummary={cashSummary}
+            activeTab={activeTab}
             dateFrom={dateFrom}
             dateTo={dateTo}
         />

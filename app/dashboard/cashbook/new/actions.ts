@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 
+import { getFinancialCategoryLabel } from "@/lib/accounting/financial-categories";
+import { syncCashbookEntryFinancialEntry } from "@/lib/accounting/financial-sync";
 import { getCurrentCompanyId } from "@/lib/company";
 import { logActivity } from "@/lib/activity/activity-log";
 import {
@@ -71,19 +73,35 @@ function getPaymentMethodLabel(paymentMethod: string): string {
 }
 
 function getCategoryLabel(category: string): string {
-    const labels: Record<string, string> = {
-        vehicle_sale: "Fahrzeugverkauf",
-        vehicle_purchase: "Fahrzeugankauf",
-        repair: "Reparatur / Werkstatt",
-        fuel: "Kraftstoff",
-        registration: "Zulassung / Kennzeichen",
-        insurance: "Versicherung",
-        tax: "Steuern / Gebühren",
-        office: "Büro / Verwaltung",
-        other: "Sonstiges",
-    };
+    return getFinancialCategoryLabel(category);
+}
 
-    return labels[category] ?? category;
+async function getCurrentCashBalance(companyId: string): Promise<number> {
+    const supabase = createServerSupabaseClient();
+    const { data: cashRegister } = await supabase
+        .from("cash_registers")
+        .select("opening_balance")
+        .eq("company_id", companyId)
+        .eq("active", true)
+        .maybeSingle();
+
+    const { data: cashEntries, error } = await supabase
+        .from("financial_entries")
+        .select("amount, direction")
+        .eq("company_id", companyId)
+        .eq("is_cash_relevant", true)
+        .eq("status", "active");
+
+    if (error) {
+        throw new Error("Der Kassenbestand konnte nicht berechnet werden.");
+    }
+
+    const openingBalance = Number(cashRegister?.opening_balance ?? 0);
+
+    return (cashEntries ?? []).reduce((balance, entry) => {
+        const amount = Number(entry.amount);
+        return entry.direction === "in" ? balance + amount : balance - amount;
+    }, openingBalance);
 }
 
 async function createCashbookReceiptDocument({
@@ -156,15 +174,15 @@ export async function createCashbookEntryAction(
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
 
-    const entryType = getStringValue(formData, "entry_type");
+    const submittedEntryType = getStringValue(formData, "entry_type");
     const category = getStringValue(formData, "category");
-    const paymentMethod = getStringValue(formData, "payment_method");
+    const submittedPaymentMethod = getStringValue(formData, "payment_method");
     const amount = getNumberValue(formData, "amount");
     const bookingDate = getStringValue(formData, "booking_date");
     const description = getStringValue(formData, "description");
     const fileValue = formData.get("receipt_file");
 
-    if (entryType !== "income" && entryType !== "expense") {
+    if (submittedEntryType !== "income" && submittedEntryType !== "expense") {
         return {
             success: false,
             message: "Bitte wähle Einnahme oder Ausgabe aus.",
@@ -178,12 +196,23 @@ export async function createCashbookEntryAction(
         };
     }
 
-    if (paymentMethod !== "cash" && paymentMethod !== "bank") {
+    if (submittedPaymentMethod !== "cash" && submittedPaymentMethod !== "bank") {
         return {
             success: false,
             message: "Bitte wähle Bar oder Bank aus.",
         };
     }
+
+    const entryType =
+        category === "owner_deposit"
+            ? "income"
+            : category === "owner_withdrawal"
+              ? "expense"
+              : submittedEntryType;
+    const paymentMethod =
+        category === "owner_deposit" || category === "owner_withdrawal"
+            ? "cash"
+            : submittedPaymentMethod;
 
     if (amount === null || amount <= 0) {
         return {
@@ -204,6 +233,34 @@ export async function createCashbookEntryAction(
             success: false,
             message: "Bitte gib eine Beschreibung ein.",
         };
+    }
+
+    if (paymentMethod === "cash" && entryType === "expense") {
+        try {
+            const currentCashBalance = await getCurrentCashBalance(companyId);
+            const targetCashBalance = Math.round((currentCashBalance - amount) * 100) / 100;
+
+            if (targetCashBalance < 0) {
+                return {
+                    success: false,
+                    message: `Diese Barausgabe würde den Kassenbestand auf ${targetCashBalance.toLocaleString(
+                        "de-DE",
+                        {
+                            style: "currency",
+                            currency: "EUR",
+                        },
+                    )} senken. Bitte prüfe Anfangsbestand oder fehlende Bareinnahmen.`,
+                };
+            }
+        } catch (error) {
+            return {
+                success: false,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Der Kassenbestand konnte nicht berechnet werden.",
+            };
+        }
     }
 
     let documentId: string | null = null;
@@ -268,6 +325,11 @@ export async function createCashbookEntryAction(
             entityType: "cashbook",
             entityId: cashbookEntry.id as string,
         });
+
+        await syncCashbookEntryFinancialEntry({
+            companyId,
+            cashbookEntryId: cashbookEntry.id as string,
+        });
     } catch (error) {
         return {
             success: false,
@@ -278,5 +340,5 @@ export async function createCashbookEntryAction(
         };
     }
 
-    redirect("/dashboard/cashbook");
+    redirect(`/dashboard/cashbook?tab=${paymentMethod === "cash" ? "cash" : "accounting"}`);
 }
