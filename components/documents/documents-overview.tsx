@@ -669,16 +669,10 @@ function DocumentPrimaryLink({
     children: ReactNode;
 }) {
     const reviewHref = reviewMode ? getReviewDocumentHref(document) : null;
-    const fileHref = document.file_path ? `/api/documents/${document.id}/file` : null;
-    const href = reviewHref ?? fileHref;
+    const detailHref = `/dashboard/documents/${document.id}`;
+    const href = reviewHref ?? detailHref;
 
-    if (!href) return <span className={className}>{children}</span>;
-
-    return (
-        <Link href={href} target={reviewHref ? undefined : "_blank"} className={className}>
-            {children}
-        </Link>
-    );
+    return <Link href={href} className={className}>{children}</Link>;
 }
 
 function DocumentMobileCard({

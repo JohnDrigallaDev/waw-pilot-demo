@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentCompanyId } from "@/lib/company";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createDocumentUseCases } from "@/src/modules/documents/infrastructure/factories/document-use-case.factory";
 
 export const runtime = "nodejs";
 
@@ -9,13 +9,6 @@ type RouteContext = {
     params: Promise<{
         documentId: string;
     }>;
-};
-
-type DocumentFileQueryResult = {
-    id: string;
-    file_name: string;
-    file_path: string | null;
-    mime_type: string | null;
 };
 
 function createSafeFileName(fileName: string): string {
@@ -27,64 +20,45 @@ export async function GET(request: Request, context: RouteContext) {
 
     const url = new URL(request.url);
     const shouldDownload = url.searchParams.get("download") === "1";
-
-    const supabase = createServerSupabaseClient();
+    const versionId = url.searchParams.get("versionId") ?? undefined;
     const companyId = getCurrentCompanyId();
+    const { getDocumentDetail, generateDocumentAccessUrl } = createDocumentUseCases();
 
-    const { data, error } = await supabase
-        .from("documents")
-        .select(
-            `
-      id,
-      file_name,
-      file_path,
-      mime_type
-    `,
-        )
-        .eq("id", documentId)
-        .eq("company_id", companyId)
-        .single();
-
-    if (error || !data) {
+    let file;
+    try {
+        await getDocumentDetail.execute({ companyId, documentId });
+        file = await generateDocumentAccessUrl.execute({
+            companyId,
+            documentId,
+            versionId,
+            expiresInSeconds: 60,
+        });
+    } catch (error) {
         return NextResponse.json(
             {
-                message: `Dokument konnte nicht geladen werden: ${
-                    error?.message ?? "Nicht gefunden"
-                }`,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Dokument konnte nicht geladen werden.",
             },
             { status: 404 },
         );
     }
 
-    const document = data as unknown as DocumentFileQueryResult;
+    const response = await fetch(file.signedUrl, { cache: "no-store" });
 
-    if (!document.file_path) {
+    if (!response.ok) {
         return NextResponse.json(
             {
-                message: "Dokument hat keinen Storage-Pfad.",
-            },
-            { status: 400 },
-        );
-    }
-
-    const { data: fileData, error: downloadError } = await supabase.storage
-        .from("documents")
-        .download(document.file_path);
-
-    if (downloadError || !fileData) {
-        return NextResponse.json(
-            {
-                message: `Datei konnte nicht aus Storage geladen werden: ${
-                    downloadError?.message ?? "Nicht gefunden"
-                }`,
+                message: "Datei konnte nicht aus Storage geladen werden.",
             },
             { status: 404 },
         );
     }
 
-    const arrayBuffer = await fileData.arrayBuffer();
-    const fileName = createSafeFileName(document.file_name);
-    const contentType = document.mime_type || "application/octet-stream";
+    const arrayBuffer = await response.arrayBuffer();
+    const fileName = createSafeFileName(file.fileName);
+    const contentType = file.mimeType || "application/octet-stream";
     const disposition = shouldDownload ? "attachment" : "inline";
 
     return new NextResponse(Buffer.from(arrayBuffer), {
