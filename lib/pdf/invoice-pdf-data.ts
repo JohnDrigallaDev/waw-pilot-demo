@@ -4,6 +4,7 @@ import { getCompanySignatureStampAssets } from "@/lib/pdf/company-signature-asse
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 import type { SaleType } from "@/lib/sales/sale-queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getCorrectionReasonLabel } from "@/src/modules/invoice-corrections/domain/constants/correction-types";
 
 type CompanyRelation = {
     legal_name: string;
@@ -59,6 +60,11 @@ type InvoiceQueryResult = {
     vat_rate: number | string;
     vat_amount: number | string;
     gross_amount: number | string;
+    original_invoice_number: string | null;
+    original_invoice_date: string | null;
+    correction_reason_code: string | null;
+    correction_reason_text: string | null;
+    customer_visible_reason: string | null;
     include_signature_stamp: boolean | null;
     companies: SupabaseRelation<CompanyRelation>;
     customers: SupabaseRelation<CustomerRelation>;
@@ -121,6 +127,11 @@ export async function getInvoicePdfData(
       vat_rate,
       vat_amount,
       gross_amount,
+      original_invoice_number,
+      original_invoice_date,
+      correction_reason_code,
+      correction_reason_text,
+      customer_visible_reason,
       include_signature_stamp,
       companies (
         legal_name,
@@ -193,6 +204,18 @@ export async function getInvoicePdfData(
         saleType: getSaleTypeValue(sale),
         invoiceNumber: invoice.invoice_number,
         invoiceDate: invoice.invoice_date,
+        correction: invoice.original_invoice_number
+            ? {
+                  originalInvoiceNumber: invoice.original_invoice_number,
+                  originalInvoiceDate: invoice.original_invoice_date,
+                  reason:
+                      invoice.customer_visible_reason ??
+                      invoice.correction_reason_text ??
+                      (invoice.correction_reason_code
+                          ? getCorrectionReasonLabel(invoice.correction_reason_code)
+                          : null),
+              }
+            : undefined,
         signatureStamp: {
             include: Boolean(invoice.include_signature_stamp),
             ...(await getCompanySignatureStampAssets(

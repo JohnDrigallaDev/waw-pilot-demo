@@ -1,7 +1,12 @@
 import { getCurrentCompanyId } from "@/lib/company";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-export type InvoiceType = "standard" | "proforma" | "down_payment";
+export type InvoiceType =
+    | "standard"
+    | "proforma"
+    | "down_payment"
+    | "cancellation_invoice"
+    | "credit_note";
 
 type GetNextInvoiceNumberParams = {
     invoiceType?: InvoiceType;
@@ -17,6 +22,8 @@ export function getInvoiceTypeLabel(invoiceType: InvoiceType): string {
         standard: "Rechnung",
         proforma: "Proforma-Rechnung",
         down_payment: "Anzahlungsrechnung",
+        cancellation_invoice: "Stornorechnung",
+        credit_note: "Gutschrift",
     };
 
     return labels[invoiceType];
@@ -27,6 +34,8 @@ export function getInvoiceTypeDocumentType(invoiceType: InvoiceType): string {
         standard: "invoice_pdf",
         proforma: "proforma_invoice",
         down_payment: "down_payment_invoice",
+        cancellation_invoice: "cancellation_invoice",
+        credit_note: "credit_note",
     };
 
     return documentTypes[invoiceType];
@@ -57,6 +66,10 @@ function getInvoiceNumberPrefix(
 
     if (invoiceType === "down_payment") {
         return `AZ-${yearPrefix}-`;
+    }
+
+    if (invoiceType === "credit_note") {
+        return `GS-${yearPrefix}-`;
     }
 
     return `${yearPrefix}-`;

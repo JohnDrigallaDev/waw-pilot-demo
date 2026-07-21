@@ -48,6 +48,7 @@ import { SendInvoiceEmailForm } from "@/components/sales/send-invoice-email-form
 import { SendStampDocumentsDialog } from "@/components/sales/send-stamp-documents-dialog";
 import { ZugferdInvoiceActions } from "@/components/sales/zugferd-invoice-actions";
 import { SalePaymentsCard } from "@/components/sales/sale-payments-card";
+import { SaleCorrectionsCard } from "@/components/sales/sale-corrections-card";
 import {
     SaleCustomerEditDialog,
     SaleVehicleEditDialog,
@@ -80,6 +81,9 @@ type SaleDetailProps = {
     exportArrivalError?: boolean;
     paymentSaved?: string | null;
     paymentError?: string | null;
+    cancellationCreated?: string | null;
+    refundCreated?: string | null;
+    correctionError?: string | null;
     recordSaved?: string | null;
     recordError?: string | null;
 };
@@ -107,6 +111,9 @@ export function SaleDetail({
                                exportArrivalError = false,
                                paymentSaved = null,
                                paymentError = null,
+                               cancellationCreated = null,
+                               refundCreated = null,
+                               correctionError = null,
                                recordSaved = null,
                                recordError = null,
                            }: SaleDetailProps) {
@@ -189,6 +196,31 @@ export function SaleDetail({
                             </p>
                         </div>
                     </div>
+                </div>
+            ) : null}
+
+            {cancellationCreated ? (
+                <FlashMessage
+                    message="Stornorechnung wurde erstellt."
+                    description={`Stornorechnung ${cancellationCreated} ist im Bereich „Rechnungskorrekturen“ verfügbar.`}
+                />
+            ) : null}
+
+            {refundCreated ? (
+                <FlashMessage
+                    message="Rückzahlung wurde erfasst."
+                    description={`Rückzahlung ${refundCreated} wurde gespeichert und im Finanzjournal berücksichtigt.`}
+                />
+            ) : null}
+
+            {correctionError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+                    <p className="font-extrabold text-red-950">
+                        Rechnungskorrektur konnte nicht gespeichert werden.
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-red-800">
+                        {getCorrectionErrorMessage(correctionError)}
+                    </p>
                 </div>
             ) : null}
 
@@ -543,6 +575,20 @@ export function SaleDetail({
                                     <EmptyBox text="Für diesen Verkauf wurde noch keine Rechnung erzeugt." />
                                 </div>
                             )}
+
+                            <div className="mt-6">
+                                <SaleCorrectionsCard
+                                    saleId={sale.id}
+                                    originalInvoice={
+                                        sale.invoices.find(
+                                            (invoice) => invoice.invoice_type === "standard",
+                                        ) ?? null
+                                    }
+                                    invoices={sale.invoices}
+                                    refunds={sale.refunds}
+                                    summary={sale.correction_summary}
+                                />
+                            </div>
 
                             <div className="mt-6">
                                 <SalePaymentsCard
@@ -1090,6 +1136,20 @@ function getPaymentErrorMessage(value: string): string {
             "Zahlung konnte nicht storniert werden. Bitte versuche es erneut.",
         missingVoidReason: "Bitte gib einen Grund für die Stornierung an.",
         notFound: "Die Zahlung wurde nicht gefunden oder ist bereits storniert.",
+    };
+
+    return messages[value] ?? "Bitte prüfe die Eingaben und versuche es erneut.";
+}
+
+function getCorrectionErrorMessage(value: string): string {
+    const messages: Record<string, string> = {
+        missingData: "Bitte wähle eine Rechnung und einen Korrekturgrund.",
+        cancellationFailed:
+            "Die Stornorechnung konnte nicht erstellt werden. Prüfe, ob die Rechnung bereits vollständig korrigiert wurde.",
+        invalidRefund:
+            "Bitte gib Betrag, Datum, Rückzahlungsart und Grund vollständig an.",
+        refundFailed:
+            "Die Rückzahlung konnte nicht erfasst werden. Prüfe den offenen Rückzahlungsbedarf.",
     };
 
     return messages[value] ?? "Bitte prüfe die Eingaben und versuche es erneut.";

@@ -20,6 +20,7 @@ import {
     calculatePaymentStatus,
     calculateRemainingAmount,
 } from "@/utils/payment-utils";
+import { CorrectionCalculationService } from "@/src/modules/invoice-corrections/domain/services/correction-calculation.service";
 
 type SupabaseRelation<T> = T | T[] | null;
 
@@ -31,7 +32,18 @@ type InvoiceRelation = {
     net_amount: number | string;
     vat_amount: number | string;
     gross_amount: number | string;
+    status: string;
     payment_status: PaymentStatus;
+    correction_of_invoice_id: string | null;
+    root_invoice_id: string | null;
+    correction_reason_code: string | null;
+    correction_reason_text: string | null;
+    customer_visible_reason: string | null;
+    correction_scope: string | null;
+    correction_status: string | null;
+    corrected_gross_amount: number | string | null;
+    original_invoice_number: string | null;
+    original_invoice_date: string | null;
     include_signature_stamp: boolean | null;
     pdf_document_id: string | null;
     email_sent_at: string | null;
@@ -77,6 +89,26 @@ type SalePaymentRelation = {
     updated_at: string;
     created_by: string | null;
     last_modified_by: string | null;
+    is_voided: boolean | null;
+    voided_at: string | null;
+    voided_by: string | null;
+    void_reason: string | null;
+};
+
+type SaleRefundRelation = {
+    id: string;
+    refund_reference: string;
+    amount: number | string;
+    refund_method: PaymentMethod;
+    refund_date: string;
+    reason: string;
+    external_reference: string | null;
+    note: string | null;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    created_by: string | null;
+    updated_by: string | null;
     is_voided: boolean | null;
     voided_at: string | null;
     voided_by: string | null;
@@ -143,6 +175,7 @@ type SaleDetailQueryRow = {
     invoices: SupabaseRelation<InvoiceRelation>;
     documents: SupabaseRelation<DocumentRelation>;
     sale_payments: SupabaseRelation<SalePaymentRelation>;
+    sale_refunds: SupabaseRelation<SaleRefundRelation>;
 };
 
 export type SaleDetailDocument = {
@@ -165,7 +198,18 @@ export type SaleDetailInvoice = {
     net_amount: number;
     vat_amount: number;
     gross_amount: number;
+    status: string;
     payment_status: PaymentStatus;
+    correction_of_invoice_id: string | null;
+    root_invoice_id: string | null;
+    correction_reason_code: string | null;
+    correction_reason_text: string | null;
+    customer_visible_reason: string | null;
+    correction_scope: string | null;
+    correction_status: string | null;
+    corrected_gross_amount: number | null;
+    original_invoice_number: string | null;
+    original_invoice_date: string | null;
     include_signature_stamp: boolean;
     pdf_document_id: string | null;
     email_sent_at: string | null;
@@ -185,6 +229,26 @@ export type SaleDetailInvoice = {
     zugferd_email_sent_language: string | null;
     zugferd_email_send_count: number;
     created_at: string;
+};
+
+export type SaleDetailRefund = {
+    id: string;
+    refund_reference: string;
+    amount: number;
+    refund_method: PaymentMethod;
+    refund_date: string;
+    reason: string;
+    external_reference: string | null;
+    note: string | null;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    created_by: string | null;
+    updated_by: string | null;
+    is_voided: boolean;
+    voided_at: string | null;
+    voided_by: string | null;
+    void_reason: string | null;
 };
 
 export type SaleDetailPayment = {
@@ -271,6 +335,16 @@ export type SaleDetail = {
     invoice: SaleDetailInvoice | null;
     invoices: SaleDetailInvoice[];
     payments: SaleDetailPayment[];
+    refunds: SaleDetailRefund[];
+    correction_summary: {
+        original_invoice_id: string | null;
+        existing_correction_gross_amount: number;
+        remaining_correctable_amount: number;
+        effective_invoice_amount: number;
+        refunded_amount: number;
+        outstanding_refund_amount: number;
+        refund_status: string;
+    };
 
     documents: SaleDetailDocument[];
     required_documents: RequiredDocumentStatus[];
@@ -311,6 +385,8 @@ function getInvoiceSortWeight(invoiceType: InvoiceType): number {
         standard: 1,
         proforma: 2,
         down_payment: 3,
+        cancellation_invoice: 4,
+        credit_note: 5,
     };
 
     return weights[invoiceType];
@@ -384,7 +460,18 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         net_amount,
         vat_amount,
         gross_amount,
+        status,
         payment_status,
+        correction_of_invoice_id,
+        root_invoice_id,
+        correction_reason_code,
+        correction_reason_text,
+        customer_visible_reason,
+        correction_scope,
+        correction_status,
+        corrected_gross_amount,
+        original_invoice_number,
+        original_invoice_date,
         include_signature_stamp,
         pdf_document_id,
         email_sent_at,
@@ -432,6 +519,25 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         voided_at,
         voided_by,
         void_reason
+      ),
+      sale_refunds (
+        id,
+        refund_reference,
+        amount,
+        refund_method,
+        refund_date,
+        reason,
+        external_reference,
+        note,
+        status,
+        created_at,
+        updated_at,
+        created_by,
+        updated_by,
+        is_voided,
+        voided_at,
+        voided_by,
+        void_reason
       )
     `,
         )
@@ -458,7 +564,21 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             net_amount: Number(invoice.net_amount),
             vat_amount: Number(invoice.vat_amount),
             gross_amount: Number(invoice.gross_amount),
+            status: invoice.status,
             payment_status: invoice.payment_status,
+            correction_of_invoice_id: invoice.correction_of_invoice_id,
+            root_invoice_id: invoice.root_invoice_id,
+            correction_reason_code: invoice.correction_reason_code,
+            correction_reason_text: invoice.correction_reason_text,
+            customer_visible_reason: invoice.customer_visible_reason,
+            correction_scope: invoice.correction_scope,
+            correction_status: invoice.correction_status,
+            corrected_gross_amount:
+                invoice.corrected_gross_amount === null
+                    ? null
+                    : Number(invoice.corrected_gross_amount),
+            original_invoice_number: invoice.original_invoice_number,
+            original_invoice_date: invoice.original_invoice_date,
             include_signature_stamp: Boolean(invoice.include_signature_stamp),
             pdf_document_id: invoice.pdf_document_id,
             email_sent_at: invoice.email_sent_at,
@@ -532,6 +652,33 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
 
             return b.created_at.localeCompare(a.created_at);
         });
+    const refunds = getManyRelation(sale.sale_refunds)
+        .map((refund) => ({
+            id: refund.id,
+            refund_reference: refund.refund_reference,
+            amount: Number(refund.amount),
+            refund_method: refund.refund_method,
+            refund_date: refund.refund_date,
+            reason: refund.reason,
+            external_reference: refund.external_reference,
+            note: refund.note,
+            status: refund.status,
+            created_at: refund.created_at,
+            updated_at: refund.updated_at,
+            created_by: refund.created_by,
+            updated_by: refund.updated_by,
+            is_voided: Boolean(refund.is_voided),
+            voided_at: refund.voided_at,
+            voided_by: refund.voided_by,
+            void_reason: refund.void_reason,
+        }))
+        .sort((a, b) => {
+            const dateSort = b.refund_date.localeCompare(a.refund_date);
+
+            if (dateSort !== 0) return dateSort;
+
+            return b.created_at.localeCompare(a.created_at);
+        });
 
     const requiredDocuments = getRequiredDocumentsForSale({
         saleType,
@@ -586,6 +733,40 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
     const paidAmount = calculatePaidAmount(payments);
     const remainingAmount = calculateRemainingAmount(grossAmount, payments);
     const paymentStatus = calculatePaymentStatus(grossAmount, payments);
+    const correctionCalculation = new CorrectionCalculationService();
+    const standardInvoice =
+        invoices.find((invoice) => invoice.invoice_type === "standard") ?? null;
+    const correctionInvoices = standardInvoice
+        ? invoices.filter(
+              (invoice) =>
+                  (invoice.invoice_type === "cancellation_invoice" ||
+                      invoice.invoice_type === "credit_note") &&
+                  invoice.correction_status !== "VOIDED" &&
+                  (invoice.root_invoice_id === standardInvoice.id ||
+                      invoice.correction_of_invoice_id === standardInvoice.id),
+          )
+        : [];
+    const existingCorrectionGrossAmount = correctionInvoices.reduce(
+        (sum, invoice) => sum + Math.abs(invoice.gross_amount),
+        0,
+    );
+    const effectiveInvoiceAmount = Math.max(
+        grossAmount - existingCorrectionGrossAmount,
+        0,
+    );
+    const refundedAmount = refunds
+        .filter((refund) => !refund.is_voided)
+        .reduce((sum, refund) => sum + refund.amount, 0);
+    const refundInputs = refunds.map((refund) => ({
+        amount: refund.amount,
+        isVoided: refund.is_voided,
+    }));
+    const outstandingRefundAmount =
+        correctionCalculation.calculateOutstandingRefundAmount({
+            paidAmount,
+            effectiveInvoiceAmount,
+            refunds: refundInputs,
+        });
 
     return {
         id: sale.id,
@@ -655,6 +836,28 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         invoice: mainInvoice,
         invoices,
         payments,
+        refunds,
+        correction_summary: {
+            original_invoice_id: standardInvoice?.id ?? null,
+            existing_correction_gross_amount: existingCorrectionGrossAmount,
+            remaining_correctable_amount: standardInvoice
+                ? correctionCalculation.calculateRemainingCorrectableAmount({
+                      originalGrossAmount: standardInvoice.gross_amount,
+                      corrections: correctionInvoices.map((invoice) => ({
+                          grossAmount: invoice.gross_amount,
+                          status: invoice.correction_status,
+                      })),
+                  })
+                : 0,
+            effective_invoice_amount: effectiveInvoiceAmount,
+            refunded_amount: refundedAmount,
+            outstanding_refund_amount: outstandingRefundAmount,
+            refund_status: correctionCalculation.calculateRefundStatus({
+                paidAmount,
+                effectiveInvoiceAmount,
+                refunds: refundInputs,
+            }),
+        },
 
         documents,
         required_documents: requiredDocumentStatuses,

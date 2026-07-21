@@ -1,6 +1,11 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-type FinancialSourceType = "sale_payment" | "purchase_payment" | "cashbook_entry";
+type FinancialSourceType =
+    | "sale_payment"
+    | "purchase_payment"
+    | "cashbook_entry"
+    | "invoice_correction"
+    | "sale_refund";
 
 type FinancialEntryPayload = {
     source_type: FinancialSourceType;
@@ -315,5 +320,115 @@ export async function syncCashbookEntryFinancialEntry({
         document_id: (entry.document_id as string | null) ?? null,
         status: "active",
         is_cash_relevant: entry.payment_method === "cash",
+    });
+}
+
+export async function syncCorrectionInvoiceFinancialEntry({
+    companyId,
+    invoiceId,
+}: {
+    companyId: string;
+    invoiceId: string;
+}) {
+    const supabase = createServerSupabaseClient();
+    const { data: invoice, error } = await supabase
+        .from("invoices")
+        .select(
+            "id, sale_id, customer_id, vehicle_id, invoice_number, invoice_date, gross_amount, invoice_type, correction_status",
+        )
+        .eq("company_id", companyId)
+        .eq("id", invoiceId)
+        .single();
+
+    if (error || !invoice) {
+        throw new Error("Korrekturbeleg konnte nicht für das Finanzjournal geladen werden.");
+    }
+
+    const invoiceType = invoice.invoice_type as string;
+    const isCorrection =
+        invoiceType === "cancellation_invoice" || invoiceType === "credit_note";
+
+    if (!isCorrection) {
+        throw new Error("Nur Korrekturbelege können als Korrektur synchronisiert werden.");
+    }
+
+    return upsertFinancialEntry(companyId, {
+        source_type: "invoice_correction",
+        source_id: invoice.id as string,
+        source_reference: invoice.invoice_number as string,
+        entry_type: invoiceType,
+        payment_method: null,
+        booking_date: invoice.invoice_date as string,
+        document_date: invoice.invoice_date as string,
+        amount: Math.abs(Number(invoice.gross_amount)),
+        direction: "out",
+        description: `${invoiceType === "cancellation_invoice" ? "Stornorechnung" : "Gutschrift"} ${invoice.invoice_number}`,
+        category_code: "refund",
+        customer_id: (invoice.customer_id as string | null) ?? null,
+        vehicle_id: (invoice.vehicle_id as string | null) ?? null,
+        sale_id: (invoice.sale_id as string | null) ?? null,
+        purchase_id: null,
+        invoice_id: invoice.id as string,
+        document_id: null,
+        status: invoice.correction_status === "VOIDED" ? "voided" : "active",
+        is_cash_relevant: false,
+    });
+}
+
+export async function syncSaleRefundFinancialEntry({
+    companyId,
+    refundId,
+}: {
+    companyId: string;
+    refundId: string;
+}) {
+    const supabase = createServerSupabaseClient();
+    const { data: refund, error } = await supabase
+        .from("sale_refunds")
+        .select(
+            "id, sale_id, invoice_id, correction_invoice_id, customer_id, refund_reference, amount, refund_method, refund_date, reason, status, is_voided, voided_at, voided_by, void_reason",
+        )
+        .eq("company_id", companyId)
+        .eq("id", refundId)
+        .single();
+
+    if (error || !refund) {
+        throw new Error("Rückzahlung konnte nicht für das Finanzjournal geladen werden.");
+    }
+
+    const { data: sale } = await supabase
+        .from("sales")
+        .select("vehicle_id")
+        .eq("company_id", companyId)
+        .eq("id", refund.sale_id)
+        .maybeSingle();
+    const isVoided = Boolean(refund.is_voided);
+
+    return upsertFinancialEntry(companyId, {
+        source_type: "sale_refund",
+        source_id: refund.id as string,
+        source_reference: refund.refund_reference as string,
+        entry_type: "sale_refund",
+        payment_method: refund.refund_method as "cash" | "bank",
+        booking_date: refund.refund_date as string,
+        document_date: refund.refund_date as string,
+        amount: Number(refund.amount),
+        direction: "out",
+        description: `Rückzahlung ${refund.refund_reference}: ${refund.reason}`,
+        category_code: "refund",
+        customer_id: (refund.customer_id as string | null) ?? null,
+        vehicle_id: (sale?.vehicle_id as string | undefined) ?? null,
+        sale_id: refund.sale_id as string,
+        purchase_id: null,
+        invoice_id:
+            (refund.correction_invoice_id as string | null) ??
+            (refund.invoice_id as string | null) ??
+            null,
+        document_id: null,
+        status: isVoided ? "voided" : "active",
+        is_cash_relevant: refund.refund_method === "cash" && !isVoided,
+        voided_at: (refund.voided_at as string | null) ?? null,
+        voided_by: (refund.voided_by as string | null) ?? null,
+        void_reason: (refund.void_reason as string | null) ?? null,
     });
 }

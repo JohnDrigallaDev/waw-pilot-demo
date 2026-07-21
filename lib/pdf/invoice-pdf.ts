@@ -20,6 +20,11 @@ export type InvoicePdfData = {
     saleType: SaleType;
     invoiceNumber: string;
     invoiceDate: string;
+    correction?: {
+        originalInvoiceNumber: string | null;
+        originalInvoiceDate: string | null;
+        reason: string | null;
+    };
     termsAttached?: boolean;
     signatureStamp?: CompanySignatureStampAssets & {
         include: boolean;
@@ -451,6 +456,14 @@ function drawCellText(
 }
 
 function getInvoiceTitle(invoiceType: InvoiceType, invoiceNumber: string): string {
+    if (invoiceType === "cancellation_invoice") {
+        return `STORNORECHNUNG ${invoiceNumber}`;
+    }
+
+    if (invoiceType === "credit_note") {
+        return `GUTSCHRIFT ${invoiceNumber}`;
+    }
+
     if (invoiceType === "proforma") {
         return "Proforma Anzahlungs Rechnung";
     }
@@ -463,6 +476,14 @@ function getInvoiceTitle(invoiceType: InvoiceType, invoiceNumber: string): strin
 }
 
 function getInvoiceBoxTitle(invoiceType: InvoiceType, invoiceNumber: string): string {
+    if (invoiceType === "cancellation_invoice") {
+        return `Stornorechnung: ${invoiceNumber}`;
+    }
+
+    if (invoiceType === "credit_note") {
+        return `Gutschrift: ${invoiceNumber}`;
+    }
+
     if (invoiceType === "proforma") {
         return "Anzahlungs-Rechnung: Proforma";
     }
@@ -475,6 +496,14 @@ function getInvoiceBoxTitle(invoiceType: InvoiceType, invoiceNumber: string): st
 }
 
 function getPaymentReasonLabel(invoiceType: InvoiceType): string {
+    if (invoiceType === "cancellation_invoice") {
+        return "Storno zu Rechnung Nr. | Cancellation invoice";
+    }
+
+    if (invoiceType === "credit_note") {
+        return "Gutschrift Nr. | Credit note number";
+    }
+
     if (invoiceType === "proforma") {
         return "Artikel - Nummer / item number";
     }
@@ -487,6 +516,14 @@ function getPaymentReasonLabel(invoiceType: InvoiceType): string {
 }
 
 function getPrimaryFileLabel(invoiceType: InvoiceType): string {
+    if (invoiceType === "cancellation_invoice") {
+        return "Storno";
+    }
+
+    if (invoiceType === "credit_note") {
+        return "Gutschrift";
+    }
+
     if (invoiceType === "proforma") {
         return "Proforma";
     }
@@ -685,6 +722,30 @@ export async function generateInvoicePdf(
         color: data.invoiceType === "standard" ? gray : black,
         maxWidth: 340,
     });
+
+    if (data.correction?.originalInvoiceNumber) {
+        drawText(
+            page,
+            `Bezug: Originalrechnung ${data.correction.originalInvoiceNumber} vom ${formatDate(data.correction.originalInvoiceDate)}`,
+            210,
+            788,
+            {
+                font: helveticaBold,
+                size: 8,
+                color: gray,
+                maxWidth: 340,
+            },
+        );
+
+        if (data.correction.reason) {
+            drawText(page, `Grund: ${data.correction.reason}`, 210, 776, {
+                font: helvetica,
+                size: 7.5,
+                color: gray,
+                maxWidth: 340,
+            });
+        }
+    }
 
     /**
      * Empfängeradresse / Käufer

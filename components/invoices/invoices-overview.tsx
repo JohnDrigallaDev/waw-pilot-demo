@@ -725,6 +725,8 @@ function InvoiceTypePill({ invoice }: { invoice: InvoiceRow }) {
         standard: "border-cyan-100 bg-cyan-50 text-cyan-700",
         proforma: "border-violet-100 bg-violet-50 text-violet-700",
         down_payment: "border-emerald-100 bg-emerald-50 text-emerald-700",
+        cancellation_invoice: "border-red-100 bg-red-50 text-red-700",
+        credit_note: "border-amber-100 bg-amber-50 text-amber-700",
     };
 
     return (

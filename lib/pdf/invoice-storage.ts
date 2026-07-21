@@ -15,6 +15,8 @@ function getInvoiceFileBaseName(invoiceType: InvoiceType): string {
         standard: "rechnung",
         proforma: "proforma-rechnung",
         down_payment: "anzahlungsrechnung",
+        cancellation_invoice: "stornorechnung",
+        credit_note: "gutschrift",
     };
 
     return fileBaseNames[invoiceType];

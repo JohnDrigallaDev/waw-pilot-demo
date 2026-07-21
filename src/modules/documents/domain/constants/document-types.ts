@@ -10,6 +10,8 @@ export type DocumentTypeCode =
     | "seller_commercial_register"
     | "proforma_invoice"
     | "down_payment_invoice"
+    | "cancellation_invoice"
+    | "credit_note"
     | "vehicle_registration"
     | "contract"
     | "handover_protocol"
@@ -139,6 +141,28 @@ export const documentTypeDefinitions: readonly DocumentTypeDefinition[] = [
         allowedRelations: ["INVOICE", "SALE", "CUSTOMER", "VEHICLE"],
         sortOrder: 13,
         badgeTone: "info",
+        defaultStatus: "ACTIVE",
+    }),
+    defineDocumentType({
+        code: "cancellation_invoice",
+        label: "Stornorechnung",
+        canBeRequired: false,
+        replacementAllowed: false,
+        archiveAllowed: true,
+        allowedRelations: ["INVOICE", "SALE", "CUSTOMER", "VEHICLE", "FINANCIAL_ENTRY"],
+        sortOrder: 14,
+        badgeTone: "error",
+        defaultStatus: "ACTIVE",
+    }),
+    defineDocumentType({
+        code: "credit_note",
+        label: "Gutschrift",
+        canBeRequired: false,
+        replacementAllowed: false,
+        archiveAllowed: true,
+        allowedRelations: ["INVOICE", "SALE", "CUSTOMER", "VEHICLE", "FINANCIAL_ENTRY"],
+        sortOrder: 15,
+        badgeTone: "warning",
         defaultStatus: "ACTIVE",
     }),
     defineDocumentType({

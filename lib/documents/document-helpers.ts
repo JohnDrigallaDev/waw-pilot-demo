@@ -22,6 +22,8 @@ export function getDocumentTypeLabel(type: string): string {
 
         proforma_invoice: "Proforma-Rechnung",
         down_payment_invoice: "Anzahlungsrechnung",
+        cancellation_invoice: "Stornorechnung",
+        credit_note: "Gutschrift",
 
         vehicle_registration: "Fahrzeugschein",
         contract: "Kaufvertrag",

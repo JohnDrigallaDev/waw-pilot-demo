@@ -102,6 +102,8 @@ function getInvoiceFileName(invoiceType: InvoiceType, invoiceNumber: string): st
         standard: "rechnung",
         proforma: "proforma-rechnung",
         down_payment: "anzahlungsrechnung",
+        cancellation_invoice: "stornorechnung",
+        credit_note: "gutschrift",
     };
 
     return `${baseNames[invoiceType]}-${invoiceNumber}.pdf`;
@@ -112,6 +114,8 @@ function getInvoiceSortWeight(invoiceType: InvoiceType): number {
         standard: 1,
         proforma: 2,
         down_payment: 3,
+        cancellation_invoice: 4,
+        credit_note: 5,
     };
 
     return weights[invoiceType];
