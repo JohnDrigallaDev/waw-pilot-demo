@@ -621,6 +621,57 @@ async function createVehicleFromSaleForm(
     };
 }
 
+async function cleanupInlineSaleCreation({
+    supabase,
+    companyId,
+    saleId,
+    createdVehicleId,
+    createdCustomerId,
+}: {
+    supabase: ReturnType<typeof createServerSupabaseClient>;
+    companyId: string;
+    saleId?: string | null;
+    createdVehicleId?: string | null;
+    createdCustomerId?: string | null;
+}) {
+    if (saleId) {
+        const { error } = await supabase
+            .from("sales")
+            .delete()
+            .eq("id", saleId)
+            .eq("company_id", companyId);
+
+        if (error) {
+            console.error("[sale-create] cleanup sale failed", error);
+        }
+    }
+
+    if (createdVehicleId) {
+        const { error } = await supabase
+            .from("vehicles")
+            .delete()
+            .eq("id", createdVehicleId)
+            .eq("company_id", companyId)
+            .eq("status", "in_stock");
+
+        if (error) {
+            console.error("[sale-create] cleanup inline vehicle failed", error);
+        }
+    }
+
+    if (createdCustomerId) {
+        const { error } = await supabase
+            .from("customers")
+            .delete()
+            .eq("id", createdCustomerId)
+            .eq("company_id", companyId);
+
+        if (error) {
+            console.error("[sale-create] cleanup inline customer failed", error);
+        }
+    }
+}
+
 export async function createSaleAction(
     _previousState: CreateSaleState,
     formData: FormData,
@@ -630,6 +681,8 @@ export async function createSaleAction(
 
     let vehicleId = getStringValue(formData, "vehicle_id");
     let buyerCustomerId = getStringValue(formData, "buyer_customer_id");
+    let createdInlineVehicleId: string | null = null;
+    let createdInlineCustomerId: string | null = null;
 
     const buyerMode = getStringValue(formData, "buyer_mode") ?? "existing";
     const vehicleMode = getSelectionMode(formData, "vehicle_mode");
@@ -701,9 +754,16 @@ export async function createSaleAction(
         }
 
         vehicleId = createdVehicle.vehicleId;
+        createdInlineVehicleId = createdVehicle.vehicleId;
     }
 
     if (!vehicleId) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: "Bitte wähle ein Fahrzeug aus oder lege ein neues Fahrzeug an.",
@@ -718,6 +778,12 @@ export async function createSaleAction(
         .single();
 
     if (vehicleLoadError || !vehicleData) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: `Fahrzeug konnte nicht geladen werden: ${
@@ -729,6 +795,12 @@ export async function createSaleAction(
     const vehicleEligibility = evaluateVehicleSaleEligibility(vehicleData.status);
 
     if (!vehicleEligibility.eligible) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message:
@@ -750,6 +822,12 @@ export async function createSaleAction(
     }
 
     if ((existingActiveSale ?? []).length > 0) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message:
@@ -766,6 +844,12 @@ export async function createSaleAction(
         );
 
         if (!createdCustomer.success) {
+            await cleanupInlineSaleCreation({
+                supabase,
+                companyId,
+                createdVehicleId: createdInlineVehicleId,
+                createdCustomerId: createdInlineCustomerId,
+            });
             return {
                 success: false,
                 message: createdCustomer.message,
@@ -773,6 +857,7 @@ export async function createSaleAction(
         }
 
         buyerCustomerId = createdCustomer.customerId;
+        createdInlineCustomerId = createdCustomer.customerId;
 
         await logActivity({
             action: `Kunde ${createdCustomer.customerName} direkt beim Verkauf angelegt`,
@@ -782,6 +867,12 @@ export async function createSaleAction(
     }
 
     if (!buyerCustomerId) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: "Bitte wähle einen Käufer aus oder lege einen neuen Käufer an.",
@@ -796,6 +887,12 @@ export async function createSaleAction(
         .single();
 
     if (buyerCustomerLoadError || !buyerCustomer) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: `Käufer konnte nicht geladen werden: ${
@@ -819,6 +916,12 @@ export async function createSaleAction(
     });
 
     if (taxConfiguration.showTaxNumber && !buyerCustomer.tax_number) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message:
@@ -827,6 +930,12 @@ export async function createSaleAction(
     }
 
     if (taxConfiguration.showVatId && !buyerCustomer.vat_id) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message:
@@ -835,6 +944,12 @@ export async function createSaleAction(
     }
 
     if (!saleDate) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: "Bitte wähle ein Verkaufsdatum aus.",
@@ -856,6 +971,12 @@ export async function createSaleAction(
             !exportTransportType ||
             !exportReceiverName)
     ) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message:
@@ -871,6 +992,12 @@ export async function createSaleAction(
             year: exportArrivalYear,
         })
     ) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message:
@@ -879,6 +1006,12 @@ export async function createSaleAction(
     }
 
     if (netAmount === null || netAmount <= 0) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: "Bitte gib einen gültigen Verkaufspreis netto ein.",
@@ -897,6 +1030,12 @@ export async function createSaleAction(
     try {
         saleNumber = await getNextSaleNumber(supabase, companyId);
     } catch (error) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message:
@@ -939,6 +1078,12 @@ export async function createSaleAction(
         .single();
 
     if (saleError || !sale) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: `Verkauf konnte nicht gespeichert werden: ${
@@ -970,6 +1115,13 @@ export async function createSaleAction(
         .maybeSingle();
 
     if (vehicleUpdateError || !updatedVehicle) {
+        await cleanupInlineSaleCreation({
+            supabase,
+            companyId,
+            saleId,
+            createdVehicleId: createdInlineVehicleId,
+            createdCustomerId: createdInlineCustomerId,
+        });
         return {
             success: false,
             message: vehicleUpdateError
