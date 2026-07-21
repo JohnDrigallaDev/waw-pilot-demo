@@ -45,11 +45,12 @@ type SalesOverviewProps = {
     initialMonthFilter?: string | null;
 };
 
-type PaymentFilter = "all" | "open" | "paid" | "proforma";
+type PaymentFilter = "all" | "open" | "paid" | "overpaid" | "proforma";
 
 function getInitialPaymentFilter(paymentStatus: string | null | undefined): PaymentFilter {
     if (paymentStatus === "open" || paymentStatus === "unpaid") return "open";
     if (paymentStatus === "paid") return "paid";
+    if (paymentStatus === "overpaid") return "overpaid";
     if (paymentStatus === "proforma") return "proforma";
 
     return "all";
@@ -76,8 +77,12 @@ export function SalesOverview({
 
             const matchesPaymentFilter =
                 paymentFilter === "all" ||
-                (paymentFilter === "open" && sale.payment_status !== "paid") ||
+                (paymentFilter === "open" &&
+                    (sale.payment_status === "open" ||
+                        sale.payment_status === "partial")) ||
                 (paymentFilter === "paid" && sale.payment_status === "paid") ||
+                (paymentFilter === "overpaid" &&
+                    sale.payment_status === "overpaid") ||
                 (paymentFilter === "proforma" && sale.has_proforma_invoice);
 
             if (!matchesPaymentFilter) return false;
@@ -107,7 +112,7 @@ export function SalesOverview({
     );
 
     const openPayments = monthFilteredSales.filter(
-        (sale) => sale.payment_status !== "paid",
+        (sale) => sale.payment_status === "open" || sale.payment_status === "partial",
     ).length;
 
     const incompleteDocuments = monthFilteredSales.filter(
@@ -213,6 +218,7 @@ export function SalesOverview({
                                     { value: "all", label: "Alle" },
                                     { value: "open", label: "Offene Zahlungen" },
                                     { value: "paid", label: "Bezahlt" },
+                                    { value: "overpaid", label: "Überzahlt" },
                                     { value: "proforma", label: "Proforma" },
                                 ]}
                             />
@@ -294,6 +300,10 @@ export function SalesOverview({
                                                 <StatusBadge tone={getPaymentStatusTone(sale.payment_status)}>
                                                     {getPaymentStatusLabel(sale.payment_status)}
                                                 </StatusBadge>
+                                                <p className="mt-2 text-xs font-semibold text-slate-500">
+                                                    Bezahlt {formatCurrency(sale.paid_amount)} · Rest{" "}
+                                                    {formatCurrency(Math.max(sale.remaining_amount, 0))}
+                                                </p>
                                             </div>
 
                                             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
@@ -440,6 +450,9 @@ export function SalesOverview({
                                                 <StatusBadge tone={getPaymentStatusTone(sale.payment_status)}>
                                                     {getPaymentStatusLabel(sale.payment_status)}
                                                 </StatusBadge>
+                                                <p className="mt-2 text-xs font-semibold text-slate-500">
+                                                    {formatCurrency(sale.paid_amount)} bezahlt
+                                                </p>
                                             </td>
 
                                             <td className="px-5 py-5">

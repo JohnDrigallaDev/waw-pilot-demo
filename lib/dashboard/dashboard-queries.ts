@@ -121,8 +121,8 @@ export async function getDashboardData(month?: string | null): Promise<Dashboard
         0,
     );
 
-    const openInvoices = filteredInvoices.filter(
-        (invoice) => invoice.payment_status !== "paid",
+    const openInvoices = filteredSales.filter(
+        (sale) => sale.payment_status !== "paid",
     );
 
     const incompleteDocuments = documents.filter(

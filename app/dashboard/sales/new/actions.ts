@@ -23,6 +23,7 @@ import {
     normalizeVatId,
     type SaleBuyerType,
 } from "@/utils/sale-tax-rules";
+import { calculatePaymentStatus } from "@/utils/payment-utils";
 
 type CreateSaleState = {
     success: boolean;
@@ -64,6 +65,19 @@ function getSaleTypeValue(formData: FormData): SaleType {
     }
 
     return "inland";
+}
+
+async function getNextSalePaymentReference(companyId: string): Promise<string> {
+    const supabase = createServerSupabaseClient();
+    const { data, error } = await supabase.rpc("next_sale_payment_reference", {
+        target_company_id: companyId,
+    });
+
+    if (error || typeof data !== "string") {
+        throw new Error("Zahlungsreferenz konnte nicht erzeugt werden.");
+    }
+
+    return data;
 }
 
 function requiresExportDetails(saleType: SaleType): boolean {
@@ -774,6 +788,81 @@ export async function createSaleAction(
     }
 
     if (shouldCreateCashbookEntry) {
+        let paymentReference: string;
+
+        try {
+            paymentReference = await getNextSalePaymentReference(companyId);
+        } catch (error) {
+            return {
+                success: false,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Zahlungsreferenz konnte nicht erzeugt werden.",
+            };
+        }
+
+        const { data: salePayment, error: salePaymentError } = await supabase
+            .from("sale_payments")
+            .insert({
+                company_id: companyId,
+                sale_id: saleId,
+                payment_reference: paymentReference,
+                amount: grossAmount,
+                payment_method: paymentMethod,
+                payment_date: saleDate,
+                note: invoiceNumber
+                    ? `Erstzahlung zu Rechnung ${invoiceNumber}`
+                    : `Erstzahlung zu Verkauf ${saleNumber}`,
+                external_reference: "sale-create-flow",
+            })
+            .select("id")
+            .single();
+
+        if (salePaymentError || !salePayment) {
+            return {
+                success: false,
+                message: `Verkauf wurde gespeichert, aber Zahlung konnte nicht erzeugt werden: ${
+                    salePaymentError?.message ?? "Keine Zahlungs-ID erhalten"
+                }`,
+            };
+        }
+
+        const { error: paymentAuditError } = await supabase
+            .from("sale_payment_audit_log")
+            .insert({
+                company_id: companyId,
+                payment_id: salePayment.id,
+                sale_id: saleId,
+                action: "CREATED",
+                previous_values: null,
+                new_values: {
+                    payment_reference: paymentReference,
+                    amount: grossAmount,
+                    payment_method: paymentMethod,
+                    payment_date: saleDate,
+                    external_reference: "sale-create-flow",
+                },
+                reason: "sale-create-flow",
+            });
+
+        if (paymentAuditError) {
+            return {
+                success: false,
+                message: `Verkauf wurde gespeichert, aber Zahlungs-Audit konnte nicht erzeugt werden: ${paymentAuditError.message}`,
+            };
+        }
+
+        const calculatedPaymentStatus = calculatePaymentStatus(grossAmount, [
+            { amount: grossAmount },
+        ]);
+
+        await supabase
+            .from("sales")
+            .update({ payment_status: calculatedPaymentStatus })
+            .eq("id", saleId)
+            .eq("company_id", companyId);
+
         const description = invoiceNumber
             ? `Zahlung Rechnung ${invoiceNumber}`
             : `Zahlung Verkauf ${saleNumber}`;

@@ -27,8 +27,6 @@ import {
     getDatevStatusTone,
     getPaymentStatusLabel,
     getPaymentStatusTone,
-    getSaleStatusLabel,
-    getSaleStatusTone,
     getSaleTypeLabel,
     getSaleTypeTone,
 } from "@/lib/sales/sale-helpers";
@@ -40,9 +38,6 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { CompactStatCard } from "@/components/cards/compact-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-    markInvoicePaidAction,
-} from "@/app/dashboard/sales/[saleId]/invoice-actions";
 import { SaleExportDetailsForm } from "@/components/sales/sale-export-details-form";
 import type { SaleExportDetails } from "@/lib/sales/sale-export-details-queries";
 import { FlashMessage } from "@/components/shared/flash-message";
@@ -52,6 +47,15 @@ import { RegenerateInvoicePdfForm } from "@/components/sales/regenerate-invoice-
 import { SendInvoiceEmailForm } from "@/components/sales/send-invoice-email-form";
 import { SendStampDocumentsDialog } from "@/components/sales/send-stamp-documents-dialog";
 import { ZugferdInvoiceActions } from "@/components/sales/zugferd-invoice-actions";
+import { SalePaymentsCard } from "@/components/sales/sale-payments-card";
+import {
+    SaleCustomerEditDialog,
+    SaleVehicleEditDialog,
+} from "@/components/sales/sale-record-edit-dialogs";
+import {
+    getSaleDocumentStatus,
+    getSaleDocumentStatusLabel,
+} from "@/utils/sale-document-status";
 
 type SaleDetailProps = {
     sale: SaleDetailType;
@@ -74,6 +78,10 @@ type SaleDetailProps = {
     exportDataSaved?: boolean;
     exportDataError?: boolean;
     exportArrivalError?: boolean;
+    paymentSaved?: string | null;
+    paymentError?: string | null;
+    recordSaved?: string | null;
+    recordError?: string | null;
 };
 
 export function SaleDetail({
@@ -97,13 +105,21 @@ export function SaleDetail({
                                exportDataSaved = false,
                                exportDataError = false,
                                exportArrivalError = false,
+                               paymentSaved = null,
+                               paymentError = null,
+                               recordSaved = null,
+                               recordError = null,
                            }: SaleDetailProps) {
     const missingRequirementLabels = [
         ...sale.missing_required_labels,
         ...sale.missing_required_data_labels,
     ];
     const missingRequirementCount = missingRequirementLabels.length;
-    const isRequirementComplete = missingRequirementCount === 0;
+    const saleDocumentStatus = getSaleDocumentStatus({
+        missingRequiredDocuments: sale.missing_required_labels.length,
+        missingRequiredData: sale.missing_required_data_labels.length,
+    });
+    const isRequirementComplete = saleDocumentStatus === "complete";
     const existingInvoiceTypes = sale.invoices.map(
         (invoice) => invoice.invoice_type,
     );
@@ -281,6 +297,42 @@ export function SaleDetail({
                 </div>
             ) : null}
 
+            {paymentSaved ? (
+                <FlashMessage
+                    message={getPaymentSavedMessage(paymentSaved)}
+                    description="Zahlungsstatus, Summen und Historie wurden aktualisiert."
+                />
+            ) : null}
+
+            {paymentError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+                    <p className="font-extrabold text-red-950">
+                        Zahlung konnte nicht gespeichert werden.
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-red-800">
+                        {getPaymentErrorMessage(paymentError)}
+                    </p>
+                </div>
+            ) : null}
+
+            {recordSaved ? (
+                <FlashMessage
+                    message={recordSaved === "customer" ? "Kundendaten wurden gespeichert." : "Fahrzeugdaten wurden gespeichert."}
+                    description="Die Verkaufsakte zeigt die aktualisierten Stammdaten. Bereits erzeugte Rechnungs-PDFs bleiben unverändert."
+                />
+            ) : null}
+
+            {recordError ? (
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+                    <p className="font-extrabold text-red-950">
+                        Stammdaten konnten nicht gespeichert werden.
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-red-800">
+                        {getRecordErrorMessage(recordError)}
+                    </p>
+                </div>
+            ) : null}
+
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <DetailStatCard
                     label="Verkaufstyp"
@@ -290,11 +342,11 @@ export function SaleDetail({
                     tone={getSaleTypeTone(sale.sale_type)}
                 />
                 <DetailStatCard
-                    label="Status"
-                    value={getSaleStatusLabel(sale.status)}
-                    description="Verkaufsstatus"
+                    label="Aktenstatus"
+                    value={getSaleDocumentStatusLabel(saleDocumentStatus)}
+                    description="aus Pflichtdokumenten berechnet"
                     icon={CheckCircle2}
-                    tone={getSaleStatusTone(sale.status)}
+                    tone={isRequirementComplete ? "success" : "danger"}
                 />
                 <DetailStatCard
                     label="Zahlung"
@@ -320,11 +372,17 @@ export function SaleDetail({
                 <div className="space-y-6">
                     <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
                         <CardContent className="p-5">
-                            <SectionTitle
-                                icon={UserRound}
-                                title="Kunde"
-                                description="Käuferdaten aus der Verkaufsakte."
-                            />
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                <SectionTitle
+                                    icon={UserRound}
+                                    title="Kunde"
+                                    description="Käuferdaten aus der Verkaufsakte."
+                                />
+                                <SaleCustomerEditDialog
+                                    saleId={sale.id}
+                                    customer={sale.customer}
+                                />
+                            </div>
 
                             <div className="mt-5 space-y-3">
                                 <InfoRow label="Name" value={sale.customer.name} />
@@ -353,11 +411,17 @@ export function SaleDetail({
 
                     <Card className="rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
                         <CardContent className="p-5">
-                            <SectionTitle
-                                icon={Truck}
-                                title="Fahrzeug"
-                                description="Fahrzeugdaten und Rohgewinn."
-                            />
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                <SectionTitle
+                                    icon={Truck}
+                                    title="Fahrzeug"
+                                    description="Fahrzeugdaten und Rohgewinn."
+                                />
+                                <SaleVehicleEditDialog
+                                    saleId={sale.id}
+                                    vehicle={sale.vehicle}
+                                />
+                            </div>
 
                             <div className="mt-5 space-y-3">
                                 <InfoRow label="Interne Nummer" value={sale.vehicle.internal_number} />
@@ -479,6 +543,17 @@ export function SaleDetail({
                                     <EmptyBox text="Für diesen Verkauf wurde noch keine Rechnung erzeugt." />
                                 </div>
                             )}
+
+                            <div className="mt-6">
+                                <SalePaymentsCard
+                                    saleId={sale.id}
+                                    totalAmount={sale.gross_amount}
+                                    paidAmount={sale.paid_amount}
+                                    remainingAmount={sale.remaining_amount}
+                                    paymentStatus={sale.payment_status}
+                                    payments={sale.payments}
+                                />
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -813,8 +888,6 @@ function InvoiceCard({
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-                <MarkSaleInvoicePaidButton saleId={saleId} invoice={invoice} />
-
                 <Button
                     asChild
                     variant="outline"
@@ -839,6 +912,19 @@ function InvoiceCard({
                 <RegenerateInvoicePdfForm saleId={saleId} invoiceId={invoice.id} />
 
                 <SendInvoiceEmailForm saleId={saleId} invoiceId={invoice.id} />
+
+                {invoice.invoice_type !== "proforma" ? (
+                    <Button
+                        asChild
+                        variant="outline"
+                        className="rounded-2xl bg-white font-bold"
+                    >
+                        <a href="#payments">
+                            <Wallet className="mr-2 size-4" />
+                            Zahlung erfassen
+                        </a>
+                    </Button>
+                ) : null}
             </div>
 
             {invoice.email_sent_at && invoice.email_sent_to ? (
@@ -980,58 +1066,54 @@ function getZugferdErrorMessage(errorCode: string): string {
     return messages[errorCode] ?? messages.createFailed;
 }
 
-function MarkSaleInvoicePaidButton({
-                                       saleId,
-                                       invoice,
-                                   }: {
-    saleId: string;
-    invoice: SaleDetailInvoice;
-}) {
-    if (invoice.invoice_type === "proforma") {
-        return null;
-    }
+function getPaymentSavedMessage(value: string): string {
+    const messages: Record<string, string> = {
+        created: "Zahlung wurde erfasst.",
+        updated: "Zahlung wurde geändert.",
+        voided: "Zahlung wurde storniert.",
+    };
 
-    if (invoice.payment_status === "paid") {
-        return (
-            <Button
-                disabled
-                variant="outline"
-                className="rounded-2xl border-emerald-200 bg-emerald-50 font-bold text-emerald-700 disabled:cursor-default disabled:opacity-100"
-            >
-                <CheckCircle2 className="mr-2 size-4" />
-                Bezahlt
-            </Button>
-        );
-    }
+    return messages[value] ?? "Zahlung wurde gespeichert.";
+}
 
-    return (
-        <form
-            action={markInvoicePaidAction}
-            className="flex flex-wrap items-center gap-2"
-        >
-            <input type="hidden" name="sale_id" value={saleId} />
-            <input type="hidden" name="invoice_id" value={invoice.id} />
+function getPaymentErrorMessage(value: string): string {
+    const messages: Record<string, string> = {
+        invalidAmount: "Bitte gib einen gültigen Betrag größer als 0 ein.",
+        invalidMethod: "Bitte wähle Bar oder Bank als Zahlungsart.",
+        overpaymentNeedsConfirmation:
+            "Diese Zahlung überschreitet den Restbetrag. Bitte bestätige die Überzahlung bewusst im Dialog.",
+        createFailed:
+            "Zahlung konnte nicht angelegt werden. Bitte versuche es erneut.",
+        updateFailed:
+            "Zahlung konnte nicht geändert werden. Bitte versuche es erneut.",
+        voidFailed:
+            "Zahlung konnte nicht storniert werden. Bitte versuche es erneut.",
+        missingVoidReason: "Bitte gib einen Grund für die Stornierung an.",
+        notFound: "Die Zahlung wurde nicht gefunden oder ist bereits storniert.",
+    };
 
-            <select
-                name="payment_method"
-                defaultValue="bank"
-                className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
-            >
-                <option value="bank">Bank</option>
-                <option value="cash">Bar</option>
-            </select>
+    return messages[value] ?? "Bitte prüfe die Eingaben und versuche es erneut.";
+}
 
-            <Button
-                type="submit"
-                className="rounded-2xl bg-emerald-700 font-bold text-white hover:bg-emerald-800"
-            >
-                <CheckCircle2 className="mr-2 size-4" />
-                {invoice.invoice_type === "down_payment"
-                    ? "Anzahlung bezahlt"
-                    : "Als bezahlt markieren"}
-            </Button>
-        </form>
-    );
+function getRecordErrorMessage(value: string): string {
+    const decodedValue = decodeURIComponent(value);
+    const messages: Record<string, string> = {
+        invalidCustomerType: "Bitte wähle eine gültige Käuferart.",
+        customerAddressMissing: "Straße, PLZ und Ort sind Pflichtfelder.",
+        companyNameMissing: "Bitte gib einen Firmennamen ein.",
+        privateNameMissing: "Bitte gib Vorname und Nachname ein.",
+        invalidPhone: "Bitte gib eine gültige Telefonnummer ein.",
+        saleCustomerMismatch: "Der Kunde gehört nicht zu dieser Verkaufsakte.",
+        customerUpdateFailed:
+            "Kundendaten konnten nicht gespeichert werden. Bitte versuche es erneut.",
+        vehicleRequiredMissing:
+            "Interne Nummer, Hersteller, Modell, Typ und VIN sind Pflichtfelder.",
+        vehiclePriceInvalid: "Bitte prüfe die Preisangaben.",
+        damageNotesMissing: "Bitte erfasse zuerst eine Schadensbeschreibung.",
+        saleVehicleMismatch: "Das Fahrzeug gehört nicht zu dieser Verkaufsakte.",
+    };
+
+    return messages[decodedValue] ?? decodedValue;
 }
 
 function SectionTitle({

@@ -16,7 +16,6 @@ import {
 
 import type { InvoiceRow } from "@/lib/invoices/invoice-queries";
 import { getInvoiceTypeLabel } from "@/lib/invoices/invoice-numbering";
-import { markInvoicePaidAction } from "@/app/dashboard/sales/[saleId]/invoice-actions";
 import {
     getInvoiceDatevStatusLabel,
     getInvoiceDatevStatusTone,
@@ -785,46 +784,21 @@ function MarkInvoicePaidButton({ invoice }: { invoice: InvoiceRow }) {
         return null;
     }
 
-    if (invoice.payment_status === "paid") {
-        return (
-            <Button
-                disabled
-                variant="outline"
-                size="sm"
-                className="rounded-xl border-emerald-200 bg-emerald-50 font-bold text-emerald-700 disabled:cursor-default disabled:opacity-100"
-            >
-                Bezahlt
-            </Button>
-        );
-    }
-
     return (
-        <form
-            action={markInvoicePaidAction}
-            className="flex items-center gap-2"
+        <Button
+            asChild
+            variant={invoice.payment_status === "paid" ? "outline" : "default"}
+            size="sm"
+            className={
+                invoice.payment_status === "paid"
+                    ? "rounded-xl border-emerald-200 bg-emerald-50 font-bold text-emerald-700"
+                    : "rounded-xl bg-cyan-700 font-bold text-white hover:bg-cyan-800"
+            }
         >
-            <input type="hidden" name="sale_id" value={invoice.sale_id} />
-            <input type="hidden" name="invoice_id" value={invoice.id} />
-
-            <select
-                name="payment_method"
-                defaultValue="bank"
-                className="h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-            >
-                <option value="bank">Bank</option>
-                <option value="cash">Bar</option>
-            </select>
-
-            <Button
-                type="submit"
-                size="sm"
-                className="rounded-xl bg-emerald-700 font-bold text-white hover:bg-emerald-800"
-            >
-                {invoice.invoice_type === "down_payment"
-                    ? "Anzahlung bezahlt"
-                    : "Als bezahlt markieren"}
-            </Button>
-        </form>
+            <Link href={`/dashboard/sales/${invoice.sale_id}#payments`}>
+                {invoice.payment_status === "paid" ? "Zahlungen öffnen" : "Zahlung erfassen"}
+            </Link>
+        </Button>
     );
 }
 

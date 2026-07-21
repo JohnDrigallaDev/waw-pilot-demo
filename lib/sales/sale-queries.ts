@@ -6,10 +6,17 @@ import {
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 import { getSaleTaxConfiguration } from "@/utils/sale-tax-rules";
+import {
+    calculatePaidAmount,
+    calculatePaymentStatus,
+    calculateRemainingAmount,
+} from "@/utils/payment-utils";
+import type { PaymentMethod } from "@/lib/payments/payment-methods";
+import { getSaleDocumentStatus } from "@/utils/sale-document-status";
 
 export type SaleType = "inland" | "eu" | "export_third_country";
 export type SaleStatus = "draft" | "active" | "completed" | "cancelled";
-export type PaymentStatus = "open" | "partial" | "paid";
+export type PaymentStatus = "open" | "partial" | "paid" | "overpaid";
 export type DocumentCheckStatus = "complete" | "missing" | "warning";
 export type DatevStatus = "not_sent" | "sent";
 
@@ -47,6 +54,8 @@ export type SaleRow = {
     available_required_documents_count: number;
     missing_required_documents_count: number;
     missing_required_document_labels: string[];
+    paid_amount: number;
+    remaining_amount: number;
 };
 
 type InvoiceRelation = {
@@ -58,6 +67,13 @@ type InvoiceRelation = {
 type DocumentRelation = {
     document_type: string;
     status: "available" | "missing" | "needs_review";
+};
+
+type PaymentRelation = {
+    amount: number | string;
+    payment_method: PaymentMethod;
+    payment_date: string;
+    is_voided: boolean | null;
 };
 
 type SupabaseRelation<T> = T | T[] | null;
@@ -100,6 +116,7 @@ type SaleQueryRow = {
 
     invoices: SupabaseRelation<InvoiceRelation>;
     documents: SupabaseRelation<DocumentRelation>;
+    sale_payments: SupabaseRelation<PaymentRelation>;
 };
 
 function getSingleRelation<T>(relation: SupabaseRelation<T>): T | null {
@@ -185,6 +202,12 @@ export async function getSales(): Promise<SaleRow[]> {
       documents (
         document_type,
         status
+      ),
+      sale_payments (
+        amount,
+        payment_method,
+        payment_date,
+        is_voided
       )
     `,
         )
@@ -203,6 +226,10 @@ export async function getSales(): Promise<SaleRow[]> {
         const saleType = sale.sale_type ?? "inland";
 
         const relatedDocuments = getManyRelation(sale.documents);
+        const payments = getManyRelation(sale.sale_payments).map((payment) => ({
+            amount: Number(payment.amount),
+            is_voided: payment.is_voided,
+        }));
 
         const requiredDocuments = getRequiredDocumentsForSale({
             saleType,
@@ -226,8 +253,15 @@ export async function getSales(): Promise<SaleRow[]> {
                 ? "USt-IdNr. beim Kunden fehlt."
                 : null,
         ].filter((label): label is string => Boolean(label));
-        const isDocumentCheckComplete =
-            documentCheck.isComplete && missingRequiredDataLabels.length === 0;
+        const documentStatus = getSaleDocumentStatus({
+            missingRequiredDocuments: documentCheck.missingCount,
+            missingRequiredData: missingRequiredDataLabels.length,
+        });
+
+        const grossAmount = Number(sale.gross_amount);
+        const paidAmount = calculatePaidAmount(payments);
+        const remainingAmount = calculateRemainingAmount(grossAmount, payments);
+        const paymentStatus = calculatePaymentStatus(grossAmount, payments);
 
         return {
             id: sale.id,
@@ -238,10 +272,11 @@ export async function getSales(): Promise<SaleRow[]> {
             net_amount: Number(sale.net_amount),
             vat_rate: Number(sale.vat_rate),
             vat_amount: Number(sale.vat_amount),
-            gross_amount: Number(sale.gross_amount),
+            gross_amount: grossAmount,
             status: sale.status,
-            payment_status: sale.payment_status,
-            document_check_status: isDocumentCheckComplete ? "complete" : "missing",
+            payment_status: paymentStatus,
+            document_check_status:
+                documentStatus === "complete" ? "complete" : "missing",
             datev_status: sale.datev_status,
             notes: sale.notes,
             created_at: sale.created_at,
@@ -268,6 +303,8 @@ export async function getSales(): Promise<SaleRow[]> {
                 ...documentCheck.missingLabels,
                 ...missingRequiredDataLabels,
             ],
+            paid_amount: paidAmount,
+            remaining_amount: remainingAmount,
         };
     });
 }

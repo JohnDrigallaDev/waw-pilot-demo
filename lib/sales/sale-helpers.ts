@@ -44,9 +44,10 @@ export function getSaleStatusLabel(status: SaleStatus): string {
 
 export function getPaymentStatusLabel(status: PaymentStatus): string {
     const labels: Record<PaymentStatus, string> = {
-        open: "Offen",
-        partial: "Teilbezahlt",
+        open: "Nicht bezahlt",
+        partial: "Teilweise bezahlt",
         paid: "Bezahlt",
+        overpaid: "Überzahlt",
     };
 
     return labels[status];
@@ -87,6 +88,7 @@ export function getPaymentStatusTone(
 ): "success" | "warning" | "danger" {
     if (status === "paid") return "success";
     if (status === "partial") return "warning";
+    if (status === "overpaid") return "warning";
 
     return "danger";
 }

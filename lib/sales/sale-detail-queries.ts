@@ -14,6 +14,12 @@ import type {
 import type { InvoiceType } from "@/lib/invoices/invoice-numbering";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getSaleTaxConfiguration } from "@/utils/sale-tax-rules";
+import type { PaymentMethod } from "@/lib/payments/payment-methods";
+import {
+    calculatePaidAmount,
+    calculatePaymentStatus,
+    calculateRemainingAmount,
+} from "@/utils/payment-utils";
 
 type SupabaseRelation<T> = T | T[] | null;
 
@@ -59,6 +65,24 @@ type DocumentRelation = {
     created_at: string;
 };
 
+type SalePaymentRelation = {
+    id: string;
+    payment_reference: string;
+    amount: number | string;
+    payment_method: PaymentMethod;
+    payment_date: string;
+    note: string | null;
+    external_reference: string | null;
+    created_at: string;
+    updated_at: string;
+    created_by: string | null;
+    last_modified_by: string | null;
+    is_voided: boolean | null;
+    voided_at: string | null;
+    voided_by: string | null;
+    void_reason: string | null;
+};
+
 type SaleDetailQueryRow = {
     id: string;
     vehicle_id: string;
@@ -101,6 +125,7 @@ type SaleDetailQueryRow = {
     customers: {
         type: "company" | "private";
         company_name: string | null;
+        owner_name: string | null;
         first_name: string | null;
         last_name: string | null;
         street: string | null;
@@ -112,10 +137,12 @@ type SaleDetailQueryRow = {
         phone: string | null;
         tax_number: string | null;
         vat_id: string | null;
+        commercial_register_number: string | null;
     } | null;
 
     invoices: SupabaseRelation<InvoiceRelation>;
     documents: SupabaseRelation<DocumentRelation>;
+    sale_payments: SupabaseRelation<SalePaymentRelation>;
 };
 
 export type SaleDetailDocument = {
@@ -160,6 +187,24 @@ export type SaleDetailInvoice = {
     created_at: string;
 };
 
+export type SaleDetailPayment = {
+    id: string;
+    payment_reference: string;
+    amount: number;
+    payment_method: PaymentMethod;
+    payment_date: string;
+    note: string | null;
+    external_reference: string | null;
+    created_at: string;
+    updated_at: string;
+    created_by: string | null;
+    last_modified_by: string | null;
+    is_voided: boolean;
+    voided_at: string | null;
+    voided_by: string | null;
+    void_reason: string | null;
+};
+
 export type RequiredDocumentStatus = RequiredDocumentDefinition & {
     isAvailable: boolean;
     document: SaleDetailDocument | null;
@@ -181,12 +226,18 @@ export type SaleDetail = {
     vat_rate: number;
     vat_amount: number;
     gross_amount: number;
+    paid_amount: number;
+    remaining_amount: number;
     profit_net: number;
 
     customer: {
         id: string;
         type: "company" | "private";
         name: string;
+        company_name: string | null;
+        owner_name: string | null;
+        first_name: string | null;
+        last_name: string | null;
         street: string | null;
         postal_code: string | null;
         city: string | null;
@@ -196,11 +247,14 @@ export type SaleDetail = {
         phone: string | null;
         tax_number: string | null;
         vat_id: string | null;
+        commercial_register_number: string | null;
     };
 
     vehicle: {
         id: string;
         internal_number: string;
+        manufacturer: string;
+        model: string;
         name: string;
         vehicle_type: string;
         vin: string;
@@ -216,6 +270,7 @@ export type SaleDetail = {
 
     invoice: SaleDetailInvoice | null;
     invoices: SaleDetailInvoice[];
+    payments: SaleDetailPayment[];
 
     documents: SaleDetailDocument[];
     required_documents: RequiredDocumentStatus[];
@@ -307,6 +362,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
       customers:buyer_customer_id (
         type,
         company_name,
+        owner_name,
         first_name,
         last_name,
         street,
@@ -317,7 +373,8 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         preferred_language,
         phone,
         tax_number,
-        vat_id
+        vat_id,
+        commercial_register_number
       ),
       invoices (
         id,
@@ -358,6 +415,23 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         mime_type,
         file_size,
         created_at
+      ),
+      sale_payments (
+        id,
+        payment_reference,
+        amount,
+        payment_method,
+        payment_date,
+        note,
+        external_reference,
+        created_at,
+        updated_at,
+        created_by,
+        last_modified_by,
+        is_voided,
+        voided_at,
+        voided_by,
+        void_reason
       )
     `,
         )
@@ -433,6 +507,31 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
     }));
 
     const saleType = sale.sale_type ?? "inland";
+    const payments = getManyRelation(sale.sale_payments)
+        .map((payment) => ({
+            id: payment.id,
+            payment_reference: payment.payment_reference,
+            amount: Number(payment.amount),
+            payment_method: payment.payment_method,
+            payment_date: payment.payment_date,
+            note: payment.note,
+            external_reference: payment.external_reference,
+            created_at: payment.created_at,
+            updated_at: payment.updated_at,
+            created_by: payment.created_by,
+            last_modified_by: payment.last_modified_by,
+            is_voided: Boolean(payment.is_voided),
+            voided_at: payment.voided_at,
+            voided_by: payment.voided_by,
+            void_reason: payment.void_reason,
+        }))
+        .sort((a, b) => {
+            const dateSort = b.payment_date.localeCompare(a.payment_date);
+
+            if (dateSort !== 0) return dateSort;
+
+            return b.created_at.localeCompare(a.created_at);
+        });
 
     const requiredDocuments = getRequiredDocumentsForSale({
         saleType,
@@ -483,13 +582,17 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
     const purchasePriceNet = Number(sale.vehicles.purchase_price_net ?? 0);
     const additionalCostsNet = Number(sale.vehicles.additional_costs_net ?? 0);
     const netAmount = Number(sale.net_amount);
+    const grossAmount = Number(sale.gross_amount);
+    const paidAmount = calculatePaidAmount(payments);
+    const remainingAmount = calculateRemainingAmount(grossAmount, payments);
+    const paymentStatus = calculatePaymentStatus(grossAmount, payments);
 
     return {
         id: sale.id,
         sale_date: sale.sale_date,
         sale_type: saleType,
         status: sale.status,
-        payment_status: sale.payment_status,
+        payment_status: paymentStatus,
         datev_status: sale.datev_status,
         notes: sale.notes,
         invoice_notes: sale.invoice_notes,
@@ -503,13 +606,19 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         net_amount: netAmount,
         vat_rate: Number(sale.vat_rate),
         vat_amount: Number(sale.vat_amount),
-        gross_amount: Number(sale.gross_amount),
+        gross_amount: grossAmount,
+        paid_amount: paidAmount,
+        remaining_amount: remainingAmount,
         profit_net: netAmount - purchasePriceNet - additionalCostsNet,
 
         customer: {
             id: sale.buyer_customer_id,
             type: sale.customers.type,
             name: getCustomerName(sale.customers),
+            company_name: sale.customers.company_name,
+            owner_name: sale.customers.owner_name,
+            first_name: sale.customers.first_name,
+            last_name: sale.customers.last_name,
             street: sale.customers.street,
             postal_code: sale.customers.postal_code,
             city: sale.customers.city,
@@ -519,11 +628,14 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
             phone: sale.customers.phone,
             tax_number: sale.customers.tax_number,
             vat_id: sale.customers.vat_id,
+            commercial_register_number: sale.customers.commercial_register_number,
         },
 
         vehicle: {
             id: sale.vehicle_id,
             internal_number: sale.vehicles.internal_number,
+            manufacturer: sale.vehicles.manufacturer,
+            model: sale.vehicles.model,
             name: `${sale.vehicles.manufacturer} ${sale.vehicles.model}`,
             vehicle_type: sale.vehicles.vehicle_type,
             vin: sale.vehicles.vin,
@@ -542,6 +654,7 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
 
         invoice: mainInvoice,
         invoices,
+        payments,
 
         documents,
         required_documents: requiredDocumentStatuses,

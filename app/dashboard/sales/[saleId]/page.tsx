@@ -25,6 +25,10 @@ type SaleDetailPageProps = {
         exportDataSaved?: string;
         exportDataError?: string;
         exportArrivalError?: string;
+        paymentSaved?: string;
+        paymentError?: string;
+        recordSaved?: string;
+        recordError?: string;
     }>;
 };
 
@@ -69,6 +73,10 @@ export default async function SaleDetailPage({
             exportDataSaved={resolvedSearchParams.exportDataSaved === "1"}
             exportDataError={resolvedSearchParams.exportDataError === "1"}
             exportArrivalError={resolvedSearchParams.exportArrivalError === "1"}
+            paymentSaved={resolvedSearchParams.paymentSaved ?? null}
+            paymentError={resolvedSearchParams.paymentError ?? null}
+            recordSaved={resolvedSearchParams.recordSaved ?? null}
+            recordError={resolvedSearchParams.recordError ?? null}
         />
     );
 }
