@@ -35,6 +35,7 @@ import {
     type SaleBuyerType,
 } from "@/utils/sale-tax-rules";
 import { CustomerCombobox } from "@/components/customers/customer-combobox";
+import { VehicleCombobox } from "@/components/vehicles/vehicle-combobox";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,6 +49,7 @@ const initialState = {
 };
 
 type BuyerMode = "existing" | "new";
+type VehicleMode = "existing" | "new";
 type NewCustomerType = "company" | "private";
 type SaleType = "inland" | "eu" | "export_third_country";
 
@@ -83,9 +85,13 @@ export function SaleForm({
     const [buyerMode, setBuyerMode] = useState<BuyerMode>(
         defaultCustomerId || customers.length > 0 ? "existing" : "new",
     );
+    const [vehicleMode, setVehicleMode] = useState<VehicleMode>(
+        defaultVehicleId || vehicles.length > 0 ? "existing" : "new",
+    );
 
     const [newCustomerType, setNewCustomerType] =
         useState<NewCustomerType>("company");
+    const [newVehicleDamageNotes, setNewVehicleDamageNotes] = useState("");
 
     const today = new Date().toISOString().slice(0, 10);
     const [saleType, setSaleType] = useState<SaleType>("inland");
@@ -234,6 +240,7 @@ export function SaleForm({
             />
 
             <form action={formAction} className="space-y-6">
+                <input type="hidden" name="vehicle_mode" value={vehicleMode} />
                 {state.message ? (
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
                         {state.message}
@@ -244,40 +251,54 @@ export function SaleForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={Truck}
-                            title="Fahrzeug"
-                            description="Wähle ein Fahrzeug aus dem aktuellen Bestand."
+                            title="1. Fahrzeug auswählen oder anlegen"
+                            description="Wähle ein verkaufsfähiges Fahrzeug aus dem Bestand oder erfasse es direkt neu."
                         />
 
-                        <div className="space-y-2">
-                            <Label htmlFor="vehicle_id" className="font-bold text-slate-700">
-                                Fahrzeug *
-                            </Label>
+                        <ModeTabs
+                            name="vehicle_mode_ui"
+                            value={vehicleMode}
+                            firstValue="existing"
+                            secondValue="new"
+                            firstLabel="Bestehendes Fahrzeug"
+                            secondLabel="Neues Fahrzeug"
+                            onChange={(value) => {
+                                setVehicleMode(value);
+                                if (value === "new") setSelectedVehicleId("");
+                            }}
+                        />
 
-                            <select
-                                id="vehicle_id"
-                                name="vehicle_id"
-                                required
-                                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
-                                value={selectedVehicleId}
-                                onChange={(event) => setSelectedVehicleId(event.target.value)}
-                            >
-                                <option value="">Fahrzeug auswählen</option>
-                                {vehicles.map((vehicle) => (
-                                    <option key={vehicle.id} value={vehicle.id}>
-                                        {vehicle.internal_number} · {getVehicleDisplayName(vehicle)} ·
-                                        EK netto {formatCurrency(vehicle.purchase_price_net)}
-                                    </option>
-                                ))}
-                            </select>
+                        {vehicleMode === "existing" ? (
+                            <div className="space-y-4">
+                                <VehicleCombobox
+                                    vehicles={vehicles}
+                                    name="vehicle_id"
+                                    label="Fahrzeug *"
+                                    value={selectedVehicleId}
+                                    required
+                                    placeholder="VIN, Bestandsnummer, Hersteller, Modell oder Kennzeichen suchen..."
+                                    emptyText="Kein verkaufsfähiges Fahrzeug gefunden."
+                                    onChange={setSelectedVehicleId}
+                                />
 
-                            {vehicles.length === 0 ? (
-                                <p className="text-sm font-bold text-amber-700">
-                                    Es gibt aktuell keine verfügbaren Fahrzeuge im Bestand.
-                                    Lege zuerst einen Ankauf an oder prüfe reservierte Fahrzeuge.
-                                </p>
-                            ) : null}
+                                {selectedVehicle ? (
+                                    <SelectedVehicleSummary vehicle={selectedVehicle} />
+                                ) : null}
 
-                        </div>
+                                {vehicles.length === 0 ? (
+                                    <p className="text-sm font-bold text-amber-700">
+                                        Es gibt aktuell keine verfügbaren Fahrzeuge im Bestand.
+                                        Du kannst das Fahrzeug direkt in diesem Verkaufsprozess neu
+                                        erfassen.
+                                    </p>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <NewVehicleFields
+                                damageNotes={newVehicleDamageNotes}
+                                onDamageNotesChange={setNewVehicleDamageNotes}
+                            />
+                        )}
                     </CardContent>
                 </Card>
 
@@ -285,45 +306,22 @@ export function SaleForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={UserRound}
-                            title="Käufer"
+                            title="2. Käufer auswählen oder anlegen"
                             description="Wähle einen bestehenden Käufer aus oder lege ihn direkt im Verkauf neu an."
                         />
 
-                        <div className="grid gap-3 md:grid-cols-2">
-                            <label className="cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60 has-[:checked]:border-cyan-300 has-[:checked]:bg-cyan-50 has-[:checked]:ring-4 has-[:checked]:ring-cyan-100">
-                                <input
-                                    type="radio"
-                                    name="buyer_mode"
-                                    value="existing"
-                                    checked={buyerMode === "existing"}
-                                    onChange={() => handleBuyerModeChange("existing")}
-                                    className="sr-only"
-                                />
-                                <p className="font-extrabold text-slate-950">
-                                    Bestehenden Käufer auswählen
-                                </p>
-                                <p className="mt-1 text-sm font-medium leading-6 text-slate-500">
-                                    Für bereits angelegte Kunden und wiederkehrende Käufer.
-                                </p>
-                            </label>
-
-                            <label className="cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-emerald-200 hover:bg-emerald-50/60 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50 has-[:checked]:ring-4 has-[:checked]:ring-emerald-100">
-                                <input
-                                    type="radio"
-                                    name="buyer_mode"
-                                    value="new"
-                                    checked={buyerMode === "new"}
-                                    onChange={() => handleBuyerModeChange("new")}
-                                    className="sr-only"
-                                />
-                                <p className="font-extrabold text-slate-950">
-                                    Neuen Käufer direkt anlegen
-                                </p>
-                                <p className="mt-1 text-sm font-medium leading-6 text-slate-500">
-                                    Käufer wird automatisch als Kundendatensatz gespeichert.
-                                </p>
-                            </label>
-                        </div>
+                        <ModeTabs
+                            name="buyer_mode"
+                            value={buyerMode}
+                            firstValue="existing"
+                            secondValue="new"
+                            firstLabel="Bestehender Käufer"
+                            secondLabel="Neuer Käufer"
+                            onChange={(value) => {
+                                handleBuyerModeChange(value);
+                                if (value === "new") setSelectedCustomerId("");
+                            }}
+                        />
 
                         {buyerMode === "existing" ? (
                             <div className="space-y-2">
@@ -336,6 +334,10 @@ export function SaleForm({
                                     placeholder="Käufer nach Name, Firma, E-Mail oder Ort suchen..."
                                     onChange={handleSelectedCustomerChange}
                                 />
+
+                                {selectedCustomer ? (
+                                    <SelectedCustomerSummary customer={selectedCustomer} />
+                                ) : null}
 
                                 {customers.length === 0 ? (
                                     <p className="text-sm font-bold text-amber-700">
@@ -515,7 +517,7 @@ export function SaleForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={Globe2}
-                            title="Verkaufstyp"
+                            title="3. Umsatzsteuer und Verkaufstyp"
                             description="Der Verkaufstyp bestimmt automatisch die Pflichtdokumente."
                         />
 
@@ -587,7 +589,7 @@ export function SaleForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={Globe2}
-                            title="Export / EU-Lieferung"
+                            title="4. Export / EU-Lieferung"
                             description={
                                 requiresExportDetails
                                     ? "Pflichtangaben für Gelangensbestätigung und Verbringungsnachweis."
@@ -754,7 +756,7 @@ export function SaleForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={Receipt}
-                            title="Verkaufsdaten"
+                            title="5. Verkaufsdaten"
                             description="Preis, Datum, MwSt. und automatische Rechnungsnummer."
                         />
 
@@ -904,7 +906,7 @@ export function SaleForm({
                     <CardContent className="space-y-5 p-5">
                         <SectionTitle
                             icon={CalendarDays}
-                            title="Notizen"
+                            title="6. Prüfung und Notizen"
                             description="Interne Hinweise zum Verkauf."
                         />
 
@@ -918,6 +920,31 @@ export function SaleForm({
                                 placeholder="z. B. Zahlungsvereinbarung, Exporthinweise, offene Dokumente..."
                                 className="min-h-32 rounded-2xl border-slate-200 bg-slate-50 font-medium"
                             />
+                        </div>
+
+                        <div className="grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700 md:grid-cols-2">
+                            <p>
+                                Kunde:{" "}
+                                <span className="font-extrabold text-slate-950">
+                                    {buyerMode === "existing"
+                                        ? selectedCustomer
+                                            ? getCustomerSummaryName(selectedCustomer)
+                                            : "noch nicht gewählt"
+                                        : "wird neu angelegt"}
+                                </span>
+                            </p>
+                            <p>
+                                Fahrzeug:{" "}
+                                <span className="font-extrabold text-slate-950">
+                                    {vehicleMode === "existing"
+                                        ? selectedVehicle
+                                            ? getVehicleDisplayName(selectedVehicle)
+                                            : "noch nicht gewählt"
+                                        : "wird neu angelegt"}
+                                </span>
+                            </p>
+                            <p>Verkaufstyp: {getSaleTypeLabel(saleType)}</p>
+                            <p>Brutto: {formatCurrency(previewGrossAmount)}</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -935,7 +962,7 @@ export function SaleForm({
 
                         <Button
                             type="submit"
-                            disabled={isPending || vehicles.length === 0}
+                            disabled={isPending}
                             className="h-12 rounded-2xl bg-cyan-700 px-6 font-extrabold text-white hover:bg-cyan-800"
                         >
                             <Save className="mr-2 size-4" />
@@ -979,8 +1006,244 @@ function SaleTypeOption({
     );
 }
 
+function ModeTabs<TValue extends string>({
+    name,
+    value,
+    firstValue,
+    secondValue,
+    firstLabel,
+    secondLabel,
+    onChange,
+}: {
+    name: string;
+    value: TValue;
+    firstValue: TValue;
+    secondValue: TValue;
+    firstLabel: string;
+    secondLabel: string;
+    onChange: (value: TValue) => void;
+}) {
+    return (
+        <div className="grid gap-3 md:grid-cols-2" role="radiogroup">
+            <ModeOption
+                name={name}
+                value={firstValue}
+                label={firstLabel}
+                checked={value === firstValue}
+                onChange={onChange}
+            />
+            <ModeOption
+                name={name}
+                value={secondValue}
+                label={secondLabel}
+                checked={value === secondValue}
+                onChange={onChange}
+            />
+        </div>
+    );
+}
+
+function ModeOption<TValue extends string>({
+    name,
+    value,
+    label,
+    checked,
+    onChange,
+}: {
+    name: string;
+    value: TValue;
+    label: string;
+    checked: boolean;
+    onChange: (value: TValue) => void;
+}) {
+    return (
+        <label className="cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60 has-[:checked]:border-cyan-300 has-[:checked]:bg-cyan-50 has-[:checked]:ring-4 has-[:checked]:ring-cyan-100">
+            <input
+                type="radio"
+                name={name}
+                value={value}
+                checked={checked}
+                onChange={() => onChange(value)}
+                className="sr-only"
+            />
+            <p className="font-extrabold text-slate-950">{label}</p>
+        </label>
+    );
+}
+
+function SelectedCustomerSummary({ customer }: { customer: CustomerRow }) {
+    return (
+        <div className="rounded-3xl border border-cyan-100 bg-cyan-50 p-4 text-sm font-semibold leading-6 text-cyan-950">
+            <p className="text-base font-extrabold">{getCustomerSummaryName(customer)}</p>
+            <p>
+                {[customer.street, customer.postal_code, customer.city, customer.country]
+                    .filter(Boolean)
+                    .join(", ")}
+            </p>
+            <p>
+                {[customer.type === "company" ? "Firma" : "Privatperson", customer.email, customer.phone]
+                    .filter(Boolean)
+                    .join(" · ")}
+            </p>
+            {customer.vat_id ? <p>USt-ID: {customer.vat_id}</p> : null}
+        </div>
+    );
+}
+
+function SelectedVehicleSummary({ vehicle }: { vehicle: VehicleRow }) {
+    return (
+        <div className="rounded-3xl border border-cyan-100 bg-cyan-50 p-4 text-sm font-semibold leading-6 text-cyan-950">
+            <p className="text-base font-extrabold">
+                {[vehicle.internal_number, getVehicleDisplayName(vehicle)].filter(Boolean).join(" · ")}
+            </p>
+            <p>
+                {[`VIN: ${vehicle.vin}`, vehicle.construction_year ? `Baujahr: ${vehicle.construction_year}` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+            </p>
+            <p>
+                {[vehicle.license_plate ? `Kennzeichen: ${vehicle.license_plate}` : null, getVehicleStatusLabel(vehicle.status)]
+                    .filter(Boolean)
+                    .join(" · ")}
+            </p>
+            {vehicle.damage_notes ? <p>Schäden: {vehicle.damage_notes}</p> : null}
+        </div>
+    );
+}
+
+function NewVehicleFields({
+    damageNotes,
+    onDamageNotesChange,
+}: {
+    damageNotes: string;
+    onDamageNotesChange: (value: string) => void;
+}) {
+    const hasDamageNotes = damageNotes.trim().length > 0;
+
+    return (
+        <div className="space-y-5 rounded-3xl border border-emerald-100 bg-emerald-50/50 p-4">
+            <div>
+                <h3 className="text-lg font-extrabold text-emerald-950">
+                    Neues Fahrzeug
+                </h3>
+                <p className="mt-1 text-sm font-semibold leading-6 text-emerald-800">
+                    Das Fahrzeug wird erst beim Speichern des Verkaufs angelegt und direkt
+                    mit der Verkaufsakte verknüpft.
+                </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <FormField label="Interne Nummer" name="new_vehicle_internal_number" />
+                <FormField label="Hersteller *" name="new_vehicle_manufacturer" required />
+                <FormField label="Modell *" name="new_vehicle_model" required />
+                <FormField label="Fahrzeugtyp *" name="new_vehicle_vehicle_type" required />
+                <FormField label="FIN / VIN *" name="new_vehicle_vin" required />
+                <FormField label="Kennzeichen" name="new_vehicle_license_plate" />
+                <FormField
+                    label="Baujahr"
+                    name="new_vehicle_construction_year"
+                    type="number"
+                    placeholder="z. B. 2021"
+                />
+                <FormField
+                    label="Kilometerstand"
+                    name="new_vehicle_mileage"
+                    type="number"
+                    placeholder="z. B. 185000"
+                />
+                <FormField label="Farbe" name="new_vehicle_color" />
+                <FormField label="Fahrzeugkategorie" name="new_vehicle_vehicle_category" />
+                <FormField
+                    label="Einkaufspreis netto *"
+                    name="new_vehicle_purchase_price_net"
+                    type="number"
+                    step="0.01"
+                    required
+                />
+                <FormField
+                    label="Nebenkosten netto"
+                    name="new_vehicle_additional_costs_net"
+                    type="number"
+                    step="0.01"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="new_vehicle_damage_notes" className="font-bold text-slate-700">
+                    Schäden
+                </Label>
+                <Textarea
+                    id="new_vehicle_damage_notes"
+                    name="new_vehicle_damage_notes"
+                    value={damageNotes}
+                    onChange={(event) => onDamageNotesChange(event.target.value)}
+                    placeholder="Bekannte Schäden oder Mängel am Fahrzeug eintragen."
+                    className="min-h-28 rounded-2xl border-slate-200 bg-white font-medium"
+                />
+            </div>
+
+            <label
+                className={
+                    hasDamageNotes
+                        ? "flex cursor-pointer items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4"
+                        : "flex cursor-not-allowed items-start gap-3 rounded-3xl border border-slate-200 bg-white p-4 opacity-75"
+                }
+            >
+                <input
+                    type="checkbox"
+                    name="new_vehicle_show_damage_on_invoice"
+                    value="yes"
+                    disabled={!hasDamageNotes}
+                    className="mt-1 size-4 rounded border-amber-300 text-amber-700 disabled:cursor-not-allowed"
+                />
+                <span>
+                    <span className="block font-extrabold text-slate-950">
+                        Schadensangaben auf Rechnungen anzeigen
+                    </span>
+                    <span className="mt-1 block text-sm font-medium leading-6 text-slate-600">
+                        Schäden bleiben intern, solange diese Option nicht aktiviert ist.
+                    </span>
+                </span>
+            </label>
+
+            <div className="space-y-2">
+                <Label htmlFor="new_vehicle_notes" className="font-bold text-slate-700">
+                    Fahrzeugnotizen
+                </Label>
+                <Textarea
+                    id="new_vehicle_notes"
+                    name="new_vehicle_notes"
+                    placeholder="Interne Hinweise zum Fahrzeug."
+                    className="min-h-24 rounded-2xl border-slate-200 bg-white font-medium"
+                />
+            </div>
+        </div>
+    );
+}
+
 function getRequiredLabel(label: string, required: boolean): string {
     return required ? `${label} *` : label;
+}
+
+function getCustomerSummaryName(customer: CustomerRow): string {
+    if (customer.type === "company") return customer.company_name ?? "Unbekannte Firma";
+
+    return [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Unbekannte Privatperson";
+}
+
+function getVehicleStatusLabel(status: VehicleRow["status"]): string {
+    if (status === "in_stock") return "Im Bestand";
+    if (status === "reserved") return "Reserviert";
+    if (status === "sold") return "Verkauft";
+
+    return status;
+}
+
+function getSaleTypeLabel(saleType: SaleType): string {
+    if (saleType === "eu") return "EU-Verkauf";
+    if (saleType === "export_third_country") return "Drittlandexport";
+
+    return "Inland";
 }
 
 function SectionTitle({

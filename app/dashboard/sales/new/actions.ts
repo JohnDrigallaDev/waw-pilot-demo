@@ -19,11 +19,21 @@ import {
 } from "@/lib/customers/email-languages";
 import { isAllowedArrivalPeriod } from "@/lib/sales/export-date-rules";
 import {
+    evaluateVehicleSaleEligibility,
+    normalizeVinForSale,
+} from "@/lib/sales/vehicle-sale-eligibility";
+import {
     getSaleTaxConfiguration,
     normalizeVatId,
     type SaleBuyerType,
 } from "@/utils/sale-tax-rules";
 import { calculatePaymentStatus } from "@/utils/payment-utils";
+import { getNextVehicleInternalNumber } from "@/lib/vehicles/vehicle-numbering";
+import {
+    getDuplicateInternalNumberMessage,
+    getDuplicateVinMessage,
+    translateVehicleDatabaseError,
+} from "@/lib/vehicles/vehicle-save-errors";
 
 type CreateSaleState = {
     success: boolean;
@@ -31,6 +41,7 @@ type CreateSaleState = {
 };
 
 type CustomerType = "company" | "private";
+type SelectionMode = "existing" | "new";
 
 function getStringValue(formData: FormData, key: string): string | null {
     const value = formData.get(key);
@@ -124,6 +135,10 @@ function getNewCustomerType(formData: FormData): CustomerType {
     return "company";
 }
 
+function getSelectionMode(formData: FormData, key: string): SelectionMode {
+    return getStringValue(formData, key) === "new" ? "new" : "existing";
+}
+
 function getNewCustomerEmailLanguage(formData: FormData): EmailLanguage {
     return normalizeEmailLanguage(
         getStringValue(formData, "new_customer_preferred_language"),
@@ -176,6 +191,17 @@ async function getNextSaleNumber(
     supabase: ReturnType<typeof createServerSupabaseClient>,
     companyId: string,
 ): Promise<string> {
+    const { data: rpcSaleNumber, error: rpcSaleNumberError } = await supabase.rpc(
+        "next_sale_number",
+        {
+            target_company_id: companyId,
+        },
+    );
+
+    if (!rpcSaleNumberError && typeof rpcSaleNumber === "string") {
+        return rpcSaleNumber;
+    }
+
     const { data, error } = await supabase
         .from("sales")
         .select("sale_number")
@@ -288,6 +314,28 @@ async function createBuyerCustomerFromSaleForm(
         };
     }
 
+    const duplicateCustomer = await findDuplicateCustomer({
+        supabase,
+        companyId,
+        type,
+        companyName,
+        firstName,
+        lastName,
+        email,
+        phone,
+        vatId,
+        postalCode,
+        city,
+    });
+
+    if (duplicateCustomer) {
+        return {
+            success: false,
+            message:
+                "Es gibt bereits einen möglichen passenden Kunden. Bitte wähle den bestehenden Kunden über die Suche aus oder prüfe die Stammdaten.",
+        };
+    }
+
     const { data: customer, error } = await supabase
         .from("customers")
         .insert({
@@ -333,6 +381,246 @@ async function createBuyerCustomerFromSaleForm(
     };
 }
 
+async function findDuplicateCustomer({
+    supabase,
+    companyId,
+    type,
+    companyName,
+    firstName,
+    lastName,
+    email,
+    phone,
+    vatId,
+    postalCode,
+    city,
+}: {
+    supabase: ReturnType<typeof createServerSupabaseClient>;
+    companyId: string;
+    type: CustomerType;
+    companyName: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    phone: string | null;
+    vatId: string | null;
+    postalCode: string | null;
+    city: string | null;
+}): Promise<boolean> {
+    async function hasMatch(
+        query: PromiseLike<{ data: { id: string }[] | null }>,
+    ): Promise<boolean> {
+        const { data } = await query;
+
+        return (data ?? []).length > 0;
+    }
+
+    if (vatId) {
+        if (
+            await hasMatch(
+            supabase
+                .from("customers")
+                .select("id")
+                .eq("company_id", companyId)
+                .eq("vat_id", vatId)
+                .limit(1),
+            )
+        ) {
+            return true;
+        }
+    }
+
+    if (email) {
+        if (
+            await hasMatch(
+            supabase
+                .from("customers")
+                .select("id")
+                .eq("company_id", companyId)
+                .ilike("email", email)
+                .limit(1),
+            )
+        ) {
+            return true;
+        }
+    }
+
+    if (phone) {
+        if (
+            await hasMatch(
+            supabase
+                .from("customers")
+                .select("id")
+                .eq("company_id", companyId)
+                .eq("phone", phone)
+                .limit(1),
+            )
+        ) {
+            return true;
+        }
+    }
+
+    if (type === "company" && companyName && postalCode && city) {
+        if (
+            await hasMatch(
+            supabase
+                .from("customers")
+                .select("id")
+                .eq("company_id", companyId)
+                .eq("type", "company")
+                .ilike("company_name", companyName)
+                .eq("postal_code", postalCode)
+                .ilike("city", city)
+                .limit(1),
+            )
+        ) {
+            return true;
+        }
+    }
+
+    if (type === "private" && firstName && lastName && postalCode && city) {
+        if (
+            await hasMatch(
+            supabase
+                .from("customers")
+                .select("id")
+                .eq("company_id", companyId)
+                .eq("type", "private")
+                .ilike("first_name", firstName)
+                .ilike("last_name", lastName)
+                .eq("postal_code", postalCode)
+                .ilike("city", city)
+                .limit(1),
+            )
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+async function createVehicleFromSaleForm(
+    supabase: ReturnType<typeof createServerSupabaseClient>,
+    companyId: string,
+    formData: FormData,
+): Promise<{ success: true; vehicleId: string; vehicleName: string } | { success: false; message: string }> {
+    const submittedInternalNumber = getStringValue(formData, "new_vehicle_internal_number");
+    const manufacturer = getStringValue(formData, "new_vehicle_manufacturer");
+    const model = getStringValue(formData, "new_vehicle_model");
+    const vehicleType = getStringValue(formData, "new_vehicle_vehicle_type");
+    const vin = getStringValue(formData, "new_vehicle_vin");
+    const normalizedVin = vin ? normalizeVinForSale(vin) : null;
+    const constructionYear = getNumberValue(formData, "new_vehicle_construction_year");
+    const mileage = getNumberValue(formData, "new_vehicle_mileage");
+    const color = getStringValue(formData, "new_vehicle_color");
+    const vehicleCategory = getStringValue(formData, "new_vehicle_vehicle_category");
+    const licensePlate = getStringValue(formData, "new_vehicle_license_plate");
+    const purchasePriceNet = getNumberValue(formData, "new_vehicle_purchase_price_net");
+    const additionalCostsNet =
+        getNumberValue(formData, "new_vehicle_additional_costs_net") ?? 0;
+    const notes = getStringValue(formData, "new_vehicle_notes");
+    const damageNotes = getStringValue(formData, "new_vehicle_damage_notes");
+    const showDamageOnInvoice =
+        Boolean(damageNotes?.trim()) &&
+        getStringValue(formData, "new_vehicle_show_damage_on_invoice") === "yes";
+
+    if (!manufacturer || !model || !vehicleType || !normalizedVin) {
+        return {
+            success: false,
+            message: "Bitte fülle Hersteller, Modell, Fahrzeugtyp und VIN für das neue Fahrzeug aus.",
+        };
+    }
+
+    if (purchasePriceNet === null) {
+        return {
+            success: false,
+            message: "Bitte gib für das neue Fahrzeug einen gültigen Einkaufspreis netto ein.",
+        };
+    }
+
+    const internalNumber =
+        submittedInternalNumber ?? (await getNextVehicleInternalNumber());
+
+    const { data: duplicateVinVehicle, error: duplicateVinError } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("vin", normalizedVin)
+        .limit(1);
+
+    if (duplicateVinError) {
+        console.error("[sale-create] vehicle VIN duplicate check failed", duplicateVinError);
+    }
+
+    if ((duplicateVinVehicle ?? []).length > 0) {
+        return { success: false, message: getDuplicateVinMessage() };
+    }
+
+    const { data: duplicateInternalNumberVehicle } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("internal_number", internalNumber)
+        .limit(1);
+
+    if ((duplicateInternalNumberVehicle ?? []).length > 0) {
+        return { success: false, message: getDuplicateInternalNumberMessage() };
+    }
+
+    const { data: vehicle, error } = await supabase
+        .from("vehicles")
+        .insert({
+            company_id: companyId,
+            internal_number: internalNumber,
+            manufacturer,
+            model,
+            vehicle_type: vehicleType,
+            construction_year: constructionYear,
+            first_registration: null,
+            vin: normalizedVin,
+            license_plate: licensePlate,
+            purchase_price_net: purchasePriceNet,
+            sale_price_net: null,
+            additional_costs_net: additionalCostsNet,
+            status: "in_stock",
+            seller_customer_id: null,
+            buyer_customer_id: null,
+            mileage,
+            color,
+            vehicle_category: vehicleCategory,
+            notes,
+            damage_notes: damageNotes,
+            show_damage_on_invoice: showDamageOnInvoice,
+        })
+        .select("id, internal_number, manufacturer, model")
+        .single();
+
+    if (error || !vehicle) {
+        if (error) console.error("[sale-create] inline vehicle insert failed", error);
+
+        return {
+            success: false,
+            message: error
+                ? translateVehicleDatabaseError(error)
+                : "Das neue Fahrzeug konnte nicht gespeichert werden.",
+        };
+    }
+
+    const vehicleName = getVehicleActivityName(vehicle);
+
+    await logActivity({
+        action: `Fahrzeug ${vehicleName} direkt beim Verkauf angelegt`,
+        entityType: "vehicle",
+        entityId: vehicle.id as string,
+    });
+
+    return {
+        success: true,
+        vehicleId: vehicle.id as string,
+        vehicleName,
+    };
+}
+
 export async function createSaleAction(
     _previousState: CreateSaleState,
     formData: FormData,
@@ -340,10 +628,11 @@ export async function createSaleAction(
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
 
-    const vehicleId = getStringValue(formData, "vehicle_id");
+    let vehicleId = getStringValue(formData, "vehicle_id");
     let buyerCustomerId = getStringValue(formData, "buyer_customer_id");
 
     const buyerMode = getStringValue(formData, "buyer_mode") ?? "existing";
+    const vehicleMode = getSelectionMode(formData, "vehicle_mode");
     const saleDate = getStringValue(formData, "sale_date");
     const saleType = getSaleTypeValue(formData);
     const netAmount = getNumberValue(formData, "net_amount");
@@ -397,16 +686,33 @@ export async function createSaleAction(
         };
     }
 
+    if (vehicleMode === "new") {
+        const createdVehicle = await createVehicleFromSaleForm(
+            supabase,
+            companyId,
+            formData,
+        );
+
+        if (!createdVehicle.success) {
+            return {
+                success: false,
+                message: createdVehicle.message,
+            };
+        }
+
+        vehicleId = createdVehicle.vehicleId;
+    }
+
     if (!vehicleId) {
         return {
             success: false,
-            message: "Bitte wähle ein Fahrzeug aus.",
+            message: "Bitte wähle ein Fahrzeug aus oder lege ein neues Fahrzeug an.",
         };
     }
 
     const { data: vehicleData, error: vehicleLoadError } = await supabase
         .from("vehicles")
-        .select("internal_number, manufacturer, model, status, damage_notes, show_damage_on_invoice")
+        .select("id, internal_number, manufacturer, model, status, damage_notes, show_damage_on_invoice")
         .eq("id", vehicleId)
         .eq("company_id", companyId)
         .single();
@@ -420,11 +726,34 @@ export async function createSaleAction(
         };
     }
 
-    if (vehicleData.status !== "in_stock" && vehicleData.status !== "reserved") {
+    const vehicleEligibility = evaluateVehicleSaleEligibility(vehicleData.status);
+
+    if (!vehicleEligibility.eligible) {
         return {
             success: false,
             message:
-                "Dieses Fahrzeug wurde bereits verkauft und kann nicht erneut verkauft werden.",
+                vehicleEligibility.reason ??
+                "Dieses Fahrzeug ist im aktuellen Status nicht verkaufsfähig.",
+        };
+    }
+
+    const { data: existingActiveSale, error: existingActiveSaleError } = await supabase
+        .from("sales")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("vehicle_id", vehicleId)
+        .eq("status", "active")
+        .limit(1);
+
+    if (existingActiveSaleError) {
+        console.error("[sale-create] active sale check failed", existingActiveSaleError);
+    }
+
+    if ((existingActiveSale ?? []).length > 0) {
+        return {
+            success: false,
+            message:
+                "Das ausgewählte Fahrzeug ist bereits einem aktiven Verkauf zugeordnet.",
         };
     }
 
@@ -627,7 +956,7 @@ export async function createSaleAction(
         entityId: saleId,
     });
 
-    const { error: vehicleUpdateError } = await supabase
+    const { data: updatedVehicle, error: vehicleUpdateError } = await supabase
         .from("vehicles")
         .update({
             status: "sold",
@@ -635,12 +964,17 @@ export async function createSaleAction(
             sale_price_net: netAmount,
         })
         .eq("id", vehicleId)
-        .eq("company_id", companyId);
+        .eq("company_id", companyId)
+        .in("status", ["in_stock", "reserved"])
+        .select("id")
+        .maybeSingle();
 
-    if (vehicleUpdateError) {
+    if (vehicleUpdateError || !updatedVehicle) {
         return {
             success: false,
-            message: `Verkauf wurde gespeichert, aber Fahrzeugstatus konnte nicht aktualisiert werden: ${vehicleUpdateError.message}`,
+            message: vehicleUpdateError
+                ? `Verkauf wurde gespeichert, aber Fahrzeugstatus konnte nicht aktualisiert werden: ${vehicleUpdateError.message}`
+                : "Das Fahrzeug wurde zwischenzeitlich geändert. Bitte prüfe die Verkaufsakte und den Fahrzeugstatus.",
         };
     }
 
