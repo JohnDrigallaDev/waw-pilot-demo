@@ -11,6 +11,7 @@ type CompanyRelation = {
     city: string;
     country: string;
     email: string | null;
+    website?: string | null;
     phone: string | null;
     vat_id: string | null;
     tax_number: string | null;
@@ -226,6 +227,7 @@ export async function getSaleGeneratedDocumentData(
                 city: company.city,
                 country: company.country,
                 email: company.email,
+                website: company.website ?? null,
                 phone: company.phone,
                 vatId: company.vat_id,
                 taxNumber: company.tax_number,

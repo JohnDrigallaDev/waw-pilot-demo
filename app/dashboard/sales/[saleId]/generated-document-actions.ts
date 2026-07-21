@@ -54,6 +54,7 @@ export async function generateSaleDocumentAction(formData: FormData) {
     );
     const includeSignatureStamp =
         getStringValue(formData, "include_signature_stamp") === "yes";
+    const documentDateOverride = getStringValue(formData, "document_date");
 
     if (!saleId) {
         throw new Error("Verkauf fehlt.");
@@ -81,6 +82,7 @@ export async function generateSaleDocumentAction(formData: FormData) {
         saleId,
         documentType,
         includeSignatureStamp,
+        documentDateOverride,
     });
 
     await logActivity({

@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { rgb } from "pdf-lib";
 
 import {
@@ -9,6 +6,7 @@ import {
 } from "@/lib/pdf/core/pdf-layout";
 import { pdfTheme } from "@/lib/pdf/core/pdf-theme";
 import { formatPdfDate } from "@/lib/pdf/core/pdf-format";
+import { drawCompanyDocumentHeader } from "@/lib/pdf/core/company-document-header";
 import type { SaleGeneratedDocumentData } from "@/lib/pdf/generated-documents/sale-document-data";
 import {
     embedCompanyPdfImage,
@@ -72,37 +70,7 @@ function getInvoiceNumber(data: SaleGeneratedDocumentData): string {
 }
 
 function getDocumentDate(data: SaleGeneratedDocumentData): string {
-    return formatPdfDate(data.sale?.saleDate ?? data.sale?.invoiceDate ?? null);
-}
-
-async function drawLogo(ctx: Awaited<ReturnType<typeof createPdfLayout>>) {
-    try {
-        const logoPath = path.join(
-            process.cwd(),
-            "public",
-            "brand",
-            "waw-logo.png",
-        );
-
-        const logoBytes = await readFile(logoPath);
-        const logoImage = await ctx.pdfDoc.embedPng(logoBytes);
-
-        const logoWidth = 105;
-        const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
-
-        ctx.page.drawImage(logoImage, {
-            x: ctx.width - ctx.margin - logoWidth,
-            y: ctx.height - ctx.margin - logoHeight + 6,
-            width: logoWidth,
-            height: logoHeight,
-        });
-    } catch {
-        drawText(ctx, "WAW", ctx.width - ctx.margin - 70, ctx.height - ctx.margin, {
-            size: 18,
-            bold: true,
-            color: pdfTheme.colors.primaryDark,
-        });
-    }
+    return formatPdfDate(data.documentDate?.usedDate ?? data.sale?.invoiceDate ?? null);
 }
 
 async function drawSignatureStampImages(
@@ -208,9 +176,7 @@ export async function generateHandoverProtocolPdf(
 
     const ctx = await createPdfLayout();
 
-    await drawLogo(ctx);
-
-    let y = ctx.height - ctx.margin - 30;
+    let y = await drawCompanyDocumentHeader(ctx, data);
 
     drawText(
         ctx,

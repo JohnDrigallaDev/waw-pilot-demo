@@ -7,6 +7,7 @@ import {
 
 import { createPdfLayout } from "@/lib/pdf/core/pdf-layout";
 import { formatPdfDate } from "@/lib/pdf/core/pdf-format";
+import { drawCompanyDocumentHeader } from "@/lib/pdf/core/company-document-header";
 import type { SaleGeneratedDocumentData } from "@/lib/pdf/generated-documents/sale-document-data";
 
 function requireValue(value: string | number | null | undefined): string {
@@ -75,6 +76,11 @@ function getVehicleDescription(data: SaleGeneratedDocumentData): string {
 }
 
 function getArrivalPeriod(data: SaleGeneratedDocumentData): string {
+    if (data.documentDate?.usedDate) {
+        const [, month, year] = formatPdfDate(data.documentDate.usedDate).split(".");
+        return `${getArrivalMonthLabel(month)} ${year}`;
+    }
+
     const month = getArrivalMonthLabel(data.export?.arrivalMonth);
     const year = requireValue(data.export?.arrivalYear);
 
@@ -93,7 +99,7 @@ function getDestination(data: SaleGeneratedDocumentData): string {
 }
 
 function getIssuerDate(data: SaleGeneratedDocumentData): string {
-    return formatPdfDate(data.sale?.saleDate ?? data.sale?.invoiceDate ?? null);
+    return formatPdfDate(data.documentDate?.usedDate ?? data.sale?.invoiceDate ?? null);
 }
 
 function splitLongWord(
@@ -323,15 +329,7 @@ export async function generateEntryCertificatePdf(
     const contentWidth = ctx.width - contentX * 2;
     const centerX = ctx.width / 2;
 
-    let y = ctx.height - 56;
-
-    drawCenteredText(page, "- 13 -", centerX, y, {
-        font: timesRoman,
-        size: 10,
-        maxWidth: contentWidth,
-    });
-
-    y -= 70;
+    let y = await drawCompanyDocumentHeader(ctx, data);
 
     drawCenteredText(
         page,

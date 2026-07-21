@@ -11,6 +11,13 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { generateEntryCertificatePdf } from "@/lib/pdf/templates/entry-certificate-pdf";
 import { generateTransportProofPdf } from "@/lib/pdf/templates/transport-proof-pdf";
 import { getCompanySignatureStampAssets } from "@/lib/pdf/company-signature-assets";
+import { logActivity } from "@/lib/activity/activity-log";
+import { MissingInvoiceDateError } from "@/src/modules/documents/domain/errors/document-rule-errors";
+import { MissingDocumentDateError } from "@/src/modules/documents/domain/errors/document-rule-errors";
+import {
+    DocumentDatePolicy,
+    type DocumentDateSuggestion,
+} from "@/src/modules/documents/domain/policies/document-date-policy";
 
 export type GenerateSaleDocumentResult = {
     documentId: string;
@@ -48,12 +55,51 @@ function getSaleGeneratedDocumentFileBaseName(
     return names[documentType];
 }
 
+function buildGeneratedDocumentMetadata(params: {
+    documentDate: DocumentDateSuggestion;
+    generatedAt: string;
+    overrideDate: string | null;
+}): Record<string, unknown> {
+    return {
+        documentDate: params.documentDate.usedDate,
+        usedDate: params.documentDate.usedDate,
+        suggestedDate: params.documentDate.suggestedDate,
+        sourceDate: params.documentDate.sourceDate,
+        transitDays: params.documentDate.transitDays,
+        destinationCountryCode: params.documentDate.countryCode,
+        destinationCountryName: params.documentDate.countryName,
+        calculationType: params.documentDate.calculationType,
+        overrideApplied: params.documentDate.isOverridden,
+        overrideDate: params.overrideDate,
+        generatedAt: params.generatedAt,
+        source: "generated_sale_document",
+    };
+}
+
+async function logDocumentDateOverrideActivity(params: {
+    documentId: string;
+    documentDate: DocumentDateSuggestion;
+}): Promise<void> {
+    if (!params.documentDate.isOverridden) return;
+
+    await logActivity({
+        action: `Das vorgeschlagene Dokumentdatum wurde auf ${params.documentDate.usedDate} geändert.`,
+        entityType: "document",
+        entityId: params.documentId,
+    });
+}
+
 async function generatePdfBytesForSaleDocument(
     documentType: GeneratedDocumentType,
     saleId: string,
     includeSignatureStamp: boolean,
+    documentDateOverride: string | null,
 ) {
     const documentData = await getSaleGeneratedDocumentData(saleId);
+    if (!isSupportedSaleGeneratedDocumentType(documentType)) {
+        throw new Error("Dieser Dokumenttyp wird nicht automatisch erzeugt.");
+    }
+
     const validation = validateGeneratedDocumentData(documentType, documentData);
 
     if (!validation.canGenerate) {
@@ -66,29 +112,60 @@ async function generatePdfBytesForSaleDocument(
         );
     }
 
+    const documentDate = new DocumentDatePolicy().suggest({
+        documentType,
+        invoiceDate: documentData.sale?.invoiceDate,
+        saleDate: documentData.sale?.saleDate,
+        transportStartDate: documentData.export?.transportDate,
+        destinationCountry: documentData.export?.destinationCountry,
+        overrideDate: documentDateOverride,
+    });
+
+    if (documentType === "handover_protocol" && !documentDate.usedDate) {
+        throw new MissingInvoiceDateError();
+    }
+
+    if (
+        (documentType === "entry_certificate" || documentType === "transport_proof") &&
+        !documentDate.usedDate
+    ) {
+        throw new MissingDocumentDateError();
+    }
+
+    const documentDataWithDate = {
+        ...documentData,
+        documentDate: {
+            ...documentDate,
+            usedDate: documentDate.usedDate,
+        },
+    };
+
     if (documentType === "handover_protocol") {
         return {
-            pdfBytes: await generateHandoverProtocolPdf(documentData, {
+            pdfBytes: await generateHandoverProtocolPdf(documentDataWithDate, {
                 signatureStamp: {
                     include: includeSignatureStamp,
                     ...(await getCompanySignatureStampAssets(includeSignatureStamp)),
                 },
             }),
-            documentData,
+            documentData: documentDataWithDate,
+            documentDate,
         };
     }
 
     if (documentType === "entry_certificate") {
         return {
-            pdfBytes: await generateEntryCertificatePdf(documentData),
-            documentData,
+            pdfBytes: await generateEntryCertificatePdf(documentDataWithDate),
+            documentData: documentDataWithDate,
+            documentDate,
         };
     }
 
     if (documentType === "transport_proof") {
         return {
-            pdfBytes: await generateTransportProofPdf(documentData),
-            documentData,
+            pdfBytes: await generateTransportProofPdf(documentDataWithDate),
+            documentData: documentDataWithDate,
+            documentDate,
         };
     }
 
@@ -101,6 +178,7 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
     saleId: string;
     documentType: GeneratedDocumentType;
     includeSignatureStamp?: boolean;
+    documentDateOverride?: string | null;
 }): Promise<GenerateSaleDocumentResult> {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -113,10 +191,11 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
 
     const definition = getGeneratedDocumentDefinition(params.documentType);
 
-    const { pdfBytes, documentData } = await generatePdfBytesForSaleDocument(
+    const { pdfBytes, documentData, documentDate } = await generatePdfBytesForSaleDocument(
         params.documentType,
         params.saleId,
         Boolean(params.includeSignatureStamp),
+        params.documentDateOverride ?? null,
     );
 
     const fileBaseName = getSaleGeneratedDocumentFileBaseName(params.documentType);
@@ -124,13 +203,20 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
         documentData.sale?.invoiceNumber ?? params.saleId,
     );
 
+    const generatedAt = new Date().toISOString();
+    const versionPart = generatedAt.replace(/[:.]/g, "-");
     const fileName = `${fileBaseName}-${numberPart}.pdf`;
-    const filePath = `generated-documents/sales/${params.saleId}/${fileName}`;
+    const filePath = `generated-documents/sales/${params.saleId}/${fileBaseName}-${numberPart}-${versionPart}.pdf`;
+    const metadata = buildGeneratedDocumentMetadata({
+        documentDate,
+        generatedAt,
+        overrideDate: params.documentDateOverride ?? null,
+    });
 
     const [uploadResult, existingDocumentResult] = await Promise.all([
         supabase.storage.from("documents").upload(filePath, pdfBytes, {
             contentType: "application/pdf",
-            upsert: true,
+            upsert: false,
         }),
         supabase
             .from("documents")
@@ -168,6 +254,7 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
                 customer_id: documentData.customerId,
                 vehicle_id: documentData.vehicleId,
                 generated_by_system: true,
+                metadata,
             })
             .eq("id", existingDocument.id)
             .eq("company_id", companyId);
@@ -177,6 +264,11 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
                 `Dokument konnte nicht aktualisiert werden: ${updateError.message}`,
             );
         }
+
+        await logDocumentDateOverrideActivity({
+            documentId: existingDocument.id,
+            documentDate,
+        });
 
         return {
             documentId: existingDocument.id,
@@ -200,6 +292,7 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
             vehicle_id: documentData.vehicleId,
             sale_id: params.saleId,
             generated_by_system: true,
+            metadata,
         })
         .select("id")
         .single();
@@ -211,6 +304,11 @@ export async function generateAndStoreSaleGeneratedDocument(params: {
             }`,
         );
     }
+
+    await logDocumentDateOverrideActivity({
+        documentId: insertedDocument.id as string,
+        documentDate,
+    });
 
     return {
         documentId: insertedDocument.id as string,

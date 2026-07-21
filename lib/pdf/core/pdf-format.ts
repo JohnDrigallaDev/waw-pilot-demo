@@ -1,6 +1,12 @@
 export function formatPdfDate(dateString: string | null | undefined): string {
     if (!dateString) return "—";
 
+    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+
+    if (dateOnlyMatch) {
+        return `${dateOnlyMatch[3]}.${dateOnlyMatch[2]}.${dateOnlyMatch[1]}`;
+    }
+
     return new Intl.DateTimeFormat("de-DE", {
         day: "2-digit",
         month: "2-digit",

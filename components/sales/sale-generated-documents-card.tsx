@@ -329,6 +329,30 @@ function GeneratedDocumentRow({
                                 </label>
                             ) : null}
 
+                            {document.dateSuggestion ? (
+                                <div className="mb-2 rounded-2xl border border-cyan-100 bg-cyan-50 p-3 text-xs font-bold leading-5 text-cyan-900">
+                                    <p>{document.dateSuggestion.explanation}</p>
+                                    <label className="mt-2 block text-slate-700">
+                                        Dokumentdatum
+                                        <input
+                                            type="date"
+                                            name="document_date"
+                                            defaultValue={
+                                                document.dateSuggestion.suggestedDate ?? ""
+                                            }
+                                            className="mt-1 h-9 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm font-semibold text-slate-950"
+                                            required={
+                                                document.type === "handover_protocol" ||
+                                                document.dateSuggestion.suggestedDate === null
+                                            }
+                                        />
+                                    </label>
+                                    <p className="mt-2 text-[11px] text-cyan-700">
+                                        Der Vorschlag ist ein Schätzwert und kann vor der PDF-Erstellung manuell angepasst werden.
+                                    </p>
+                                </div>
+                            ) : null}
+
                             <GenerateSaleDocumentSubmitButton
                                 disabled={!canGenerateNow}
                                 isGenerated={Boolean(document.generatedDocument?.id)}

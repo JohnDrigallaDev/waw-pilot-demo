@@ -86,6 +86,7 @@ export type GeneratedDocumentValidationData = {
         city?: string | null;
         country?: string | null;
         email?: string | null;
+        website?: string | null;
         phone?: string | null;
         vatId?: string | null;
         taxNumber?: string | null;
@@ -123,6 +124,18 @@ export type GeneratedDocumentValidationData = {
         vatRate?: number | null;
         vatAmount?: number | null;
         grossAmount?: number | null;
+    } | null;
+
+    documentDate?: {
+        usedDate?: string | null;
+        suggestedDate?: string | null;
+        sourceDate?: string | null;
+        calculationType?: string | null;
+        transitDays?: number | null;
+        countryCode?: string | null;
+        countryName?: string | null;
+        isOverridden?: boolean;
+        explanation?: string | null;
     } | null;
 
     purchase?: {
@@ -348,16 +361,6 @@ export const documentValidationRules: Record<
         ...saleBaseRules,
         ...invoiceRules,
         ...exportBaseRules,
-        {
-            field: "export.arrivalMonth",
-            label: "Gelangensbestätigung: Monat",
-            message: "Der Monat des Gelangens fehlt.",
-        },
-        {
-            field: "export.arrivalYear",
-            label: "Gelangensbestätigung: Jahr",
-            message: "Das Jahr des Gelangens fehlt.",
-        },
     ],
 
     transport_proof: [
@@ -372,11 +375,6 @@ export const documentValidationRules: Record<
         ...saleBaseRules,
         ...invoiceRules,
         ...exportBaseRules,
-        {
-            field: "export.transportDate",
-            label: "Verbringung: Datum",
-            message: "Das Verbringungs- bzw. Übergabedatum fehlt.",
-        },
         {
             field: "export.transportType",
             label: "Verbringung: Art",

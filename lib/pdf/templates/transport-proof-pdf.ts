@@ -7,6 +7,7 @@ import {
 
 import { createPdfLayout } from "@/lib/pdf/core/pdf-layout";
 import { formatPdfDate } from "@/lib/pdf/core/pdf-format";
+import { drawCompanyDocumentHeader } from "@/lib/pdf/core/company-document-header";
 import type { SaleGeneratedDocumentData } from "@/lib/pdf/generated-documents/sale-document-data";
 
 function requireValue(value: string | number | null | undefined): string {
@@ -53,11 +54,11 @@ function getDestination(data: SaleGeneratedDocumentData): string {
 }
 
 function getTransportDate(data: SaleGeneratedDocumentData): string {
-    return formatPdfDate(data.export?.transportDate ?? data.sale?.saleDate ?? null);
+    return formatPdfDate(data.documentDate?.usedDate ?? data.export?.transportDate ?? data.sale?.invoiceDate ?? null);
 }
 
 function getIssuerDate(data: SaleGeneratedDocumentData): string {
-    return formatPdfDate(data.export?.transportDate ?? data.sale?.saleDate ?? null);
+    return getTransportDate(data);
 }
 
 function splitLongWord(
@@ -319,7 +320,7 @@ export async function generateTransportProofPdf(
     const contentWidth = ctx.width - contentX * 2;
     const lineEndX = contentX + contentWidth;
 
-    let y = ctx.height - 78;
+    let y = await drawCompanyDocumentHeader(ctx, data);
 
     drawWrappedText(
         page,

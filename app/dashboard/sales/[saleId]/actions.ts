@@ -5,16 +5,37 @@ import { redirect } from "next/navigation";
 
 import { getCurrentCompanyId } from "@/lib/company";
 import {
+    getBzstVerificationTooLargeMessage,
     getDocumentUploadFailedMessage,
+    getDocumentTooLargeMessage,
     getUnsupportedDocumentTypeMessage,
     isAllowedDocumentFile,
+    maxBzstVerificationFileSizeBytes,
+    maxDocumentFileSizeBytes,
 } from "@/lib/documents/upload-validation";
+import { logActivity } from "@/lib/activity/activity-log";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type SaleUploadQueryResult = {
     id: string;
     vehicle_id: string;
     buyer_customer_id: string;
+    customers:
+        | {
+            type: "company" | "private";
+            company_name: string | null;
+            first_name: string | null;
+            last_name: string | null;
+            vat_id: string | null;
+        }
+        | {
+            type: "company" | "private";
+            company_name: string | null;
+            first_name: string | null;
+            last_name: string | null;
+            vat_id: string | null;
+        }[]
+        | null;
 };
 
 type ExistingDocumentQueryResult = {
@@ -59,6 +80,33 @@ function getFileExtension(fileName: string): string {
     return extension ? `.${extension}` : "";
 }
 
+function isBzstVerificationDocument(documentType: string): boolean {
+    return (
+        documentType === "bzst_vat_verification_primary" ||
+        documentType === "bzst_vat_verification_secondary"
+    );
+}
+
+function getSingleRelation<T>(relation: T | T[] | null): T | null {
+    if (!relation) return null;
+
+    return Array.isArray(relation) ? relation[0] ?? null : relation;
+}
+
+function getCustomerName(
+    customer: {
+        type: "company" | "private";
+        company_name: string | null;
+        first_name: string | null;
+        last_name: string | null;
+    } | null,
+): string | null {
+    if (!customer) return null;
+    if (customer.type === "company") return customer.company_name;
+
+    return [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
+}
+
 export async function uploadSaleDocumentAction(formData: FormData) {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -85,9 +133,34 @@ export async function uploadSaleDocumentAction(formData: FormData) {
         throw new Error(getUnsupportedDocumentTypeMessage());
     }
 
+    const maxFileSize = isBzstVerificationDocument(documentType)
+        ? maxBzstVerificationFileSizeBytes
+        : maxDocumentFileSizeBytes;
+
+    if (fileValue.size > maxFileSize) {
+        throw new Error(
+            isBzstVerificationDocument(documentType)
+                ? getBzstVerificationTooLargeMessage()
+                : getDocumentTooLargeMessage(),
+        );
+    }
+
     const { data: saleData, error: saleError } = await supabase
         .from("sales")
-        .select("id, vehicle_id, buyer_customer_id")
+        .select(
+            `
+            id,
+            vehicle_id,
+            buyer_customer_id,
+            customers:buyer_customer_id (
+                type,
+                company_name,
+                first_name,
+                last_name,
+                vat_id
+            )
+        `,
+        )
         .eq("id", saleId)
         .eq("company_id", companyId)
         .single();
@@ -101,6 +174,22 @@ export async function uploadSaleDocumentAction(formData: FormData) {
     }
 
     const sale = saleData as SaleUploadQueryResult;
+    const customer = getSingleRelation(sale.customers);
+    const metadata = isBzstVerificationDocument(documentType)
+        ? {
+            source: "MANUAL_BZST_CHECK",
+            saleId: sale.id,
+            buyerId: sale.buyer_customer_id,
+            vatNumberSnapshot: customer?.vat_id ?? null,
+            buyerNameSnapshot: getCustomerName(customer),
+            verificationSlot:
+                documentType === "bzst_vat_verification_primary"
+                    ? "PRIMARY"
+                    : "SECONDARY",
+            uploadedAt: new Date().toISOString(),
+            reviewStatus: "REVIEW_REQUIRED",
+        }
+        : {};
 
     let existingDocument: ExistingDocumentQueryResult | null = null;
 
@@ -163,6 +252,7 @@ export async function uploadSaleDocumentAction(formData: FormData) {
                 vehicle_id: sale.vehicle_id,
                 sale_id: sale.id,
                 generated_by_system: false,
+                metadata,
             })
             .eq("id", existingDocument.id)
             .eq("company_id", companyId);
@@ -176,9 +266,13 @@ export async function uploadSaleDocumentAction(formData: FormData) {
             );
         }
 
-        if (existingDocument.file_path && existingDocument.file_path !== filePath) {
-            await supabase.storage.from("documents").remove([existingDocument.file_path]);
-        }
+        await logActivity({
+            action: isBzstVerificationDocument(documentType)
+                ? `${documentLabel} wurde ersetzt.`
+                : `${documentLabel} wurde ersetzt.`,
+            entityType: "document",
+            entityId: existingDocument.id,
+        });
     } else {
         const { error: documentError } = await supabase.from("documents").insert({
             company_id: companyId,
@@ -194,6 +288,7 @@ export async function uploadSaleDocumentAction(formData: FormData) {
             sale_id: sale.id,
             invoice_id: null,
             generated_by_system: false,
+            metadata,
         });
 
         if (documentError) {
@@ -203,6 +298,14 @@ export async function uploadSaleDocumentAction(formData: FormData) {
             throw new Error(
                 "Dokument konnte nicht gespeichert werden. Bitte versuche es erneut.",
             );
+        }
+
+        if (isBzstVerificationDocument(documentType)) {
+            await logActivity({
+                action: `${documentLabel} wurde hochgeladen.`,
+                entityType: "sale",
+                entityId: sale.id,
+            });
         }
     }
 
@@ -252,10 +355,6 @@ export async function deleteSaleDocumentAction(formData: FormData) {
         );
     }
 
-    if (document.file_path) {
-        await supabase.storage.from("documents").remove([document.file_path]);
-    }
-
     const { error: documentUpdateError } = await supabase
         .from("documents")
         .update({
@@ -272,7 +371,7 @@ export async function deleteSaleDocumentAction(formData: FormData) {
 
     if (documentUpdateError) {
         throw new Error(
-            `Dokument wurde aus dem Storage entfernt, aber der Datenbankstatus konnte nicht aktualisiert werden: ${documentUpdateError.message}`,
+            `Dokumentstatus konnte nicht aktualisiert werden: ${documentUpdateError.message}`,
         );
     }
 

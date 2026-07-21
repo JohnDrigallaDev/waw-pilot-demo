@@ -1,4 +1,5 @@
 import type { SaleType } from "@/lib/sales/sale-queries";
+import { VatVerificationRequirementPolicy } from "@/src/modules/documents/domain/policies/vat-verification-requirement-policy";
 
 export type RequiredDocumentDefinition = {
     documentType: string;
@@ -57,6 +58,19 @@ const EU_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
     },
 ];
 
+const EU_COMPANY_VAT_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
+    {
+        documentType: "bzst_vat_verification_primary",
+        label: "BZSt-Prüfnachweis – Ergebnisübersicht",
+        helperText: "Erster Screenshot der manuellen USt-ID-Prüfung.",
+    },
+    {
+        documentType: "bzst_vat_verification_secondary",
+        label: "BZSt-Prüfnachweis – qualifizierte Bestätigung",
+        helperText: "Zweiter Screenshot der qualifizierten BZSt-Bestätigung.",
+    },
+];
+
 const THIRD_COUNTRY_REQUIRED_DOCUMENTS: RequiredDocumentDefinition[] = [
     {
         documentType: "customs",
@@ -81,6 +95,15 @@ export function getRequiredDocumentsForSale({
 
     if (saleType === "eu") {
         requiredDocuments.push(...EU_REQUIRED_DOCUMENTS);
+    }
+
+    if (
+        new VatVerificationRequirementPolicy().isRequired({
+            saleType,
+            buyerType: isCompanyCustomer ? "company" : "private",
+        })
+    ) {
+        requiredDocuments.push(...EU_COMPANY_VAT_REQUIRED_DOCUMENTS);
     }
 
     if (saleType === "export_third_country") {

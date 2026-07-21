@@ -31,6 +31,9 @@ export function getDocumentTypeLabel(type: string): string {
 
         entry_certificate: "Gelangensbestätigung",
         transport_proof: "Verbringungsnachweis",
+        bzst_vat_verification_primary: "BZSt-Prüfnachweis – Ergebnisübersicht",
+        bzst_vat_verification_secondary:
+            "BZSt-Prüfnachweis – qualifizierte Bestätigung",
         abd_checklist: "ABD-Checkliste",
         exit_note_checklist: "Ausgangsvermerk-Checkliste",
 

@@ -17,6 +17,8 @@ export type DocumentTypeCode =
     | "handover_protocol"
     | "entry_certificate"
     | "transport_proof"
+    | "bzst_vat_verification_primary"
+    | "bzst_vat_verification_secondary"
     | "abd_checklist"
     | "exit_note_checklist"
     | "commercial_register"
@@ -221,6 +223,34 @@ export const documentTypeDefinitions: readonly DocumentTypeDefinition[] = [
         sortOrder: 52,
         badgeTone: "success",
         defaultStatus: "ACTIVE",
+    }),
+    defineDocumentType({
+        code: "bzst_vat_verification_primary",
+        label: "BZSt-Prüfnachweis – Ergebnisübersicht",
+        description:
+            "Screenshot oder PDF der manuellen BZSt-Prüfung mit Ergebnisübersicht.",
+        canBeRequired: true,
+        replacementAllowed: true,
+        archiveAllowed: true,
+        allowedRelations: ["SALE", "CUSTOMER"],
+        sortOrder: 53,
+        badgeTone: "warning",
+        defaultStatus: "REVIEW_REQUIRED",
+        maxFileSizeBytes: 10 * 1024 * 1024,
+    }),
+    defineDocumentType({
+        code: "bzst_vat_verification_secondary",
+        label: "BZSt-Prüfnachweis – qualifizierte Bestätigung",
+        description:
+            "Screenshot oder PDF der qualifizierten manuellen BZSt-Bestätigung.",
+        canBeRequired: true,
+        replacementAllowed: true,
+        archiveAllowed: true,
+        allowedRelations: ["SALE", "CUSTOMER"],
+        sortOrder: 54,
+        badgeTone: "warning",
+        defaultStatus: "REVIEW_REQUIRED",
+        maxFileSizeBytes: 10 * 1024 * 1024,
     }),
     defineDocumentType({
         code: "cashbook_receipt",

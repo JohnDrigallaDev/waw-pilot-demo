@@ -18,6 +18,10 @@ import {
 import { getSaleGeneratedDocumentData } from "@/lib/pdf/generated-documents/sale-document-data";
 import { getCurrentCompanyId } from "@/lib/company";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+    DocumentDatePolicy,
+    type DocumentDateSuggestion,
+} from "@/src/modules/documents/domain/policies/document-date-policy";
 
 export type SaleGeneratedDocumentCheck = {
     type: GeneratedDocumentType;
@@ -58,6 +62,8 @@ export type SaleGeneratedDocumentCheck = {
         status: string;
         source: string;
     } | null;
+
+    dateSuggestion: DocumentDateSuggestion | null;
 };
 
 type DocumentRow = {
@@ -256,6 +262,16 @@ export async function getSaleGeneratedDocumentChecks(
 
         const generationMode = getGenerationMode({ definition, saleType });
         const externalAction = getExternalAction(definition.type);
+        const dateSuggestion =
+            isSupportedSaleGeneratedDocumentType(definition.type)
+                ? new DocumentDatePolicy().suggest({
+                    documentType: definition.type,
+                    invoiceDate: documentData.sale?.invoiceDate,
+                    saleDate: documentData.sale?.saleDate,
+                    transportStartDate: documentData.export?.transportDate,
+                    destinationCountry: documentData.export?.destinationCountry,
+                })
+                : null;
         const validation: GeneratedDocumentValidationResult =
             generationMode === "automatic"
                 ? validateGeneratedDocumentData(definition.type, documentData)
@@ -304,6 +320,7 @@ export async function getSaleGeneratedDocumentChecks(
 
             generatedDocument: mapDocumentRow(generatedDocument),
             signedDocument: mapDocumentRow(signedDocument),
+            dateSuggestion,
         };
     });
 }

@@ -53,6 +53,8 @@ import { SaleCorrectionsCard } from "@/components/sales/sale-corrections-card";
 import { getCurrentCompanyId } from "@/lib/company";
 import { createEmailRepository } from "@/src/modules/email/infrastructure/factories/email-use-case.factory";
 import { EmailHistoryTable } from "@/src/modules/email/presentation/components/email-history-table";
+import { GetVatVerificationRequirementUseCase } from "@/src/modules/documents/application/use-cases/get-vat-verification-requirement.use-case";
+import { BzstVatVerificationCard } from "@/src/modules/documents/presentation/components/bzst-vat-verification-card";
 import {
     SaleCustomerEditDialog,
     SaleVehicleEditDialog,
@@ -140,6 +142,10 @@ export async function SaleDetail({
     const existingInvoiceTypes = sale.invoices.map(
         (invoice) => invoice.invoice_type,
     );
+    const showBzstVerification = new GetVatVerificationRequirementUseCase().execute({
+        saleType: sale.sale_type,
+        buyerType: sale.customer.type,
+    });
     const travelExpenseSearchParams = new URLSearchParams({
         saleId: sale.id,
         vehicleId: sale.vehicle.id,
@@ -448,6 +454,14 @@ export async function SaleDetail({
                                 />
                                 <InfoRow label="USt-ID" value={sale.customer.vat_id ?? "—"} />
                             </div>
+
+                            {showBzstVerification ? (
+                                <BzstVatVerificationCard
+                                    saleId={sale.id}
+                                    vatId={sale.customer.vat_id}
+                                    documents={sale.documents}
+                                />
+                            ) : null}
                         </CardContent>
                     </Card>
 

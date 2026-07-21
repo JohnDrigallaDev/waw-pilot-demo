@@ -48,6 +48,14 @@ function redirectWithSaleMessage(saleId: string, params: Record<string, string>)
     redirect(`/dashboard/sales/${saleId}?${searchParams.toString()}`);
 }
 
+function getMetadataRecord(metadata: unknown): Record<string, unknown> {
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+        return {};
+    }
+
+    return metadata as Record<string, unknown>;
+}
+
 export async function updateSaleCustomerAction(formData: FormData) {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -108,6 +116,13 @@ export async function updateSaleCustomerAction(formData: FormData) {
         redirectWithSaleMessage(saleId, { recordError: "saleCustomerMismatch" });
     }
 
+    const { data: existingCustomer } = await supabase
+        .from("customers")
+        .select("vat_id")
+        .eq("id", customerId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
     const { error } = await supabase
         .from("customers")
         .update({
@@ -133,6 +148,66 @@ export async function updateSaleCustomerAction(formData: FormData) {
     if (error) {
         console.error("[sale-record] customer update failed", error);
         redirectWithSaleMessage(saleId, { recordError: "customerUpdateFailed" });
+    }
+
+    const previousVatId =
+        typeof existingCustomer?.vat_id === "string"
+            ? existingCustomer.vat_id.trim()
+            : null;
+    const nextVatId = vatId?.trim() ?? null;
+
+    if (previousVatId !== nextVatId) {
+        const { data: bzstDocuments, error: bzstDocumentsError } = await supabase
+            .from("documents")
+            .select("id, metadata")
+            .eq("company_id", companyId)
+            .eq("sale_id", saleId)
+            .in("document_type", [
+                "bzst_vat_verification_primary",
+                "bzst_vat_verification_secondary",
+            ]);
+
+        if (bzstDocumentsError) {
+            console.error("[sale-record] BZSt documents lookup failed", bzstDocumentsError);
+        }
+
+        const vatNumberChangedAt = new Date().toISOString();
+
+        const bzstResetResults = await Promise.all(
+            (bzstDocuments ?? []).map((document) =>
+                supabase
+                    .from("documents")
+                    .update({
+                        status: "needs_review",
+                        metadata: {
+                            ...getMetadataRecord(document.metadata),
+                            reviewStatus: "REVIEW_REQUIRED",
+                            vatNumberChangedAt,
+                            previousVatId,
+                            currentVatId: nextVatId,
+                        },
+                    })
+                    .eq("company_id", companyId)
+                    .eq("id", document.id),
+            ),
+        );
+
+        const bzstResetError = bzstResetResults.find((result) => result.error)?.error;
+
+        if (bzstResetError) {
+            console.error("[sale-record] BZSt review reset failed", bzstResetError);
+        }
+
+        if (bzstResetError) {
+            console.error("[sale-record] BZSt review reset incomplete");
+        } else {
+            await logActivity({
+                action:
+                    "Die USt-ID wurde geändert. Die BZSt-Prüfung muss erneut geprüft werden.",
+                entityType: "sale",
+                entityId: saleId,
+            });
+        }
     }
 
     await logActivity({
