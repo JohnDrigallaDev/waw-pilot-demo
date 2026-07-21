@@ -3,19 +3,18 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentCompanyId } from "@/lib/company";
-import { logActivity } from "@/lib/activity/activity-log";
 import {
     normalizeEmailLanguage,
 } from "@/lib/customers/email-languages";
 import {
     EmailConfigurationError,
-    sendEmailWithResend,
 } from "@/lib/email/resend";
 import {
     getAvailableStampDocuments,
     getStampDocumentType,
 } from "@/lib/sales/stamp-documents";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSendEmailUseCase } from "@/src/modules/email/infrastructure/factories/email-use-case.factory";
 
 export type SendStampDocumentsEmailState = {
     success: boolean;
@@ -101,6 +100,27 @@ function toHtml(text: string): string {
 
 function isValidEmail(email: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function getConfiguredMailSender(): { senderName: string; senderEmail: string } {
+    const configuredSender = process.env.MAIL_FROM?.trim();
+
+    if (!configuredSender) {
+        throw new EmailConfigurationError();
+    }
+
+    const senderMatch = configuredSender.match(/^(.*?)<([^>]+)>$/);
+    if (senderMatch) {
+        return {
+            senderName: senderMatch[1]?.trim() || "WAW Nutzfahrzeuge",
+            senderEmail: senderMatch[2]?.trim() || configuredSender,
+        };
+    }
+
+    return {
+        senderName: "WAW Nutzfahrzeuge",
+        senderEmail: configuredSender,
+    };
 }
 
 export async function sendStampDocumentsEmailAction(
@@ -207,60 +227,62 @@ export async function sendStampDocumentsEmailAction(
         };
     }
 
-    const attachments = [];
-    let totalAttachmentBytes = 0;
+    const selectedAttachments = availableStampDocuments
+        .filter((document) => Boolean(document.file_path) && Boolean(getStampDocumentType(document)))
+        .map((document) => ({
+            documentId: document.id,
+            attachmentType: "stamp_document",
+            fileSize: document.file_size ?? 0,
+        }));
 
-    for (const document of availableStampDocuments) {
-        if (!document.file_path) continue;
-        if (!getStampDocumentType(document)) continue;
+    const totalAttachmentBytes = selectedAttachments.reduce(
+        (sum, attachment) => sum + attachment.fileSize,
+        0,
+    );
 
-        const { data: fileData, error: downloadError } = await supabase.storage
-            .from("documents")
-            .download(document.file_path);
-
-        if (downloadError || !fileData) {
-            console.error("[stamp-doc-email] attachment download failed", {
-                documentId: document.id,
-                error: downloadError,
-            });
-            return {
-                success: false,
-                message: `Dokument "${document.file_name}" konnte nicht geladen werden.`,
-            };
-        }
-
-        const content = Buffer.from(await fileData.arrayBuffer());
-        totalAttachmentBytes += content.byteLength;
-
-        if (totalAttachmentBytes > maxAttachmentBytes) {
-            return {
-                success: false,
-                message:
-                    "Die ausgewählten Anhänge sind zu groß für den E-Mail-Versand. Bitte wähle weniger Dokumente aus.",
-            };
-        }
-
-        attachments.push({
-            filename: document.file_name,
-            content,
-            contentType: document.mime_type ?? fileData.type ?? "application/pdf",
-        });
-    }
-
-    if (attachments.length === 0) {
+    if (selectedAttachments.length === 0) {
         return {
             success: false,
             message: "Es konnte kein gültiger Anhang geladen werden.",
         };
     }
 
+    if (totalAttachmentBytes > maxAttachmentBytes) {
+        return {
+            success: false,
+            message:
+                "Die ausgewählten Anhänge sind zu groß für den E-Mail-Versand. Bitte wähle weniger Dokumente aus.",
+        };
+    }
+
     try {
-        await sendEmailWithResend({
-            to: recipientEmail,
+        const sender = getConfiguredMailSender();
+        const sendEmail = createSendEmailUseCase();
+
+        await sendEmail.execute({
+            companyId,
+            contextType: "SALE",
+            contextId: saleId,
+            templateKey: "documents.free",
+            senderName: sender.senderName,
+            senderEmail: sender.senderEmail,
+            toRecipients: [{ email: recipientEmail, name: null }],
             subject,
-            text: body,
-            html: toHtml(body),
-            attachments,
+            bodyText: body,
+            bodyHtml: toHtml(body),
+            documentAttachments: selectedAttachments.map((attachment) => ({
+                documentId: attachment.documentId,
+                attachmentType: attachment.attachmentType,
+            })),
+            relations: [{ relationType: "SALE", relationId: saleId }],
+            idempotencyKey: `stamp-documents-email:${companyId}:${saleId}:${Array.from(selectedDocumentIds)
+                .sort()
+                .join(",")}:${recipientEmail}:${subject}`,
+            metadata: {
+                language,
+                vehicle: `${vehicle.internal_number} ${vehicle.manufacturer} ${vehicle.model}`,
+                documentLabels: availableStampDocuments.map((document) => document.label),
+            },
         });
     } catch (sendError) {
         if (sendError instanceof EmailConfigurationError) {
@@ -271,16 +293,9 @@ export async function sendStampDocumentsEmailAction(
         return { success: false, message: initialErrorMessage };
     }
 
-    await logActivity({
-        action: `Dokumente zum Stempeln an ${recipientEmail} gesendet (${language}, ${availableStampDocuments
-            .map((document) => document.label)
-            .join(", ")})`,
-        entityType: "sale",
-        entityId: saleId,
-    });
-
     revalidatePath(`/dashboard/sales/${saleId}`);
     revalidatePath("/dashboard/activities");
+    revalidatePath("/dashboard/emails");
 
     return {
         success: true,

@@ -7,6 +7,7 @@ import {
     FileText,
     FileCheck2,
     FileWarning,
+    Mail,
     Receipt,
     Route,
     Truck,
@@ -49,6 +50,9 @@ import { SendStampDocumentsDialog } from "@/components/sales/send-stamp-document
 import { ZugferdInvoiceActions } from "@/components/sales/zugferd-invoice-actions";
 import { SalePaymentsCard } from "@/components/sales/sale-payments-card";
 import { SaleCorrectionsCard } from "@/components/sales/sale-corrections-card";
+import { getCurrentCompanyId } from "@/lib/company";
+import { createEmailRepository } from "@/src/modules/email/infrastructure/factories/email-use-case.factory";
+import { EmailHistoryTable } from "@/src/modules/email/presentation/components/email-history-table";
 import {
     SaleCustomerEditDialog,
     SaleVehicleEditDialog,
@@ -88,7 +92,7 @@ type SaleDetailProps = {
     recordError?: string | null;
 };
 
-export function SaleDetail({
+export async function SaleDetail({
                                sale,
                                generatedDocuments,
                                exportDetails,
@@ -117,6 +121,12 @@ export function SaleDetail({
                                recordSaved = null,
                                recordError = null,
                            }: SaleDetailProps) {
+    const emailHistory = await createEmailRepository().search({
+        companyId: getCurrentCompanyId(),
+        contextType: "SALE",
+        contextId: sale.id,
+        limit: 20,
+    });
     const missingRequirementLabels = [
         ...sale.missing_required_labels,
         ...sale.missing_required_data_labels,
@@ -599,6 +609,20 @@ export function SaleDetail({
                                     paymentStatus={sale.payment_status}
                                     payments={sale.payments}
                                 />
+                            </div>
+
+                            <div className="mt-6">
+                                <SectionTitle
+                                    icon={Mail}
+                                    title="Versandhistorie"
+                                    description="Per E-Mail gesendete Rechnungen und Dokumente aus dieser Verkaufsakte."
+                                />
+                                <div className="mt-4">
+                                    <EmailHistoryTable
+                                        emails={emailHistory.emails}
+                                        emptyText="Für diese Verkaufsakte wurden noch keine E-Mails versendet."
+                                    />
+                                </div>
                             </div>
                         </CardContent>
                     </Card>

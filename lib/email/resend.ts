@@ -5,11 +5,21 @@ type EmailAttachment = {
 };
 
 type SendEmailParams = {
-    to: string;
+    to: string | string[];
+    cc?: string[];
+    bcc?: string[];
     subject: string;
     text: string;
     html?: string;
+    from?: string;
+    replyTo?: string | null;
     attachments?: EmailAttachment[];
+    idempotencyKey?: string;
+};
+
+type SendEmailResult = {
+    providerMessageId: string | null;
+    providerResponse: Record<string, unknown> | null;
 };
 
 export class EmailConfigurationError extends Error {
@@ -30,13 +40,18 @@ export class EmailSendError extends Error {
 
 export async function sendEmailWithResend({
     to,
+    cc = [],
+    bcc = [],
     subject,
     text,
     html,
+    from: explicitFrom,
+    replyTo,
     attachments = [],
-}: SendEmailParams): Promise<void> {
+    idempotencyKey,
+}: SendEmailParams): Promise<SendEmailResult> {
     const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.MAIL_FROM;
+    const from = explicitFrom ?? process.env.MAIL_FROM;
 
     if (!apiKey || !from) {
         throw new EmailConfigurationError();
@@ -47,10 +62,14 @@ export async function sendEmailWithResend({
         headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
+            ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
         },
         body: JSON.stringify({
             from,
             to,
+            cc: cc.length > 0 ? cc : undefined,
+            bcc: bcc.length > 0 ? bcc : undefined,
+            reply_to: replyTo ?? undefined,
             subject,
             text,
             html,
@@ -70,4 +89,13 @@ export async function sendEmailWithResend({
         });
         throw new EmailSendError();
     }
+
+    const responseBody = (await response.json().catch(() => null)) as
+        | { id?: string }
+        | null;
+
+    return {
+        providerMessageId: responseBody?.id ?? null,
+        providerResponse: responseBody ? { ...responseBody } : null,
+    };
 }

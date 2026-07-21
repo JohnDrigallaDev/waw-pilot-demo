@@ -16,10 +16,7 @@ import {
     getZugferdInvoiceEmailTemplate,
 } from "@/lib/email/templates/invoice-email";
 import { getSuggestedEmailLanguage } from "@/lib/customers/email-languages";
-import {
-    EmailConfigurationError,
-    sendEmailWithResend,
-} from "@/lib/email/resend";
+import { EmailConfigurationError } from "@/lib/email/resend";
 import { assertCompanySignatureStampConfigured } from "@/lib/pdf/company-signature-assets";
 import { buildFinalInvoicePdf, getCompanyTermsPdf } from "@/lib/pdf/company-terms";
 import { generateInvoicePdf } from "@/lib/pdf/invoice-pdf";
@@ -37,6 +34,7 @@ import {
     ZugferdServiceValidationError,
     type ZugferdServiceValidationSummary,
 } from "@/lib/zugferd/zugferd-service-client";
+import { createSendEmailUseCase } from "@/src/modules/email/infrastructure/factories/email-use-case.factory";
 
 type SaleInvoiceVehicleRelation = {
     damage_notes: string | null;
@@ -59,6 +57,7 @@ type SaleInvoiceSourceRow = {
 };
 
 type InvoiceEmailDocumentRelation = {
+    id: string;
     file_name: string | null;
     file_path: string | null;
     mime_type: string | null;
@@ -79,6 +78,7 @@ type InvoiceEmailQueryRow = {
     sale_id: string | null;
     invoice_number: string;
     email_send_count: number | null;
+    pdf_document_id: string | null;
     customers: InvoiceEmailCustomerRelation | InvoiceEmailCustomerRelation[] | null;
     documents:
         | InvoiceEmailDocumentRelation
@@ -217,6 +217,27 @@ function getInvoiceEmailSuccessRedirect(
     return `/dashboard/sales/${saleId}?invoiceEmailSent=${encodeURIComponent(
         email,
     )}&highlightInvoiceId=${invoiceId}`;
+}
+
+function getConfiguredMailSender(): { senderName: string; senderEmail: string } {
+    const configuredSender = process.env.MAIL_FROM?.trim();
+
+    if (!configuredSender) {
+        throw new EmailConfigurationError();
+    }
+
+    const senderMatch = configuredSender.match(/^(.*?)<([^>]+)>$/);
+    if (senderMatch) {
+        return {
+            senderName: senderMatch[1]?.trim() || "WAW Nutzfahrzeuge",
+            senderEmail: senderMatch[2]?.trim() || configuredSender,
+        };
+    }
+
+    return {
+        senderName: "WAW Nutzfahrzeuge",
+        senderEmail: configuredSender,
+    };
 }
 
 function getZugferdErrorRedirect(
@@ -734,6 +755,7 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
       sale_id,
       invoice_number,
       email_send_count,
+      pdf_document_id,
       customers:customer_id (
         type,
         company_name,
@@ -744,6 +766,7 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
         country
       ),
       documents:pdf_document_id (
+        id,
         file_name,
         file_path,
         mime_type
@@ -768,20 +791,9 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
         redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "missingEmail"));
     }
 
-    if (!document?.file_path) {
+    if (!invoice.pdf_document_id || !document?.file_path) {
         redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "missingPdf"));
     }
-
-    const { data: fileData, error: downloadError } = await supabase.storage
-        .from("documents")
-        .download(document.file_path);
-
-    if (downloadError || !fileData) {
-        console.error("[email] invoice PDF download failed", downloadError);
-        redirect(getInvoiceEmailErrorRedirect(saleId, invoiceId, "missingPdf"));
-    }
-
-    const pdfBytes = Buffer.from(await fileData.arrayBuffer());
     const language = getSuggestedEmailLanguage({
         country: customer.country,
         preferredLanguage: customer.preferred_language,
@@ -794,18 +806,36 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
     let deliveryErrorCode: string | null = null;
 
     try {
-        await sendEmailWithResend({
-            to: customer.email,
+        const sender = getConfiguredMailSender();
+        const sendEmail = createSendEmailUseCase();
+
+        await sendEmail.execute({
+            companyId,
+            contextType: "INVOICE",
+            contextId: invoiceId,
+            templateKey: "invoice.send",
+            senderName: sender.senderName,
+            senderEmail: sender.senderEmail,
+            toRecipients: [{ email: customer.email, name: getCustomerNameForEmail(customer) }],
             subject: template.subject,
-            text: template.text,
-            html: template.html,
-            attachments: [
+            bodyText: template.text,
+            bodyHtml: template.html,
+            documentAttachments: [
                 {
-                    filename: `rechnung-${invoice.invoice_number}.pdf`,
-                    content: pdfBytes,
-                    contentType: document.mime_type ?? "application/pdf",
+                    documentId: invoice.pdf_document_id,
+                    attachmentType: "invoice_pdf",
                 },
             ],
+            relations: [
+                { relationType: "INVOICE", relationId: invoiceId },
+                { relationType: "SALE", relationId: saleId },
+            ],
+            idempotencyKey: `invoice-email:${companyId}:${invoiceId}:${invoice.email_send_count ?? 0}`,
+            metadata: {
+                language,
+                invoiceNumber: invoice.invoice_number,
+                legacyInvoiceEmailFieldsUpdated: true,
+            },
         });
     } catch (sendError) {
         deliveryErrorCode =
@@ -847,6 +877,7 @@ export async function sendSaleInvoiceEmailAction(formData: FormData) {
     revalidatePath(`/dashboard/sales/${saleId}`);
     revalidatePath("/dashboard/invoices");
     revalidatePath("/dashboard/activities");
+    revalidatePath("/dashboard/emails");
 
     redirect(getInvoiceEmailSuccessRedirect(saleId, invoiceId, customer.email));
 }
@@ -1171,18 +1202,41 @@ export async function sendZugferdInvoiceEmailAction(formData: FormData) {
     let deliveryErrorCode: string | null = null;
 
     try {
-        await sendEmailWithResend({
-            to: customer.email,
+        const fileBytes = Buffer.from(await fileData.arrayBuffer());
+        const sender = getConfiguredMailSender();
+        const sendEmail = createSendEmailUseCase();
+
+        await sendEmail.execute({
+            companyId,
+            contextType: "INVOICE",
+            contextId: invoiceId,
+            templateKey: "invoice.zugferd.send",
+            senderName: sender.senderName,
+            senderEmail: sender.senderEmail,
+            toRecipients: [{ email: customer.email, name: getCustomerNameForEmail(customer) }],
             subject: template.subject,
-            text: template.text,
-            html: template.html,
-            attachments: [
+            bodyText: template.text,
+            bodyHtml: template.html,
+            resolvedAttachments: [
                 {
-                    filename: `rechnung-${invoice.invoice_number}-zugferd.pdf`,
-                    content: Buffer.from(await fileData.arrayBuffer()),
-                    contentType: "application/pdf",
+                    fileName: `rechnung-${invoice.invoice_number}-zugferd.pdf`,
+                    content: fileBytes,
+                    mimeType: "application/pdf",
+                    fileSizeBytes: fileBytes.byteLength,
+                    attachmentType: "zugferd_pdf",
                 },
             ],
+            relations: [
+                { relationType: "INVOICE", relationId: invoiceId },
+                { relationType: "SALE", relationId: saleId },
+            ],
+            idempotencyKey: `zugferd-email:${companyId}:${invoiceId}:${invoice.zugferd_email_send_count ?? 0}`,
+            metadata: {
+                language,
+                invoiceNumber: invoice.invoice_number,
+                storagePath: invoice.zugferd_file_path,
+                legacyInvoiceEmailFieldsUpdated: true,
+            },
         });
     } catch (sendError) {
         deliveryErrorCode =
@@ -1223,6 +1277,7 @@ export async function sendZugferdInvoiceEmailAction(formData: FormData) {
 
     revalidatePath(`/dashboard/sales/${saleId}`);
     revalidatePath("/dashboard/activities");
+    revalidatePath("/dashboard/emails");
 
     redirect(getZugferdSuccessRedirect(saleId, invoiceId, "sent", customer.email));
 }
