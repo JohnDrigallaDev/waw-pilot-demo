@@ -31,5 +31,6 @@ export function mapDocumentListItemToLegacyRow(
         vehicle_internal_number: document.vehicleLabel?.split(" · ")[0] ?? null,
         vehicle_name: document.vehicleLabel,
         invoice_number: document.invoiceNumber,
+        review_href: document.reviewHref,
     };
 }

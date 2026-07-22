@@ -509,7 +509,10 @@ export async function SaleDetail({
                         </CardContent>
                     </Card>
 
-                    <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                    <Card
+                        id="required-documents"
+                        className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm"
+                    >
                         <CardContent className="p-5">
                             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                                 <SectionTitle
@@ -718,6 +721,7 @@ export async function SaleDetail({
                                 {sale.required_documents.map((requiredDocument) => (
                                     <div
                                         key={requiredDocument.documentType}
+                                        id={`document-${requiredDocument.documentType}`}
                                         className="p-5"
                                     >
                                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -834,7 +838,10 @@ export async function SaleDetail({
                         </CardContent>
                     </Card>
 
-                    <Card className="overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm">
+                    <Card
+                        id="documents"
+                        className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border-slate-200 bg-white/90 shadow-sm"
+                    >
                         <CardContent className="p-0">
                             <div className="border-b border-slate-200 p-5">
                                 <SectionTitle
@@ -849,6 +856,7 @@ export async function SaleDetail({
                                     {visibleDocuments.map((document) => (
                                         <div
                                             key={document.id}
+                                            id={`document-${document.document_type}`}
                                             className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"
                                         >
                                             <div>

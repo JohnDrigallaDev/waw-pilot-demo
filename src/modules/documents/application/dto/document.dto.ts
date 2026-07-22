@@ -20,10 +20,15 @@ export type DocumentListItemDto = {
     createdBy: string | null;
     relationLabels: string[];
     customerName: string | null;
+    customerId: string | null;
     vehicleLabel: string | null;
     invoiceNumber: string | null;
+    invoiceId: string | null;
     saleId: string | null;
     vehicleId: string | null;
+    purchaseId: string | null;
+    licensePlateCaseId: string | null;
+    reviewHref: string | null;
     hasActiveFile: boolean;
 };
 

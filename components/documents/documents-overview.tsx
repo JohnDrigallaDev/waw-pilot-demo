@@ -652,9 +652,7 @@ function getDocumentGroup(
 }
 
 function getReviewDocumentHref(document: DocumentRow): string | null {
-    if (!document.sale_id) return null;
-
-    return `/dashboard/sales/${document.sale_id}#document-${document.document_type}`;
+    return document.review_href;
 }
 
 function DocumentPrimaryLink({

@@ -172,6 +172,19 @@ function getActiveVersion(row: SupabaseDocumentRow): SupabaseDocumentVersionRow 
     );
 }
 
+function getRelationId(row: SupabaseDocumentRow, relationType: string): string | null {
+    return (
+        row.document_relations?.find((relation) => relation.relation_type === relationType)
+            ?.relation_id ?? null
+    );
+}
+
+function getDocumentReviewHref(params: {
+    documentId: string;
+}): string {
+    return `/dashboard/documents/${params.documentId}/review`;
+}
+
 export function mapSupabaseDocumentRowToListItem(
     row: SupabaseDocumentRow,
 ): DocumentListItemDto {
@@ -182,6 +195,12 @@ export function mapSupabaseDocumentRowToListItem(
     const definition = getDocumentTypeDefinition(row.document_type);
     const title = row.title?.trim() || definition.label;
     const archiveStatus = (row.archive_status ?? "ACTIVE") as DocumentArchiveStatus;
+    const saleId = row.sale_id ?? getRelationId(row, "SALE");
+    const vehicleId = row.vehicle_id ?? getRelationId(row, "VEHICLE");
+    const customerId = row.customer_id ?? getRelationId(row, "CUSTOMER") ?? getRelationId(row, "PARTNER");
+    const invoiceId = row.invoice_id ?? getRelationId(row, "INVOICE");
+    const purchaseId = getRelationId(row, "PURCHASE");
+    const licensePlateCaseId = getRelationId(row, "LICENSE_PLATE_CASE");
 
     return {
         id: row.id,
@@ -204,10 +223,17 @@ export function mapSupabaseDocumentRowToListItem(
             invoice?.invoice_number ? `Rechnung ${invoice.invoice_number}` : null,
         ].filter((label): label is string => Boolean(label)),
         customerName: getCustomerName(customer),
+        customerId,
         vehicleLabel: getVehicleLabel(vehicle),
         invoiceNumber: invoice?.invoice_number ?? null,
-        saleId: row.sale_id,
-        vehicleId: row.vehicle_id,
+        invoiceId,
+        saleId,
+        vehicleId,
+        purchaseId,
+        licensePlateCaseId,
+        reviewHref: getDocumentReviewHref({
+            documentId: row.id,
+        }),
         hasActiveFile: Boolean(activeVersion?.storage_path ?? row.file_path),
     };
 }

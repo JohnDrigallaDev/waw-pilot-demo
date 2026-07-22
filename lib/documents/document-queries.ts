@@ -28,6 +28,7 @@ export type DocumentRow = {
     vehicle_internal_number: string | null;
     vehicle_name: string | null;
     invoice_number: string | null;
+    review_href: string | null;
 };
 
 export async function getDocuments(): Promise<DocumentRow[]> {

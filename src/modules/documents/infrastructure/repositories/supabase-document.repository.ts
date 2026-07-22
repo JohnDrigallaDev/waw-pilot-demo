@@ -237,6 +237,7 @@ export class SupabaseDocumentRepository implements DocumentRepository {
         const rows = await this.withDocumentVersions(
             query.companyId,
             (data ?? []) as unknown as SupabaseDocumentRow[],
+            { includeRelations: true, validateContextRoutes: true },
         );
 
         return {
@@ -405,7 +406,10 @@ export class SupabaseDocumentRepository implements DocumentRepository {
             throw new Error(`Dokumente konnten nicht geladen werden: ${error.message}`);
         }
 
-        const rows = ((data ?? []) as unknown as LegacyDocumentRow[]).map(mapLegacyDocumentRow);
+        const rows = await this.resolveReviewTargets(
+            query.companyId,
+            ((data ?? []) as unknown as LegacyDocumentRow[]).map(mapLegacyDocumentRow),
+        );
 
         return {
             documents: rows.map(mapSupabaseDocumentRowToListItem),
@@ -433,7 +437,7 @@ export class SupabaseDocumentRepository implements DocumentRepository {
     private async withDocumentVersions(
         companyId: string,
         rows: SupabaseDocumentRow[],
-        options: { includeRelations?: boolean } = {},
+        options: { includeRelations?: boolean; validateContextRoutes?: boolean } = {},
     ): Promise<SupabaseDocumentRow[]> {
         const documentIds = rows.map((row) => row.id);
 
@@ -450,11 +454,17 @@ export class SupabaseDocumentRepository implements DocumentRepository {
 
         if (versionError) {
             if (isMissingDocumentVersioningTable(versionError)) {
-                return rows.map((row) => ({
+                const rowsWithoutVersions = rows.map((row) => ({
                     ...row,
                     document_versions: [],
                     document_relations: [],
                 }));
+
+                if (options.validateContextRoutes) {
+                    return this.resolveReviewTargets(companyId, rowsWithoutVersions);
+                }
+
+                return rowsWithoutVersions;
             }
 
             throw new Error(`Dokumentversionen konnten nicht geladen werden: ${versionError.message}`);
@@ -486,11 +496,17 @@ export class SupabaseDocumentRepository implements DocumentRepository {
 
         if (relationError) {
             if (isMissingDocumentRelationsTable(relationError)) {
-                return rows.map((row) => ({
+                const rowsWithoutRelations = rows.map((row) => ({
                     ...row,
                     document_versions: versionsByDocumentId.get(row.id) ?? [],
                     document_relations: [],
                 }));
+
+                if (options.validateContextRoutes) {
+                    return this.resolveReviewTargets(companyId, rowsWithoutRelations);
+                }
+
+                return rowsWithoutRelations;
             }
 
             throw new Error(`Dokumentrelationen konnten nicht geladen werden: ${relationError.message}`);
@@ -505,10 +521,120 @@ export class SupabaseDocumentRepository implements DocumentRepository {
             relationsByDocumentId.set(relation.document_id, currentRelations);
         }
 
-        return rows.map((row) => ({
+        const rowsWithRelations = rows.map((row) => ({
             ...row,
             document_versions: versionsByDocumentId.get(row.id) ?? [],
             document_relations: relationsByDocumentId.get(row.id) ?? [],
         }));
+
+        if (options.validateContextRoutes) {
+            return this.resolveReviewTargets(companyId, rowsWithRelations);
+        }
+
+        return rowsWithRelations;
+    }
+
+    private async resolveReviewTargets(
+        companyId: string,
+        rows: SupabaseDocumentRow[],
+    ): Promise<SupabaseDocumentRow[]> {
+        const rowsWithInvoiceSales = await this.resolveInvoiceSaleTargets(companyId, rows);
+        const saleIds = new Set<string>();
+
+        for (const row of rowsWithInvoiceSales) {
+            if (row.sale_id) {
+                saleIds.add(row.sale_id);
+            }
+
+            for (const relation of row.document_relations ?? []) {
+                if (relation.relation_type === "SALE") {
+                    saleIds.add(relation.relation_id);
+                }
+            }
+        }
+
+        if (saleIds.size === 0) {
+            return rowsWithInvoiceSales;
+        }
+
+        const { data, error } = await this.supabase
+            .from("sales")
+            .select("id")
+            .eq("company_id", companyId)
+            .in("id", [...saleIds]);
+
+        if (error) {
+            return rowsWithInvoiceSales.map((row) => ({
+                ...row,
+                sale_id: null,
+                document_relations: (row.document_relations ?? []).filter(
+                    (relation) => relation.relation_type !== "SALE",
+                ),
+            }));
+        }
+
+        const existingSaleIds = new Set((data ?? []).map((sale) => sale.id as string));
+
+        return rowsWithInvoiceSales.map((row) => ({
+            ...row,
+            sale_id: row.sale_id && existingSaleIds.has(row.sale_id) ? row.sale_id : null,
+            document_relations: (row.document_relations ?? []).filter(
+                (relation) =>
+                    relation.relation_type !== "SALE" || existingSaleIds.has(relation.relation_id),
+            ),
+        }));
+    }
+
+    private async resolveInvoiceSaleTargets(
+        companyId: string,
+        rows: SupabaseDocumentRow[],
+    ): Promise<SupabaseDocumentRow[]> {
+        const invoiceIds = new Set<string>();
+
+        for (const row of rows) {
+            if (row.invoice_id) {
+                invoiceIds.add(row.invoice_id);
+            }
+
+            for (const relation of row.document_relations ?? []) {
+                if (relation.relation_type === "INVOICE") {
+                    invoiceIds.add(relation.relation_id);
+                }
+            }
+        }
+
+        if (invoiceIds.size === 0) {
+            return rows;
+        }
+
+        const { data, error } = await this.supabase
+            .from("invoices")
+            .select("id, sale_id")
+            .eq("company_id", companyId)
+            .in("id", [...invoiceIds]);
+
+        if (error) {
+            return rows;
+        }
+
+        const saleIdByInvoiceId = new Map(
+            (data ?? [])
+                .filter((invoice) => Boolean(invoice.sale_id))
+                .map((invoice) => [invoice.id as string, invoice.sale_id as string]),
+        );
+
+        return rows.map((row) => {
+            const relationInvoiceId =
+                row.document_relations?.find((relation) => relation.relation_type === "INVOICE")
+                    ?.relation_id ?? null;
+            const invoiceId = row.invoice_id ?? relationInvoiceId;
+            const saleIdFromInvoice = invoiceId ? saleIdByInvoiceId.get(invoiceId) ?? null : null;
+
+            return {
+                ...row,
+                invoice_id: invoiceId,
+                sale_id: row.sale_id ?? saleIdFromInvoice,
+            };
+        });
     }
 }
