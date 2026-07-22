@@ -454,9 +454,11 @@ async function resolveVehicleId({
     const color = getStringValue(formData, "new_vehicle_color");
     const vehicleCategory = getStringValue(formData, "new_vehicle_category");
     const damageNotes = getStringValue(formData, "new_vehicle_damage_notes");
-    const showDamageOnInvoice =
-        Boolean(damageNotes?.trim()) &&
+    const hasDamageNotes = Boolean(damageNotes?.trim());
+    const requestedShowDamageOnInvoice =
         getStringValue(formData, "new_vehicle_show_damage_on_invoice") === "yes";
+    const showDamageOnInvoice =
+        hasDamageNotes && requestedShowDamageOnInvoice;
 
     if (!manufacturer || !model || !vehicleType || !vin) {
         return {
@@ -465,13 +467,11 @@ async function resolveVehicleId({
         };
     }
 
-    if (
-        getStringValue(formData, "new_vehicle_show_damage_on_invoice") === "yes" &&
-        !damageNotes?.trim()
-    ) {
+    if (requestedShowDamageOnInvoice && !hasDamageNotes) {
         return {
             success: false as const,
-            message: "Bitte erfasse zuerst eine Schadensbeschreibung.",
+            message:
+                "Schäden können nur auf der Rechnung ausgewiesen werden, wenn eine Schadensbeschreibung vorhanden ist.",
         };
     }
 

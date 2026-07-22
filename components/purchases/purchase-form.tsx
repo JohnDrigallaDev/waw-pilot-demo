@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useMemo, useState, type ChangeEventHandler } from "react";
 import {
     ArrowLeft,
+    Building2,
     CalendarDays,
     ClipboardList,
     FileText,
+    Plus,
     Save,
     Truck,
     UserRound,
@@ -360,6 +362,19 @@ export function PurchaseForm({
 }
 
 function VehicleCreateFields() {
+    const [damageNotes, setDamageNotes] = useState("");
+    const [showDamageOnInvoice, setShowDamageOnInvoice] = useState(false);
+    const hasDamageNotes = damageNotes.trim().length > 0;
+
+    const handleDamageNotesChange: ChangeEventHandler<HTMLTextAreaElement> = (event) => {
+        const nextDamageNotes = event.currentTarget.value;
+        setDamageNotes(nextDamageNotes);
+
+        if (!nextDamageNotes.trim()) {
+            setShowDamageOnInvoice(false);
+        }
+    };
+
     return (
         <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Interne Nummer" name="new_vehicle_internal_number" />
@@ -378,17 +393,35 @@ function VehicleCreateFields() {
                 <Textarea
                     id="new_vehicle_damage_notes"
                     name="new_vehicle_damage_notes"
+                    value={damageNotes}
+                    onChange={handleDamageNotesChange}
                     placeholder="Bekannte Schäden oder Mängel am Fahrzeug eintragen."
                     className="mt-2 min-h-24 rounded-2xl border-slate-200 bg-slate-50 font-medium"
                 />
-                <label className="mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+                <label
+                    className={
+                        hasDamageNotes
+                            ? "mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900"
+                            : "mt-3 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-500"
+                    }
+                >
                     <input
                         type="checkbox"
                         name="new_vehicle_show_damage_on_invoice"
                         value="yes"
-                        className="mt-1 size-4 rounded border-amber-300"
+                        checked={showDamageOnInvoice}
+                        disabled={!hasDamageNotes}
+                        onChange={(event) => setShowDamageOnInvoice(event.currentTarget.checked)}
+                        className="mt-1 size-4 rounded border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
                     />
-                    Schäden auf Rechnung ausweisen
+                    <span>
+                        Schäden auf Rechnung ausweisen
+                        {!hasDamageNotes ? (
+                            <span className="mt-1 block text-xs font-bold text-slate-500">
+                                Erst verfügbar, wenn im Feld „Schäden“ ein Hinweis eingetragen ist.
+                            </span>
+                        ) : null}
+                    </span>
                 </label>
             </div>
         </div>
@@ -403,21 +436,23 @@ function SellerCreateFields({
     onSellerTypeChange: (type: "company" | "private") => void;
 }) {
     return (
-        <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-                <ModeCard
-                    active={sellerType === "company"}
-                    label="Unternehmen"
-                    onClick={() => onSellerTypeChange("company")}
-                />
-                <ModeCard
-                    active={sellerType === "private"}
-                    label="Privatperson"
-                    onClick={() => onSellerTypeChange("private")}
-                />
+        <div className="space-y-5 rounded-[1.75rem] border border-emerald-200 bg-emerald-50/70 p-4 md:p-5">
+            <div>
+                <h3 className="text-lg font-extrabold text-emerald-950">
+                    Neuen Verkäufer direkt anlegen
+                </h3>
+                <p className="mt-1 text-sm font-semibold leading-6 text-emerald-800">
+                    Erfasse Firma oder Privatperson hier im Ankauf. Der Verkäufer wird als Geschäftspartner gespeichert und mit dem Ankauf verknüpft.
+                </p>
             </div>
+
+            <PersonTypeCards
+                value={sellerType}
+                onChange={onSellerTypeChange}
+            />
             <input type="hidden" name="new_seller_type" value={sellerType} />
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-[1.5rem] border border-emerald-100 bg-white/90 p-4">
+                <div className="grid gap-4 md:grid-cols-2">
                 {sellerType === "company" ? (
                     <>
                         <FormField label="Firma *" name="new_seller_company_name" required />
@@ -455,8 +490,90 @@ function SellerCreateFields({
                 <FormField label="USt-ID | VAT | NIP" name="new_seller_vat_id" />
                 <FormField label="Steuernummer" name="new_seller_tax_number" />
                 <FormField label="Handelsregister" name="new_seller_commercial_register_number" />
+                </div>
             </div>
         </div>
+    );
+}
+
+function PersonTypeCards({
+    value,
+    onChange,
+}: {
+    value: "company" | "private";
+    onChange: (type: "company" | "private") => void;
+}) {
+    return (
+        <div className="grid gap-4 md:grid-cols-2">
+            <PersonTypeCard
+                active={value === "company"}
+                value="company"
+                title="Firma"
+                description="GmbH, Händler, Exportkunde"
+                icon={Building2}
+                onChange={onChange}
+            />
+            <PersonTypeCard
+                active={value === "private"}
+                value="private"
+                title="Privatperson"
+                description="Einzelperson als Käufer/Verkäufer"
+                icon={UserRound}
+                onChange={onChange}
+            />
+        </div>
+    );
+}
+
+function PersonTypeCard({
+    active,
+    value,
+    title,
+    description,
+    icon: Icon,
+    onChange,
+}: {
+    active: boolean;
+    value: "company" | "private";
+    title: string;
+    description: string;
+    icon: typeof Building2;
+    onChange: (type: "company" | "private") => void;
+}) {
+    return (
+        <label
+            className={
+                active
+                    ? "group cursor-pointer rounded-3xl border border-cyan-300 bg-cyan-50 p-4 ring-4 ring-cyan-100 transition-all hover:border-cyan-300"
+                    : "group cursor-pointer rounded-3xl border border-slate-200 bg-white p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60"
+            }
+        >
+            <input
+                type="radio"
+                name="new_seller_type_choice"
+                value={value}
+                checked={active}
+                onChange={() => onChange(value)}
+                className="peer sr-only"
+            />
+            <div className="flex items-center gap-3">
+                <div
+                    className={
+                        active
+                            ? "flex size-11 items-center justify-center rounded-2xl border border-cyan-200 bg-cyan-700 text-white"
+                            : "flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600"
+                    }
+                >
+                    <Icon className="size-5" />
+                </div>
+                <div>
+                    <p className="font-extrabold text-slate-950">{title}</p>
+                    <p className="text-sm font-medium text-slate-500">
+                        {description}
+                    </p>
+                </div>
+            </div>
+        </label>
     );
 }
 
@@ -496,6 +613,7 @@ function ModeTabs({
             <ModeCard
                 active={value === "new"}
                 label={secondLabel}
+                icon={Plus}
                 onClick={() => onChange("new")}
             />
         </div>
@@ -505,10 +623,12 @@ function ModeTabs({
 function ModeCard({
     active,
     label,
+    icon: Icon,
     onClick,
 }: {
     active: boolean;
     label: string;
+    icon?: typeof Plus;
     onClick: () => void;
 }) {
     return (
@@ -521,7 +641,10 @@ function ModeCard({
                     : "rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left font-extrabold text-slate-700 hover:border-cyan-200 hover:bg-cyan-50"
             }
         >
-            {label}
+            <span className="flex items-center gap-2">
+                {Icon ? <Icon className="size-4" /> : null}
+                {label}
+            </span>
         </button>
     );
 }
