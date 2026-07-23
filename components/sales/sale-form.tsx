@@ -3,6 +3,8 @@
 import Link from "next/link";
 import {
     useActionState,
+    useEffect,
+    useRef,
     useState,
     type ChangeEventHandler,
     type FormEventHandler,
@@ -81,6 +83,7 @@ export function SaleForm({
         createSaleAction,
         initialState,
     );
+    const errorMessageRef = useRef<HTMLDivElement | null>(null);
 
     const [buyerMode, setBuyerMode] = useState<BuyerMode>(
         defaultCustomerId || customers.length > 0 ? "existing" : "new",
@@ -148,6 +151,16 @@ export function SaleForm({
     const previewVatRate = parseDecimalInput(vatRate) ?? 0;
     const previewVatAmount = roundMoney(previewNetAmount * (previewVatRate / 100));
     const previewGrossAmount = roundMoney(previewNetAmount + previewVatAmount);
+
+    useEffect(() => {
+        if (!state.message) return;
+
+        errorMessageRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+        });
+        errorMessageRef.current?.focus({ preventScroll: true });
+    }, [state.message]);
 
     function handleSaleTypeChange(nextSaleType: SaleType) {
         const nextTaxConfiguration = getSaleTaxConfiguration({
@@ -242,7 +255,12 @@ export function SaleForm({
             <form action={formAction} className="space-y-6">
                 <input type="hidden" name="vehicle_mode" value={vehicleMode} />
                 {state.message ? (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                    <div
+                        ref={errorMessageRef}
+                        role="alert"
+                        tabIndex={-1}
+                        className="scroll-mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 outline-none focus:ring-4 focus:ring-red-100"
+                    >
                         {state.message}
                     </div>
                 ) : null}
