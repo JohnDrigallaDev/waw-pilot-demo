@@ -45,15 +45,15 @@ export function MobileHeader() {
 
                 <Link
                     href="/dashboard"
-                    className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100"
+                    className="flex items-center gap-2 rounded-2xl px-1 py-1 transition hover:bg-cyan-50/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100"
                     aria-label="Zum Dashboard"
                 >
                     <Image
                         src="/software-logo.png"
                         alt="WAW Pilot"
-                        width={32}
-                        height={32}
-                        className="h-8 w-8 object-contain"
+                        width={40}
+                        height={40}
+                        className="order-2 h-10 w-10 rounded-full border border-slate-200 bg-white object-contain p-1.5 shadow-sm"
                         priority
                     />
                     <span className="leading-none">
