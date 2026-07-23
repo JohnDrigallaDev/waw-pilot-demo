@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useActionState, useMemo, useState, type ChangeEventHandler } from "react";
 import {
     ArrowLeft,
-    Building2,
     CalendarDays,
     ClipboardList,
     FileText,
@@ -19,6 +18,7 @@ import { updatePurchaseCaseAction } from "@/app/dashboard/ankauf/[purchaseId]/ed
 import type { PurchaseFormData } from "@/lib/purchases/purchase-form-data";
 import type { PurchaseCasePaymentStatus } from "@/lib/purchases/purchase-queries";
 import { EMAIL_LANGUAGE_OPTIONS } from "@/lib/customers/email-languages";
+import { PersonTypeCards } from "@/components/customers/person-type-cards";
 import { SearchCombobox, type SearchComboboxOption } from "@/components/ui/search-combobox";
 import { VehicleDocumentUploadFields } from "@/components/vehicles/vehicle-document-upload-fields";
 import { PageHeader } from "@/components/shared/page-header";
@@ -449,6 +449,7 @@ function SellerCreateFields({
             <PersonTypeCards
                 value={sellerType}
                 onChange={onSellerTypeChange}
+                inputName="new_seller_type_choice"
             />
             <input type="hidden" name="new_seller_type" value={sellerType} />
             <div className="rounded-[1.5rem] border border-emerald-100 bg-white/90 p-4">
@@ -493,87 +494,6 @@ function SellerCreateFields({
                 </div>
             </div>
         </div>
-    );
-}
-
-function PersonTypeCards({
-    value,
-    onChange,
-}: {
-    value: "company" | "private";
-    onChange: (type: "company" | "private") => void;
-}) {
-    return (
-        <div className="grid gap-4 md:grid-cols-2">
-            <PersonTypeCard
-                active={value === "company"}
-                value="company"
-                title="Firma"
-                description="GmbH, Händler, Exportkunde"
-                icon={Building2}
-                onChange={onChange}
-            />
-            <PersonTypeCard
-                active={value === "private"}
-                value="private"
-                title="Privatperson"
-                description="Einzelperson als Käufer/Verkäufer"
-                icon={UserRound}
-                onChange={onChange}
-            />
-        </div>
-    );
-}
-
-function PersonTypeCard({
-    active,
-    value,
-    title,
-    description,
-    icon: Icon,
-    onChange,
-}: {
-    active: boolean;
-    value: "company" | "private";
-    title: string;
-    description: string;
-    icon: typeof Building2;
-    onChange: (type: "company" | "private") => void;
-}) {
-    return (
-        <label
-            className={
-                active
-                    ? "group cursor-pointer rounded-3xl border border-cyan-300 bg-cyan-50 p-4 ring-4 ring-cyan-100 transition-all hover:border-cyan-300"
-                    : "group cursor-pointer rounded-3xl border border-slate-200 bg-white p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60"
-            }
-        >
-            <input
-                type="radio"
-                name="new_seller_type_choice"
-                value={value}
-                checked={active}
-                onChange={() => onChange(value)}
-                className="peer sr-only"
-            />
-            <div className="flex items-center gap-3">
-                <div
-                    className={
-                        active
-                            ? "flex size-11 items-center justify-center rounded-2xl border border-cyan-200 bg-cyan-700 text-white"
-                            : "flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600"
-                    }
-                >
-                    <Icon className="size-5" />
-                </div>
-                <div>
-                    <p className="font-extrabold text-slate-950">{title}</p>
-                    <p className="text-sm font-medium text-slate-500">
-                        {description}
-                    </p>
-                </div>
-            </div>
-        </label>
     );
 }
 

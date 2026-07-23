@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useActionState, useState, type FormEventHandler } from "react";
-import { Building2, Save, UserRound } from "lucide-react";
+import { Save } from "lucide-react";
 
 import { createCustomerAction } from "@/app/dashboard/customers/new/actions";
 import { EMAIL_LANGUAGE_OPTIONS } from "@/lib/customers/email-languages";
 import { phoneInputPattern, sanitizePhoneInput } from "@/lib/validation/phone";
+import { PersonTypeCards, type PersonType } from "@/components/customers/person-type-cards";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,9 +25,7 @@ export function CustomerForm() {
         createCustomerAction,
         initialState,
     );
-    const [customerType, setCustomerType] = useState<"company" | "private">(
-        "company",
-    );
+    const [customerType, setCustomerType] = useState<PersonType>("company");
 
     return (
         <div className="space-y-6">
@@ -63,63 +62,11 @@ export function CustomerForm() {
                             </p>
                         </div>
 
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <label
-                                className={
-                                    customerType === "company"
-                                        ? "group cursor-pointer rounded-3xl border border-cyan-300 bg-cyan-50 p-4 ring-4 ring-cyan-100 transition-all hover:border-cyan-300"
-                                        : "group cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60"
-                                }
-                            >
-                                <input
-                                    type="radio"
-                                    name="type"
-                                    value="company"
-                                    checked={customerType === "company"}
-                                    onChange={() => setCustomerType("company")}
-                                    className="peer sr-only"
-                                />
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-11 items-center justify-center rounded-2xl border border-cyan-100 bg-cyan-50 text-cyan-700 peer-checked:bg-cyan-700">
-                                        <Building2 className="size-5" />
-                                    </div>
-                                    <div>
-                                        <p className="font-extrabold text-slate-950">Firma</p>
-                                        <p className="text-sm font-medium text-slate-500">
-                                            GmbH, Händler, Exportkunde
-                                        </p>
-                                    </div>
-                                </div>
-                            </label>
-
-                            <label
-                                className={
-                                    customerType === "private"
-                                        ? "group cursor-pointer rounded-3xl border border-cyan-300 bg-cyan-50 p-4 ring-4 ring-cyan-100 transition-all hover:border-cyan-300"
-                                        : "group cursor-pointer rounded-3xl border border-slate-200 bg-slate-50 p-4 transition-all hover:border-cyan-200 hover:bg-cyan-50/60"
-                                }
-                            >
-                                <input
-                                    type="radio"
-                                    name="type"
-                                    value="private"
-                                    checked={customerType === "private"}
-                                    onChange={() => setCustomerType("private")}
-                                    className="peer sr-only"
-                                />
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600">
-                                        <UserRound className="size-5" />
-                                    </div>
-                                    <div>
-                                        <p className="font-extrabold text-slate-950">Privatperson</p>
-                                        <p className="text-sm font-medium text-slate-500">
-                                            Einzelperson als Käufer/Verkäufer
-                                        </p>
-                                    </div>
-                                </div>
-                            </label>
-                        </div>
+                        <PersonTypeCards
+                            value={customerType}
+                            onChange={setCustomerType}
+                            inputName="type"
+                        />
                     </CardContent>
                 </Card>
 
@@ -135,10 +82,17 @@ export function CustomerForm() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                            <FormField label="Firmenname" name="company_name" />
-                            <FormField label="Inhaber / Ansprechpartner" name="owner_name" />
-                            <FormField label="Vorname" name="first_name" />
-                            <FormField label="Nachname" name="last_name" />
+                            {customerType === "company" ? (
+                                <>
+                                    <FormField label="Firma *" name="company_name" required />
+                                    <FormField label="Ansprechpartner" name="owner_name" />
+                                </>
+                            ) : (
+                                <>
+                                    <FormField label="Vorname *" name="first_name" required />
+                                    <FormField label="Nachname *" name="last_name" required />
+                                </>
+                            )}
                             <FormField label="E-Mail" name="email" type="email" />
                             <EmailLanguageField defaultValue="de" />
                             <FormField

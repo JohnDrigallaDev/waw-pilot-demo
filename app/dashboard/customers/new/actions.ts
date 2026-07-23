@@ -64,10 +64,10 @@ export async function createCustomerAction(
         };
     }
 
-    const companyName = getStringValue(formData, "company_name");
-    const ownerName = getStringValue(formData, "owner_name");
-    const firstName = getStringValue(formData, "first_name");
-    const lastName = getStringValue(formData, "last_name");
+    const companyName = type === "company" ? getStringValue(formData, "company_name") : null;
+    const ownerName = type === "company" ? getStringValue(formData, "owner_name") : null;
+    const firstName = type === "private" ? getStringValue(formData, "first_name") : null;
+    const lastName = type === "private" ? getStringValue(formData, "last_name") : null;
 
     const street = getStringValue(formData, "street");
     const postalCode = getStringValue(formData, "postal_code");
