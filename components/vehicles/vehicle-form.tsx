@@ -6,7 +6,6 @@ import { CalendarDays, FileText, Save, Truck } from "lucide-react";
 
 import { createVehicleAction } from "@/app/dashboard/vehicles/new/actions";
 import type { CustomerRow } from "@/lib/customers/customer-queries";
-import { getCustomerDisplayName } from "@/lib/customers/customer-helpers";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { VehicleDocumentUploadFields } from "@/components/vehicles/vehicle-document-upload-fields";
+import { CustomerCombobox } from "@/components/customers/customer-combobox";
 
 const initialState = {
     success: false,
@@ -202,25 +202,13 @@ export function VehicleForm({
                                 required
                             />
                             <div className="space-y-2 md:col-span-2 xl:col-span-3">
-                                <Label
-                                    htmlFor="seller_customer_id"
-                                    className="font-bold text-slate-700"
-                                >
-                                    Verkäufer-Kunde
-                                </Label>
-                                <select
-                                    id="seller_customer_id"
+                                <CustomerCombobox
+                                    customers={customers}
                                     name="seller_customer_id"
-                                    className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-950 outline-none transition focus:border-cyan-300 focus:ring-4 focus:ring-cyan-100"
-                                    defaultValue=""
-                                >
-                                    <option value="">Kein Verkäufer zugeordnet</option>
-                                    {customers.map((customer) => (
-                                        <option key={customer.id} value={customer.id}>
-                                            {getCustomerDisplayName(customer)}
-                                        </option>
-                                    ))}
-                                </select>
+                                    label="Verkäufer-Kunde"
+                                    placeholder="Name, Firma, Ort, E-Mail oder USt-ID suchen..."
+                                    emptyText="Kein Verkäufer gefunden."
+                                />
                                 <p className="text-xs font-semibold text-slate-500">
                                     Wenn du einen Verkäufer auswählst, wird zusätzlich ein Ankauf
                                     in der Tabelle purchases gespeichert.

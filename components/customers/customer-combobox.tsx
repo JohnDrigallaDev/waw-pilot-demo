@@ -17,6 +17,8 @@ export type CustomerComboboxCustomer = {
     city?: string | null;
     country?: string | null;
     email?: string | null;
+    phone?: string | null;
+    vat_id?: string | null;
 };
 
 type CustomerComboboxProps = {
@@ -92,8 +94,10 @@ export function CustomerCombobox({
 function getCustomerMeta(customer: CustomerComboboxCustomer): string {
     return [
         customer.email,
+        customer.phone,
         customer.city,
         customer.postal_code,
+        customer.vat_id,
         customer.type === "company" ? "Firma" : "Privatkunde",
     ]
         .filter(Boolean)
@@ -108,9 +112,11 @@ function getSearchText(customer: CustomerComboboxCustomer): string {
         customer.first_name,
         customer.last_name,
         customer.email,
+        customer.phone,
         customer.city,
         customer.postal_code,
         customer.country,
+        customer.vat_id,
     ]
         .filter(Boolean)
         .join(" ");
