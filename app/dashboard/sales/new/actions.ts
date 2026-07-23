@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { getCurrentCompanyId } from "@/lib/company";
 import {
@@ -40,6 +41,19 @@ type CreateSaleState = {
     message: string;
 };
 
+type UpdateSaleBuyerTaxDataCommand = {
+    customerId: string;
+    taxNumber: string | null;
+    vatId: string | null;
+};
+
+type UpdateSaleBuyerTaxDataState = {
+    success: boolean;
+    message: string;
+    taxNumber: string | null;
+    vatId: string | null;
+};
+
 type CustomerType = "company" | "private";
 type SelectionMode = "existing" | "new";
 
@@ -49,6 +63,12 @@ function getStringValue(formData: FormData, key: string): string | null {
     if (typeof value !== "string") return null;
 
     const trimmedValue = value.trim();
+
+    return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function normalizeOptionalTextValue(value: string | null): string | null {
+    const trimmedValue = value?.trim() ?? "";
 
     return trimmedValue.length > 0 ? trimmedValue : null;
 }
@@ -147,6 +167,92 @@ function getNewCustomerEmailLanguage(formData: FormData): EmailLanguage {
 
 function roundMoney(value: number): number {
     return Math.round(value * 100) / 100;
+}
+
+export async function updateSaleBuyerTaxDataAction(
+    command: UpdateSaleBuyerTaxDataCommand,
+): Promise<UpdateSaleBuyerTaxDataState> {
+    const customerId = normalizeOptionalTextValue(command.customerId);
+    const taxNumber = normalizeOptionalTextValue(command.taxNumber);
+    const vatId = normalizeVatId(command.vatId);
+
+    if (!customerId) {
+        return {
+            success: false,
+            message: "Bitte wähle zuerst einen Käufer aus.",
+            taxNumber,
+            vatId,
+        };
+    }
+
+    if (!taxNumber && !vatId) {
+        return {
+            success: false,
+            message: "Bitte gib eine Steuernummer oder USt-IdNr. ein.",
+            taxNumber,
+            vatId,
+        };
+    }
+
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const { data: customer, error: customerError } = await supabase
+        .from("customers")
+        .select("id, type, company_name, first_name, last_name")
+        .eq("id", customerId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+    if (customerError || !customer) {
+        return {
+            success: false,
+            message: "Der Käufer konnte nicht im aktuellen Unternehmen gefunden werden.",
+            taxNumber,
+            vatId,
+        };
+    }
+
+    const { error } = await supabase
+        .from("customers")
+        .update({
+            tax_number: taxNumber,
+            vat_id: vatId,
+        })
+        .eq("id", customerId)
+        .eq("company_id", companyId);
+
+    if (error) {
+        return {
+            success: false,
+            message: "Steuerdaten konnten nicht gespeichert werden. Bitte versuche es erneut.",
+            taxNumber,
+            vatId,
+        };
+    }
+
+    const customerName =
+        customer.type === "company"
+            ? customer.company_name ?? "Unbekannte Firma"
+            : [customer.first_name, customer.last_name].filter(Boolean).join(" ") ||
+              "Unbekannte Privatperson";
+
+    await logActivity({
+        action: `Steuerdaten von ${customerName} im Verkaufsprozess aktualisiert`,
+        entityType: "customer",
+        entityId: customer.id as string,
+    });
+
+    revalidatePath("/dashboard/sales/new");
+    revalidatePath(`/dashboard/customers/${customerId}`);
+    revalidatePath("/dashboard/customers");
+
+    return {
+        success: true,
+        message: "Steuerdaten wurden beim Käufer gespeichert. Du kannst den Verkauf jetzt speichern.",
+        taxNumber,
+        vatId,
+    };
 }
 
 function addDays(dateString: string, days: number): string {

@@ -6,6 +6,7 @@ import {
     useEffect,
     useRef,
     useState,
+    useTransition,
     type ChangeEventHandler,
     type FormEventHandler,
 } from "react";
@@ -20,7 +21,10 @@ import {
     UserRound,
 } from "lucide-react";
 
-import { createSaleAction } from "@/app/dashboard/sales/new/actions";
+import {
+    createSaleAction,
+    updateSaleBuyerTaxDataAction,
+} from "@/app/dashboard/sales/new/actions";
 import type { CustomerRow } from "@/lib/customers/customer-queries";
 import { EMAIL_LANGUAGE_OPTIONS } from "@/lib/customers/email-languages";
 import {
@@ -60,6 +64,11 @@ type SaleFormProps = {
     vehicles: VehicleRow[];
     defaultVehicleId?: string | null;
     defaultCustomerId?: string | null;
+};
+
+type CustomerTaxDataOverride = {
+    taxNumber: string | null;
+    vatId: string | null;
 };
 
 function parseDecimalInput(value: string): number | null {
@@ -102,6 +111,9 @@ export function SaleForm({
     const [selectedCustomerId, setSelectedCustomerId] = useState(
         defaultCustomerId ?? "",
     );
+    const [customerTaxDataOverrides, setCustomerTaxDataOverrides] = useState<
+        Record<string, CustomerTaxDataOverride>
+    >({});
     const [selectedVehicleId, setSelectedVehicleId] = useState(
         defaultVehicleId ?? "",
     );
@@ -119,6 +131,13 @@ export function SaleForm({
         saleType === "eu" || saleType === "export_third_country";
     const selectedCustomer =
         customers.find((customer) => customer.id === selectedCustomerId) ?? null;
+    const selectedCustomerTaxDataOverride = selectedCustomer
+        ? customerTaxDataOverrides[selectedCustomer.id] ?? null
+        : null;
+    const effectiveSelectedCustomerTaxNumber =
+        selectedCustomerTaxDataOverride?.taxNumber ?? selectedCustomer?.tax_number;
+    const effectiveSelectedCustomerVatId =
+        selectedCustomerTaxDataOverride?.vatId ?? selectedCustomer?.vat_id;
     const selectedVehicle =
         vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
     const selectedBuyerType: SaleBuyerType =
@@ -134,12 +153,12 @@ export function SaleForm({
         buyerMode === "existing" &&
         taxConfiguration.showTaxNumber &&
         Boolean(selectedCustomer) &&
-        !selectedCustomer?.tax_number;
+        !effectiveSelectedCustomerTaxNumber;
     const selectedCustomerMissingVatId =
         buyerMode === "existing" &&
         taxConfiguration.showVatId &&
         Boolean(selectedCustomer) &&
-        !selectedCustomer?.vat_id;
+        !effectiveSelectedCustomerVatId;
     const requiresNewCustomerTaxNumber =
         buyerMode === "new" && taxConfiguration.showTaxNumber;
     const requiresNewCustomerVatId =
@@ -376,6 +395,22 @@ export function SaleForm({
                                         Für EU-Verkäufe muss beim Kunden eine
                                         USt-IdNr. hinterlegt sein.
                                     </p>
+                                ) : null}
+
+                                {selectedCustomer &&
+                                (selectedCustomerMissingTaxNumber || selectedCustomerMissingVatId) ? (
+                                    <ExistingBuyerTaxDataEditor
+                                        key={selectedCustomer.id}
+                                        customer={selectedCustomer}
+                                        requireTaxNumber={selectedCustomerMissingTaxNumber}
+                                        requireVatId={selectedCustomerMissingVatId}
+                                        onSaved={(savedTaxData) => {
+                                            setCustomerTaxDataOverrides((currentOverrides) => ({
+                                                ...currentOverrides,
+                                                [selectedCustomer.id]: savedTaxData,
+                                            }));
+                                        }}
+                                    />
                                 ) : null}
                             </div>
                         ) : (
@@ -989,6 +1024,111 @@ export function SaleForm({
                     </div>
                 </div>
             </form>
+        </div>
+    );
+}
+
+function ExistingBuyerTaxDataEditor({
+    customer,
+    requireTaxNumber,
+    requireVatId,
+    onSaved,
+}: {
+    customer: CustomerRow;
+    requireTaxNumber: boolean;
+    requireVatId: boolean;
+    onSaved: (taxData: CustomerTaxDataOverride) => void;
+}) {
+    const [taxNumber, setTaxNumber] = useState(customer.tax_number ?? "");
+    const [vatId, setVatId] = useState(customer.vat_id ?? "");
+    const [state, setState] = useState({
+        success: false,
+        message: "",
+    });
+    const [isPending, startTransition] = useTransition();
+
+    function handleSave() {
+        startTransition(async () => {
+            const result = await updateSaleBuyerTaxDataAction({
+                customerId: customer.id,
+                taxNumber,
+                vatId,
+            });
+
+            setState({
+                success: result.success,
+                message: result.message,
+            });
+
+            if (result.success) {
+                onSaved({
+                    taxNumber: result.taxNumber,
+                    vatId: result.vatId,
+                });
+            }
+        });
+    }
+
+    return (
+        <div className="space-y-4 rounded-3xl border border-amber-200 bg-amber-50/80 p-4">
+            <div>
+                <h3 className="text-base font-extrabold text-amber-950">
+                    Steuerdaten beim Käufer ergänzen
+                </h3>
+                <p className="mt-1 text-sm font-semibold leading-6 text-amber-800">
+                    Die Daten werden direkt im Kundenstamm gespeichert. Danach kannst du den Verkauf ohne Wechsel in die Kundenverwaltung speichern.
+                </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                    <Label htmlFor={`buyer-tax-number-${customer.id}`} className="font-bold text-slate-700">
+                        Steuernummer{requireTaxNumber ? " *" : ""}
+                    </Label>
+                    <Input
+                        id={`buyer-tax-number-${customer.id}`}
+                        value={taxNumber}
+                        onChange={(event) => setTaxNumber(event.target.value)}
+                        placeholder="Steuernummer eintragen"
+                        className="h-11 rounded-2xl border-amber-200 bg-white font-medium"
+                    />
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor={`buyer-vat-id-${customer.id}`} className="font-bold text-slate-700">
+                        USt-ID | VAT | NIP{requireVatId ? " *" : ""}
+                    </Label>
+                    <Input
+                        id={`buyer-vat-id-${customer.id}`}
+                        value={vatId}
+                        onChange={(event) => setVatId(event.target.value)}
+                        placeholder="z. B. DE123456789"
+                        className="h-11 rounded-2xl border-amber-200 bg-white font-medium"
+                    />
+                </div>
+            </div>
+
+            {state.message ? (
+                <p
+                    role="status"
+                    className={
+                        state.success
+                            ? "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800"
+                            : "rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700"
+                    }
+                >
+                    {state.message}
+                </p>
+            ) : null}
+
+            <Button
+                type="button"
+                disabled={isPending}
+                onClick={handleSave}
+                className="h-11 rounded-2xl bg-amber-700 px-4 font-extrabold text-white hover:bg-amber-800"
+            >
+                {isPending ? "Speichert..." : "Steuerdaten beim Kunden speichern"}
+            </Button>
         </div>
     );
 }
