@@ -87,6 +87,7 @@ async function upsertFinancialEntry(companyId: string, payload: FinancialEntryPa
             .eq("id", existingEntry.id);
 
         if (error) {
+            console.error("[financial-sync] financial entry update failed", error);
             throw new Error("Finanzjournal konnte nicht aktualisiert werden.");
         }
 
@@ -105,6 +106,7 @@ async function upsertFinancialEntry(companyId: string, payload: FinancialEntryPa
         .single();
 
     if (error || !data) {
+        console.error("[financial-sync] financial entry insert failed", error);
         throw new Error("Finanzjournal konnte nicht angelegt werden.");
     }
 

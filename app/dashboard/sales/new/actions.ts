@@ -54,6 +54,11 @@ type UpdateSaleBuyerTaxDataState = {
     vatId: string | null;
 };
 
+type SupabaseErrorLike = {
+    code?: string;
+    message: string;
+};
+
 type CustomerType = "company" | "private";
 type SelectionMode = "existing" | "new";
 
@@ -71,6 +76,17 @@ function normalizeOptionalTextValue(value: string | null): string | null {
     const trimmedValue = value?.trim() ?? "";
 
     return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function isMissingVehicleIntakeColumn(error: SupabaseErrorLike | null | undefined): boolean {
+    if (!error) return false;
+
+    return (
+        error.code === "PGRST204" &&
+        (error.message.includes("'mileage' column") ||
+            error.message.includes("'color' column") ||
+            error.message.includes("'vehicle_category' column"))
+    );
 }
 
 function getNumberValue(formData: FormData, key: string): number | null {
@@ -673,33 +689,50 @@ async function createVehicleFromSaleForm(
         return { success: false, message: getDuplicateInternalNumberMessage() };
     }
 
-    const { data: vehicle, error } = await supabase
+    const baseVehicleInsertData = {
+        company_id: companyId,
+        internal_number: internalNumber,
+        manufacturer,
+        model,
+        vehicle_type: vehicleType,
+        construction_year: constructionYear,
+        first_registration: null,
+        vin: normalizedVin,
+        license_plate: licensePlate,
+        purchase_price_net: purchasePriceNet,
+        sale_price_net: null,
+        additional_costs_net: additionalCostsNet,
+        status: "in_stock",
+        seller_customer_id: null,
+        buyer_customer_id: null,
+        notes,
+        damage_notes: damageNotes,
+        show_damage_on_invoice: showDamageOnInvoice,
+    };
+
+    let { data: vehicle, error } = await supabase
         .from("vehicles")
         .insert({
-            company_id: companyId,
-            internal_number: internalNumber,
-            manufacturer,
-            model,
-            vehicle_type: vehicleType,
-            construction_year: constructionYear,
-            first_registration: null,
-            vin: normalizedVin,
-            license_plate: licensePlate,
-            purchase_price_net: purchasePriceNet,
-            sale_price_net: null,
-            additional_costs_net: additionalCostsNet,
-            status: "in_stock",
-            seller_customer_id: null,
-            buyer_customer_id: null,
+            ...baseVehicleInsertData,
             mileage,
             color,
             vehicle_category: vehicleCategory,
-            notes,
-            damage_notes: damageNotes,
-            show_damage_on_invoice: showDamageOnInvoice,
         })
         .select("id, internal_number, manufacturer, model")
         .single();
+
+    if (error && isMissingVehicleIntakeColumn(error)) {
+        console.warn(
+            "[sale-create] vehicle intake columns missing; retrying inline vehicle insert without optional intake fields",
+        );
+        const fallbackResult = await supabase
+            .from("vehicles")
+            .insert(baseVehicleInsertData)
+            .select("id, internal_number, manufacturer, model")
+            .single();
+        vehicle = fallbackResult.data;
+        error = fallbackResult.error;
+    }
 
     if (error || !vehicle) {
         if (error) console.error("[sale-create] inline vehicle insert failed", error);

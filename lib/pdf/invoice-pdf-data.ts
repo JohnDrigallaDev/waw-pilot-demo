@@ -72,53 +72,12 @@ type InvoiceQueryResult = {
     sales: SupabaseRelation<SaleRelation>;
 };
 
-function getSingleRelation<T>(relation: SupabaseRelation<T>): T | null {
-    if (!relation) return null;
+type SupabaseErrorLike = {
+    code?: string;
+    message: string;
+};
 
-    if (Array.isArray(relation)) {
-        return relation[0] ?? null;
-    }
-
-    return relation;
-}
-
-function getCustomerName(customer: CustomerRelation | null): string {
-    if (!customer) return "Unbekannter Kunde";
-
-    if (customer.type === "company") {
-        return customer.company_name ?? "Unbekannte Firma";
-    }
-
-    const privateName = [customer.first_name, customer.last_name]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-
-    return privateName.length > 0 ? privateName : "Unbekannte Privatperson";
-}
-
-function getSaleTypeValue(sale: SaleRelation | null): SaleType {
-    if (
-        sale?.sale_type === "inland" ||
-        sale?.sale_type === "eu" ||
-        sale?.sale_type === "export_third_country"
-    ) {
-        return sale.sale_type;
-    }
-
-    return "inland";
-}
-
-export async function getInvoicePdfData(
-    invoiceId: string,
-): Promise<InvoicePdfData> {
-    const supabase = createServerSupabaseClient();
-    const companyId = getCurrentCompanyId();
-
-    const { data, error } = await supabase
-        .from("invoices")
-        .select(
-            `
+const invoicePdfBaseSelect = `
       id,
       invoice_type,
       invoice_number,
@@ -127,11 +86,6 @@ export async function getInvoicePdfData(
       vat_rate,
       vat_amount,
       gross_amount,
-      original_invoice_number,
-      original_invoice_date,
-      correction_reason_code,
-      correction_reason_text,
-      customer_visible_reason,
       include_signature_stamp,
       companies (
         legal_name,
@@ -172,21 +126,120 @@ export async function getInvoicePdfData(
         invoice_notes,
         include_damage_notes_on_invoice
       )
-    `,
-        )
+`;
+
+const invoicePdfSelect = `
+      ${invoicePdfBaseSelect},
+      original_invoice_number,
+      original_invoice_date,
+      correction_reason_code,
+      correction_reason_text,
+      customer_visible_reason
+`;
+
+function getSingleRelation<T>(relation: SupabaseRelation<T>): T | null {
+    if (!relation) return null;
+
+    if (Array.isArray(relation)) {
+        return relation[0] ?? null;
+    }
+
+    return relation;
+}
+
+function getCustomerName(customer: CustomerRelation | null): string {
+    if (!customer) return "Unbekannter Kunde";
+
+    if (customer.type === "company") {
+        return customer.company_name ?? "Unbekannte Firma";
+    }
+
+    const privateName = [customer.first_name, customer.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+    return privateName.length > 0 ? privateName : "Unbekannte Privatperson";
+}
+
+function getSaleTypeValue(sale: SaleRelation | null): SaleType {
+    if (
+        sale?.sale_type === "inland" ||
+        sale?.sale_type === "eu" ||
+        sale?.sale_type === "export_third_country"
+    ) {
+        return sale.sale_type;
+    }
+
+    return "inland";
+}
+
+function isMissingInvoiceCorrectionColumn(error: SupabaseErrorLike | null | undefined): boolean {
+    if (!error) return false;
+
+    return (
+        error.code === "42703" ||
+        error.message.includes("invoices.original_invoice_number") ||
+        error.message.includes("invoices.original_invoice_date") ||
+        error.message.includes("invoices.correction_reason_code") ||
+        error.message.includes("invoices.correction_reason_text") ||
+        error.message.includes("invoices.customer_visible_reason")
+    );
+}
+
+function withEmptyCorrectionFields(row: unknown): InvoiceQueryResult {
+    return {
+        ...(row as Omit<
+            InvoiceQueryResult,
+            | "original_invoice_number"
+            | "original_invoice_date"
+            | "correction_reason_code"
+            | "correction_reason_text"
+            | "customer_visible_reason"
+        >),
+        original_invoice_number: null,
+        original_invoice_date: null,
+        correction_reason_code: null,
+        correction_reason_text: null,
+        customer_visible_reason: null,
+    };
+}
+
+export async function getInvoicePdfData(
+    invoiceId: string,
+): Promise<InvoicePdfData> {
+    const supabase = createServerSupabaseClient();
+    const companyId = getCurrentCompanyId();
+
+    const { data, error } = await supabase
+        .from("invoices")
+        .select(invoicePdfSelect)
         .eq("id", invoiceId)
         .eq("company_id", companyId)
         .single();
 
-    if (error || !data) {
+    let invoice = data as unknown as InvoiceQueryResult | null;
+    let loadError = error;
+
+    if (loadError && isMissingInvoiceCorrectionColumn(loadError)) {
+        const fallback = await supabase
+            .from("invoices")
+            .select(invoicePdfBaseSelect)
+            .eq("id", invoiceId)
+            .eq("company_id", companyId)
+            .single();
+
+        invoice = fallback.data ? withEmptyCorrectionFields(fallback.data) : null;
+        loadError = fallback.error;
+    }
+
+    if (loadError || !invoice) {
         throw new Error(
             `Rechnung konnte nicht geladen werden: ${
-                error?.message ?? "Nicht gefunden"
+                loadError?.message ?? "Nicht gefunden"
             }`,
         );
     }
-
-    const invoice = data as unknown as InvoiceQueryResult;
 
     const company = getSingleRelation(invoice.companies);
     const customer = getSingleRelation(invoice.customers);

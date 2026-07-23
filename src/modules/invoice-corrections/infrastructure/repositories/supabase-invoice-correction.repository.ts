@@ -51,6 +51,29 @@ type RefundRow = {
     status?: string;
 };
 
+type SupabaseErrorLike = {
+    code?: string;
+    message?: string;
+    details?: string | null;
+    hint?: string | null;
+};
+
+function isInvoiceCorrectionSchemaError(error: SupabaseErrorLike | null): boolean {
+    if (!error) return false;
+
+    const message = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
+
+    return (
+        error.code === "PGRST204" ||
+        error.code === "42703" ||
+        error.code === "23514" ||
+        message.includes("schema cache") ||
+        message.includes("invoice_type") ||
+        message.includes("correction_") ||
+        message.includes("original_invoice_")
+    );
+}
+
 export class SupabaseInvoiceCorrectionRepository implements InvoiceCorrectionRepository {
     private readonly calculation = new CorrectionCalculationService();
 
@@ -228,6 +251,14 @@ export class SupabaseInvoiceCorrectionRepository implements InvoiceCorrectionRep
             .single();
 
         if (error || !correctionInvoice) {
+            console.error("[invoice-correction] cancellation invoice insert failed", error);
+
+            if (isInvoiceCorrectionSchemaError(error)) {
+                throw new Error(
+                    "Stornorechnung konnte nicht angelegt werden, weil die Datenbankmigration für Rechnungskorrekturen fehlt oder unvollständig ist.",
+                );
+            }
+
             throw new Error("Stornorechnung konnte nicht angelegt werden.");
         }
 
