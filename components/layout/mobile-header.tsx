@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 
 import { SidebarContent } from "@/components/layout/app-sidebar";
@@ -16,9 +16,37 @@ import {
 
 export function MobileHeader() {
     const [open, setOpen] = useState(false);
+    const [isVisible, setIsVisible] = useState(true);
+
+    useEffect(() => {
+        let lastScrollY = window.scrollY;
+
+        function handleScroll() {
+            const currentScrollY = window.scrollY;
+
+            if (currentScrollY < 12) {
+                setIsVisible(true);
+                lastScrollY = currentScrollY;
+                return;
+            }
+
+            setIsVisible(currentScrollY < lastScrollY);
+            lastScrollY = currentScrollY;
+        }
+
+        window.addEventListener("scroll", handleScroll, { passive: true });
+
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
 
     return (
-        <header className="border-b border-slate-200/70 bg-white/90 px-3 py-2 shadow-sm shadow-slate-200/60 backdrop-blur-xl lg:hidden">
+        <header
+            className={
+                isVisible || open
+                    ? "sticky top-0 z-50 translate-y-0 border-b border-slate-200/70 bg-white/90 px-3 py-2 shadow-sm shadow-slate-200/60 backdrop-blur-xl transition-transform duration-200 lg:hidden"
+                    : "sticky top-0 z-50 -translate-y-full border-b border-slate-200/70 bg-white/90 px-3 py-2 shadow-sm shadow-slate-200/60 backdrop-blur-xl transition-transform duration-200 lg:hidden"
+            }
+        >
             <div className="flex items-center justify-between">
                 <Sheet open={open} onOpenChange={setOpen}>
                     <SheetTrigger asChild>
