@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
-import { Menu, Truck } from "lucide-react";
+import { Menu } from "lucide-react";
 
 import { SidebarContent } from "@/components/layout/app-sidebar";
 import { Button } from "@/components/ui/button";
@@ -16,21 +18,8 @@ export function MobileHeader() {
     const [open, setOpen] = useState(false);
 
     return (
-        <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm shadow-slate-200/60 backdrop-blur-xl lg:hidden">
+        <header className="border-b border-slate-200/70 bg-white/90 px-3 py-2 shadow-sm shadow-slate-200/60 backdrop-blur-xl lg:hidden">
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-blue-50 text-cyan-700 shadow-sm">
-                        <Truck className="size-5" />
-                    </div>
-
-                    <div>
-                        <p className="text-sm font-extrabold uppercase tracking-[0.24em] text-cyan-700">
-                            WAW
-                        </p>
-                        <p className="text-xs font-semibold text-slate-500">Pilot</p>
-                    </div>
-                </div>
-
                 <Sheet open={open} onOpenChange={setOpen}>
                     <SheetTrigger asChild>
                         <Button
@@ -53,6 +42,29 @@ export function MobileHeader() {
                         </div>
                     </SheetContent>
                 </Sheet>
+
+                <Link
+                    href="/dashboard"
+                    className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100"
+                    aria-label="Zum Dashboard"
+                >
+                    <Image
+                        src="/software-logo.png"
+                        alt="WAW Pilot"
+                        width={32}
+                        height={32}
+                        className="h-8 w-8 object-contain"
+                        priority
+                    />
+                    <span className="leading-none">
+                        <span className="block bg-gradient-to-r from-cyan-700 via-slate-950 to-emerald-700 bg-clip-text text-sm font-black uppercase tracking-[0.18em] text-transparent">
+                            WAW
+                        </span>
+                        <span className="block text-[10px] font-extrabold uppercase tracking-[0.22em] text-slate-500">
+                            Pilot
+                        </span>
+                    </span>
+                </Link>
             </div>
         </header>
     );
