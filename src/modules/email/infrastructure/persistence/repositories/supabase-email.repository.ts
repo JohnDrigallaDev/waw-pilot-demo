@@ -54,7 +54,12 @@ type EmailMessageRow = {
     email_attachments?: EmailAttachmentRow[] | null;
 };
 
-const emailSelect = `
+type SupabaseErrorLike = {
+    code?: string;
+    message: string;
+};
+
+const baseEmailSelect = `
   id,
   email_reference,
   context_type,
@@ -74,7 +79,11 @@ const emailSelect = `
   failed_at,
   failure_message,
   retry_count,
-  created_at,
+  created_at
+`;
+
+const emailSelect = `
+  ${baseEmailSelect},
   email_attachments (
     id,
     document_id,
@@ -85,6 +94,29 @@ const emailSelect = `
     attachment_type
   )
 `;
+
+function isMissingEmailSchemaResource(error: SupabaseErrorLike | null | undefined): boolean {
+    if (!error) return false;
+
+    return (
+        error.code === "42P01" ||
+        error.code === "PGRST205" ||
+        error.message.includes("Could not find the table 'public.email_") ||
+        error.message.includes("relation \"public.email_") ||
+        error.message.includes("schema cache")
+    );
+}
+
+function isMissingEmailAttachmentRelationship(error: SupabaseErrorLike | null | undefined): boolean {
+    if (!error) return false;
+
+    return (
+        error.code === "PGRST200" ||
+        (error.message.includes("relationship") &&
+            error.message.includes("email_messages") &&
+            error.message.includes("email_attachments"))
+    );
+}
 
 function toRecipients(value: unknown): EmailRecipientDto[] {
     if (!Array.isArray(value)) return [];
@@ -365,57 +397,83 @@ export class SupabaseEmailRepository implements EmailRepositoryPort {
         let relatedEmailIds: string[] = [];
 
         if (query.contextType && query.contextId) {
-            const { data: relationData } = await this.supabase
+            const { data: relationData, error: relationError } = await this.supabase
                 .from("email_relations")
                 .select("email_message_id")
                 .eq("company_id", query.companyId)
                 .eq("relation_type", query.contextType)
                 .eq("relation_id", query.contextId);
 
+            if (relationError && !isMissingEmailSchemaResource(relationError)) {
+                throw new Error(`E-Mail-Verknüpfungen konnten nicht geladen werden: ${relationError.message}`);
+            }
+
             relatedEmailIds = (relationData ?? [])
                 .map((relation) => relation.email_message_id)
                 .filter((emailId): emailId is string => typeof emailId === "string");
         }
 
-        let request = this.supabase
-            .from("email_messages")
-            .select(emailSelect, { count: "exact" })
-            .eq("company_id", query.companyId)
-            .order("created_at", { ascending: false });
+        const buildSearchRequest = (select: string) => {
+            let request = this.supabase
+                .from("email_messages")
+                .select(select, { count: "exact" })
+                .eq("company_id", query.companyId)
+                .order("created_at", { ascending: false });
 
-        if (query.status) request = request.eq("status", query.status);
-        if (query.contextType && query.contextId) {
-            if (relatedEmailIds.length > 0) {
-                request = request.or(
-                    `and(context_type.eq.${query.contextType},context_id.eq.${query.contextId}),id.in.(${relatedEmailIds.join(",")})`,
-                );
+            if (query.status) request = request.eq("status", query.status);
+            if (query.contextType && query.contextId) {
+                if (relatedEmailIds.length > 0) {
+                    request = request.or(
+                        `and(context_type.eq.${query.contextType},context_id.eq.${query.contextId}),id.in.(${relatedEmailIds.join(",")})`,
+                    );
+                } else {
+                    request = request
+                        .eq("context_type", query.contextType)
+                        .eq("context_id", query.contextId);
+                }
             } else {
-                request = request
-                    .eq("context_type", query.contextType)
-                    .eq("context_id", query.contextId);
+                if (query.contextType) request = request.eq("context_type", query.contextType);
+                if (query.contextId) request = request.eq("context_id", query.contextId);
             }
-        } else {
-            if (query.contextType) request = request.eq("context_type", query.contextType);
-            if (query.contextId) request = request.eq("context_id", query.contextId);
-        }
-        if (query.search?.trim()) {
-            const search = query.search.trim();
-            request = request.or(
-                [
-                    `email_reference.ilike.%${search}%`,
-                    `subject.ilike.%${search}%`,
-                    `template_key.ilike.%${search}%`,
-                ].join(","),
-            );
-        }
+            if (query.search?.trim()) {
+                const search = query.search.trim();
+                request = request.or(
+                    [
+                        `email_reference.ilike.%${search}%`,
+                        `subject.ilike.%${search}%`,
+                        `template_key.ilike.%${search}%`,
+                    ].join(","),
+                );
+            }
 
-        const offset = query.offset ?? 0;
-        const limit = query.limit ?? 50;
-        request = request.range(offset, offset + limit - 1);
+            const offset = query.offset ?? 0;
+            const limit = query.limit ?? 50;
+            return request.range(offset, offset + limit - 1);
+        };
 
-        const { data, error, count } = await request;
+        const { data, error, count } = await buildSearchRequest(emailSelect);
 
         if (error) {
+            if (isMissingEmailAttachmentRelationship(error)) {
+                const fallback = await buildSearchRequest(baseEmailSelect);
+                if (fallback.error) {
+                    if (isMissingEmailSchemaResource(fallback.error)) {
+                        return { emails: [], totalCount: 0 };
+                    }
+
+                    throw new Error(`E-Mail-Historie konnte nicht geladen werden: ${fallback.error.message}`);
+                }
+
+                return {
+                    emails: ((fallback.data ?? []) as unknown as EmailMessageRow[]).map(mapListItem),
+                    totalCount: fallback.count ?? 0,
+                };
+            }
+
+            if (isMissingEmailSchemaResource(error)) {
+                return { emails: [], totalCount: 0 };
+            }
+
             throw new Error(`E-Mail-Historie konnte nicht geladen werden: ${error.message}`);
         }
 

@@ -178,6 +178,30 @@ type SaleDetailQueryRow = {
     sale_refunds: SupabaseRelation<SaleRefundRelation>;
 };
 
+type LegacyInvoiceRelation = {
+    id: string;
+    invoice_type: InvoiceType | null;
+    invoice_number: string;
+    invoice_date: string;
+    net_amount: number | string;
+    vat_amount: number | string;
+    gross_amount: number | string;
+    status: string;
+    payment_status: PaymentStatus;
+    created_at: string;
+};
+
+type LegacySaleDetailQueryRow = Omit<
+    SaleDetailQueryRow,
+    | "invoice_notes"
+    | "include_damage_notes_on_invoice"
+    | "companies"
+    | "invoices"
+    | "sale_refunds"
+> & {
+    invoices: SupabaseRelation<LegacyInvoiceRelation>;
+};
+
 export type SaleDetailDocument = {
     id: string;
     document_type: string;
@@ -392,6 +416,60 @@ function getInvoiceSortWeight(invoiceType: InvoiceType): number {
     return weights[invoiceType];
 }
 
+function mapLegacyInvoice(invoice: LegacyInvoiceRelation): InvoiceRelation {
+    return {
+        id: invoice.id,
+        invoice_type: invoice.invoice_type ?? "standard",
+        invoice_number: invoice.invoice_number,
+        invoice_date: invoice.invoice_date,
+        net_amount: invoice.net_amount,
+        vat_amount: invoice.vat_amount,
+        gross_amount: invoice.gross_amount,
+        status: invoice.status,
+        payment_status: invoice.payment_status,
+        correction_of_invoice_id: null,
+        root_invoice_id: null,
+        correction_reason_code: null,
+        correction_reason_text: null,
+        customer_visible_reason: null,
+        correction_scope: null,
+        correction_status: null,
+        corrected_gross_amount: null,
+        original_invoice_number: null,
+        original_invoice_date: null,
+        include_signature_stamp: false,
+        pdf_document_id: null,
+        email_sent_at: null,
+        email_sent_to: null,
+        email_sent_language: null,
+        email_send_count: 0,
+        zugferd_file_path: null,
+        zugferd_generated_at: null,
+        zugferd_profile: null,
+        zugferd_standard_version: null,
+        zugferd_validation_status: null,
+        zugferd_validated_at: null,
+        zugferd_validation_summary: null,
+        zugferd_sha256: null,
+        zugferd_email_sent_at: null,
+        zugferd_email_sent_to: null,
+        zugferd_email_sent_language: null,
+        zugferd_email_send_count: 0,
+        created_at: invoice.created_at,
+    };
+}
+
+function mapLegacySaleDetailRow(row: LegacySaleDetailQueryRow): SaleDetailQueryRow {
+    return {
+        ...row,
+        invoice_notes: null,
+        include_damage_notes_on_invoice: false,
+        companies: null,
+        invoices: getManyRelation(row.invoices).map(mapLegacyInvoice),
+        sale_refunds: [],
+    };
+}
+
 export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
     const supabase = createServerSupabaseClient();
     const companyId = getCurrentCompanyId();
@@ -546,11 +624,114 @@ export async function getSaleDetail(saleId: string): Promise<SaleDetail> {
         .single();
 
     if (error || !data) {
-        notFound();
+        const { data: fallbackData, error: fallbackError } = await supabase
+            .from("sales")
+            .select(
+                `
+      id,
+      vehicle_id,
+      buyer_customer_id,
+      sale_date,
+      sale_type,
+      net_amount,
+      vat_rate,
+      vat_amount,
+      gross_amount,
+      status,
+      payment_status,
+      datev_status,
+      notes,
+      created_at,
+      vehicles (
+        internal_number,
+        manufacturer,
+        model,
+        vehicle_type,
+        vin,
+        license_plate,
+        construction_year,
+        first_registration,
+        purchase_price_net,
+        sale_price_net,
+        additional_costs_net,
+        damage_notes,
+        show_damage_on_invoice
+      ),
+      customers:buyer_customer_id (
+        type,
+        company_name,
+        owner_name,
+        first_name,
+        last_name,
+        street,
+        postal_code,
+        city,
+        country,
+        email,
+        preferred_language,
+        phone,
+        tax_number,
+        vat_id,
+        commercial_register_number
+      ),
+      invoices (
+        id,
+        invoice_type,
+        invoice_number,
+        invoice_date,
+        net_amount,
+        vat_amount,
+        gross_amount,
+        status,
+        payment_status,
+        created_at
+      ),
+      documents (
+        id,
+        document_type,
+        source,
+        status,
+        file_name,
+        file_path,
+        mime_type,
+        file_size,
+        created_at
+      ),
+      sale_payments (
+        id,
+        payment_reference,
+        amount,
+        payment_method,
+        payment_date,
+        note,
+        external_reference,
+        created_at,
+        updated_at,
+        created_by,
+        last_modified_by,
+        is_voided,
+        voided_at,
+        voided_by,
+        void_reason
+      )
+    `,
+            )
+            .eq("id", saleId)
+            .eq("company_id", companyId)
+            .single();
+
+        if (fallbackError || !fallbackData) {
+            console.error("[sales] sale detail query failed", error ?? fallbackError);
+            notFound();
+        }
+
+        return buildSaleDetail(mapLegacySaleDetailRow(fallbackData as unknown as LegacySaleDetailQueryRow));
     }
 
-    const sale = data as unknown as SaleDetailQueryRow;
+    return buildSaleDetail(data as unknown as SaleDetailQueryRow);
+}
 
+function buildSaleDetail(sale: SaleDetailQueryRow): SaleDetail {
     if (!sale.vehicles || !sale.customers) {
         throw new Error("Verkaufsakte ist unvollständig. Kunde oder Fahrzeug fehlt.");
     }
